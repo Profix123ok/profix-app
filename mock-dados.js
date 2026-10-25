@@ -123,7 +123,7 @@
         if (/\[CONFIRMAR/.test(x.corpo)) throw new Error('O texto ainda tem [CONFIRMAR …].');
         if (!(D.cotaEmail > 0)) throw new Error('Cota diária de e-mails esgotada.');
         D.cotaEmail--; anexar('interacoes', { data: h(), cliente: c.nome, canal: 'E-mail', resumo: 'E-mail: ' + x.assunto, proximoPasso: '', dataProx: '', por: 'Pedro' });
-        return { ok: true, msg: 'E-mail enviado.', cotaRestante: D.cotaEmail };
+        return { enviado: true, restanteCota: D.cotaEmail, msg: 'E-mail enviado.' };
       },
       salvarCliente: function (c) {
         if (!String(c.nome || '').trim()) throw new Error('Informe o nome do cliente.');

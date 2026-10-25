@@ -17,7 +17,7 @@
   var ESCRITA = ['salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento',
     'lancarRecebimento', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
     'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'registrarFollowup',
-    'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente']; // Agenda: crm-v3 v11. enviarEmailCliente: PROPOSTA
+    'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente']; // crm-v3 v13 (enviarEmailCliente exige idOperacao: sempre mandamos)
   var SO_ONLINE = ['criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente']; // nunca vão para a fila offline (e-mail não sai "depois" sem o Pedro ver)
   var ACOES = {};
   LEITURA.forEach(function (a) { ACOES[a] = { escrita: false }; });

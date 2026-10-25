@@ -70,8 +70,8 @@
   // Maps / Agenda / Gmail. Agenda e Gmail = ações PROPOSTAS: o botão só aparece se api.pode() (some se o servidor disser "ação desconhecida").
   function mapsBtn(end) { var l = V.linkMaps(end); return l ? '<a class="btn sec peq" data-maps target="_blank" rel="noopener" href="' + e(l) + '">🗺️ Abrir no Maps</a>' : ''; }
   // eventoId da OS: vem do getDados (coluna "Evento da agenda (ID)") ou, se o getDados não mandar, do registro local do aparelho.
-  function eventosLocais() { try { return JSON.parse(localStorage.getItem('profix.eventosOS') || '{}'); } catch (x) { return {}; } }
-  function eventoDaOS(o) { return o.eventoId || eventosLocais()[o.num] || ''; }
+  function eventoDaOS(o) { return String(o.eventoId || ''); } // vem do servidor (coluna "Evento da agenda (ID)")
+  function temCol(lista, k) { return V.temCampo(D[lista], k, D.colunas && D.colunas[lista]); }
   function agendaBtn(o) { var id = eventoDaOS(o); if (!api.pode('criarEventoAgenda')) return id ? '<span class="tag ok">Na agenda ✓</span>' : '';
     return id ? '<span class="tag ok" id="naAgenda">Na agenda ✓</span>' + botao('Atualizar na agenda', 'ag-os', o._row) + (api.pode('removerEventoAgenda') ? botao('Tirar da agenda', 'ag-rem-os', o._row) : '') : botao('📅 Pôr na agenda', 'ag-os', o._row); }
   function emailBtn(c, acao, row) { return api.pode('enviarEmailCliente') && V.podeEmailCliente(c) ? botao('✉️ Enviar e-mail', acao, row) : ''; }
@@ -183,26 +183,26 @@
       if (!v) return;
       var ini = new Date(v.data + 'T' + v.hora + ':00'), fim = new Date(ini.getTime() + (Number(v.duracao) || 60) * 60000), pad = function (n) { return ('0' + n).slice(-2); };
       var iso = function (d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':00'; };
-      escrever('criarEventoAgenda', [{ titulo: v.titulo, inicio: iso(ini), fim: iso(fim), descricao: v.descricao, local: v.local, refTipo: p.refTipo, refId: p.refId, convidarCliente: false }],
-        function (cache, r) { if (!r || !r.eventoId || p.refTipo !== 'os') return; var l = eventosLocais(); l[p.refId] = r.eventoId; localStorage.setItem('profix.eventosOS', JSON.stringify(l));
+      escrever('criarEventoAgenda', [{ titulo: v.titulo, inicio: iso(ini), fim: iso(fim), descricao: v.descricao, local: v.local, refTipo: p.refTipo, refId: p.refId, linha: p.linha, convidarCliente: false }],
+        function (cache, r) { if (!r || !r.eventoId || p.refTipo !== 'os') return;
           (cache.os || []).forEach(function (x) { if (x.num === p.refId) x.eventoId = r.eventoId; }); });
     });
   }
   /** Tela de confirmação do e-mail: texto pronto e editável; só envia depois do "Enviar e-mail". */
   function emailTela(c, o) {
     var tipo = o && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? 'pronto' : 'orcamento';
-    var t = o ? V.montarEmail(tipo, o, c, CFG) : { assunto: 'ProFix Computadores', corpo: 'Oi, ' + c.nome.split(' ')[0] + '!\n\n\nPedro — ProFix Computadores\n\n' + V.RODAPE_LGPD };
+    var t = o ? V.montarEmail(tipo, o, c, CFG) : { assunto: 'ProFix Computadores', corpo: 'Oi, ' + c.nome.split(' ')[0] + '!\n\n\nPedro — ProFix Computadores' };
     var cota = D.cotaEmail == null ? 'não informada' : String(D.cotaEmail);
     var p = formulario('✉️ Enviar e-mail', (o ? [{ k: 'modelo', r: 'Modelo', t: 'select', o: [V.EMAILS.orcamento.rotulo, V.EMAILS.pronto.rotulo] }] : []).concat([{ k: 'assunto', r: 'Assunto', req: true }, { k: 'corpo', r: 'Texto (pode editar)', t: 'textarea', req: true }]),
       { modelo: V.EMAILS[tipo].rotulo, assunto: t.assunto, corpo: t.corpo },
-      '<div class="muted">Para: <b id="emPara">' + e(c.email) + '</b> · cota restante hoje: <b id="emCota">' + e(cota) + '</b></div><p class="alerta" id="emPend"' + (V.temPendencia(t.corpo) ? '' : ' hidden') + '>Texto com [CONFIRMAR …]: troque pelo valor certo antes de enviar (validade/garantia ainda não confirmadas no config.js).</p>');
+      '<div class="muted">Para: <b id="emPara">' + e(c.email) + '</b> · cota restante hoje: <b id="emCota">' + e(cota) + '</b><br>O rodapé LGPD (\u201c' + e(V.RODAPE_LGPD_SERVIDOR) + '\u201d) é colocado automaticamente.</div><p class="alerta" id="emPend"' + (V.temPendencia(t.corpo) ? '' : ' hidden') + '>Texto com [CONFIRMAR …]: troque pelo valor certo antes de enviar (validade/garantia ainda não confirmadas no config.js).</p>');
     $('c_corpo').rows = 12; $('fSalvar').textContent = 'Enviar e-mail';
     if ($('c_modelo')) $('c_modelo').onchange = function () { var k = this.value === V.EMAILS.pronto.rotulo ? 'pronto' : 'orcamento', n = V.montarEmail(k, o, c, CFG); $('c_assunto').value = n.assunto; $('c_corpo').value = n.corpo; $('c_corpo').oninput(); };
     $('c_corpo').oninput = function () { $('emPend').hidden = !V.temPendencia(this.value); };
     $('fSalvar').addEventListener('click', function (ev) { if (V.temPendencia($('c_corpo').value)) { ev.preventDefault(); $('fErro').textContent = 'Troque o [CONFIRMAR …] antes de enviar.'; } });
     p.then(function (v) {
       if (!v) return;
-      escrever('enviarEmailCliente', [{ clienteId: c.id, assunto: v.assunto, corpo: v.corpo, refId: o ? o.num : '' }], function (cache, r) { if (r && r.cotaRestante != null) cache.cotaEmail = r.cotaRestante; });
+      escrever('enviarEmailCliente', [{ clienteId: c.id, assunto: v.assunto, corpo: v.corpo, refId: o ? o.num : '' }], function (cache, r) { if (r && r.restanteCota != null) cache.cotaEmail = r.restanteCota; });
     });
   }
   function escrever(acao, args, local) {
@@ -219,8 +219,8 @@
         { k: 'lembrete', r: 'Próximo contato', t: 'date' }, { k: 'proximoPasso', r: 'Próximo passo' },
         { k: 'canal', r: 'Melhor canal', t: 'select', o: D.canais }, { k: 'telefone', r: 'Telefone' }, { k: 'whatsapp', r: 'WhatsApp comercial (publicado pela empresa)' },
         { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'motivoPerda', r: 'Motivo da perda', t: 'select', o: D.motivosPerda, ajuda: 'Use quando descartar.' }, { k: 'obs', r: 'Observações', t: 'textarea' }
-      ].concat(V.temCampo(D.oportunidades, 'origem') ? [{ k: 'origem', r: 'Origem', t: 'select', o: D.origens }] : [])
-       .concat(V.temCampo(D.oportunidades, 'indicadoPor') ? [{ k: 'indicadoPor', r: 'Indicado por' }] : []), o).then(function (v) { if (!v) return; var mud = Object.assign({ _row: o._row, _empresaOriginal: o.empresa, empresa: o.empresa }, v); escrever('salvarOportunidade', [mud], aplicar('oportunidades', o._row, mud)); });
+      ].concat(temCol('oportunidades', 'origem') ? [{ k: 'origem', r: 'Origem', t: 'select', o: D.origens }] : [])
+       .concat(temCol('oportunidades', 'indicadoPor') ? [{ k: 'indicadoPor', r: 'Indicado por' }] : []), o).then(function (v) { if (!v) return; var mud = Object.assign({ _row: o._row, _empresaOriginal: o.empresa, empresa: o.empresa }, v); escrever('salvarOportunidade', [mud], aplicar('oportunidades', o._row, mud)); });
     },
     'op-lead': function (row) { var o = achar('oportunidades', row); if (confirm('Copiar "' + o.empresa + '" para Clientes como Lead (consentimento “Não” até a empresa autorizar)?')) escrever('virarLead', [o.empresa, o._row], aplicar('oportunidades', row, { status: 'Virou lead' })); },
     'os-abrir': function (row) {
@@ -271,14 +271,14 @@
     'os-peca': function (row) {
       var o = achar('os', row);
       formulario('Peça na ' + e(o.num), [{ k: 'peca', r: 'Peça', req: true }, { k: 'qtd', r: 'Quantidade', t: 'number' }, { k: 'custoUnit', r: 'Custo unitário (R$)', t: 'number' }, { k: 'precoUnit', r: 'Preço cobrado (R$)', t: 'number' },
-        { k: 'fornecedor', r: 'Fornecedor' }, { k: 'origem', r: 'Origem', t: 'select', o: ['Comprada para esta OS', 'Do estoque', 'Cliente trouxe'] }, { k: 'link', r: 'Link do fornecedor', t: 'url' }], { qtd: '1' }, o.aprovacao === 'Pendente' ? '<div class="alerta">Atenção: o orçamento desta OS ainda não foi aprovado.</div>' : '')
+        { k: 'fornecedor', r: 'Fornecedor' }, { k: 'origem', r: 'Origem', t: 'select', o: ['Comprada para esta OS', 'Estoque', 'Cliente forneceu'] }, { k: 'link', r: 'Link do fornecedor', t: 'url' }], { qtd: '1' }, o.aprovacao === 'Pendente' ? '<div class="alerta">Atenção: o orçamento desta OS ainda não foi aprovado.</div>' : '')
         .then(function (v) { if (!v) return; if (v.origem === 'Comprada para esta OS' && o.aprovacao === 'Pendente' && !confirm('O orçamento ainda não foi aprovado. Registrar a compra mesmo assim?')) return; escrever('salvarPeca', [Object.assign({ os: o.num, _rowOS: o._row }, v)]); });
     },
     'cli-editar': function (row) {
       var c = row ? achar('clientes', row) : {};
       formulario(row ? e(c.nome) : 'Novo cliente', [{ k: 'nome', r: 'Nome', req: true }, { k: 'whatsapp', r: 'WhatsApp' }, { k: 'bairro', r: 'Bairro' }, { k: 'origem', r: 'Origem do contato', t: 'select', o: D.origens },
-        { k: 'indicadoPor', r: 'Indicado por' }, { k: 'consent', r: 'Consentimento para WhatsApp (LGPD)', t: 'select', o: ['Sim', 'Não'] }, { k: 'proximo', r: 'Próximo contato', t: 'date' }, { k: 'acao', r: 'Próxima ação' },
-        { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'obs', r: 'Observações', t: 'textarea' }], c)
+        { k: 'indicadoPor', r: 'Indicado por' }, { k: 'consent', r: 'Consentimento de contato (LGPD)', t: 'select', o: ['Sim', 'Não'] }].concat(temCol('clientes', 'email') ? [{ k: 'email', r: 'E-mail', t: 'email' }] : [], temCol('clientes', 'endereco') ? [{ k: 'endereco', r: 'Endereço (para o Maps)' }] : [], [ { k: 'proximo', r: 'Próximo contato', t: 'date' }, { k: 'acao', r: 'Próxima ação' },
+        { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'obs', r: 'Observações', t: 'textarea' }]), c)
         .then(function (v) { if (!v) return; var d = Object.assign({}, v); if (v.consent === 'Sim' && c.consent !== 'Sim') d.dataConsent = D.hoje; if (row) { d._row = c._row; d._nomeOriginal = c.nome; } escrever('salvarCliente', [d], row ? aplicar('clientes', row, v) : null); });
     },
     'cli-novo': function () { ACOES['cli-editar'](''); },
@@ -324,10 +324,10 @@
         .then(function (v) { if (!v) return; var d = Object.assign({}, v); if (row) { d._row = m._row; d._modeloOriginal = m.modelo; } escrever('salvarModelo', [d], row ? aplicar('modelos', row, v) : null); });
     },
     'mod-novo': function () { ACOES['mod-editar'](''); },
-    'ag-os': function (row) { var o = achar('os', row); agendar({ titulo: (o.status === 'Pronto' ? 'Retirada ' : 'Atendimento ') + o.num + ' – ' + o.cliente, data: o.previsao || D.hoje, local: V.enderecoOS(D, o), descricao: o.equipamento + (o.defeito ? ' – ' + o.defeito : ''), refTipo: 'os', refId: o.num }); },
+    'ag-os': function (row) { var o = achar('os', row); agendar({ titulo: (o.status === 'Pronto' ? 'Retirada ' : 'Atendimento ') + o.num + ' – ' + o.cliente, data: o.previsao || D.hoje, local: V.enderecoOS(D, o), descricao: o.equipamento + (o.defeito ? ' – ' + o.defeito : ''), refTipo: 'os', refId: o.num, linha: o._row }); },
     'ag-ev': function (id) { var a = (D.agenda || []).find(function (x) { return x.eventoId === id; }); agendar({ titulo: a.titulo, data: a.data, hora: a.inicio, local: a.local, descricao: a.descricao || '', refTipo: 'agenda', refId: id }); },
     'ag-rem': function (id) { if (confirm('Tirar este evento da Agenda do Google?')) escrever('removerEventoAgenda', [{ eventoId: id }], function (c) { c.agenda = (c.agenda || []).filter(function (x) { return x.eventoId !== id; }); }); },
-    'ag-rem-os': function (row) { var o = achar('os', row), id = eventoDaOS(o); if (confirm('Tirar ' + o.num + ' da Agenda do Google?')) escrever('removerEventoAgenda', [{ eventoId: id }], function (c) { var l = eventosLocais(); delete l[o.num]; localStorage.setItem('profix.eventosOS', JSON.stringify(l)); (c.os || []).forEach(function (x) { if (x.num === o.num) x.eventoId = ''; }); c.agenda = (c.agenda || []).filter(function (x) { return x.eventoId !== id; }); }); },
+    'ag-rem-os': function (row) { var o = achar('os', row), id = eventoDaOS(o); if (confirm('Tirar ' + o.num + ' da Agenda do Google?')) escrever('removerEventoAgenda', [{ eventoId: id }], function (c) { (c.os || []).forEach(function (x) { if (x.num === o.num) x.eventoId = ''; }); c.agenda = (c.agenda || []).filter(function (x) { return x.eventoId !== id; }); }); },
     'em-os': function (row) { var o = achar('os', row); emailTela(V.clienteDaOS(D, o), o); },
     'em-cli': function (row) { var c = achar('clientes', row), ult = (D.os || []).filter(function (o) { return o.cliente === c.nome; }).slice(-1)[0]; emailTela(c, ult || null); },
     'tar-feita': function (row) { var t = achar('tarefas', row); escrever('mudarStatusTarefa', [t.tarefa, t._row, 'Feita'], aplicar('tarefas', row, { status: 'Feita' })); }

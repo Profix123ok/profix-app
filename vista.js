@@ -58,7 +58,7 @@
   };
   V.funil = function (D) { var g = {}; (D.etapas || []).forEach(function (et) { g[et] = []; }); (D.clientes || []).forEach(function (c) { (g[c.etapa || 'Lead'] = g[c.etapa || 'Lead'] || []).push(c); }); return g; };
   /** A planilha tem a coluna? (o crm-v3 só manda o campo se a coluna existir) */
-  V.temCampo = function (lista, k) { return (lista || []).some(function (x) { return x && k in x; }); };
+  V.temCampo = function (lista, k, colunas) { if (Array.isArray(colunas)) return colunas.indexOf(k) >= 0; return (lista || []).some(function (x) { return x && k in x; }); };
   // ---- Maps / Agenda / Gmail ----
   /** Link de rota no Google Maps (sem chave de API). '' se não houver endereço. */
   V.linkMaps = function (end) { end = String(end || '').trim(); return end ? 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(end) : ''; };
@@ -73,7 +73,8 @@
     pronto: { rotulo: 'Pronto para retirar', assunto: 'Seu {equipamento} está pronto — ProFix Computadores',
       corpo: 'Oi, {nome}!\nSeu {equipamento} está pronto. Me chama no WhatsApp {whatsapp_loja} pra combinarmos o melhor horário de retirada.\nO serviço tem {garantia_dias} dias de garantia a partir da entrega.\nObrigado pela confiança!\nPedro — ProFix Computadores' }
   };
-  V.RODAPE_LGPD = 'Você recebe este e-mail porque autorizou o contato da ProFix. Se não quiser mais receber, é só responder pedindo.';
+  // O rodapé LGPD é acrescentado PELO SERVIDOR (crm-v3 RODAPE_LGPD_EMAIL); o app não repete para não sair duplicado.
+  V.RODAPE_LGPD_SERVIDOR = 'ProFix Computadores. Você recebe esta mensagem porque autorizou o contato. Para não receber mais mensagens, responda SAIR.';
   /** Monta {assunto, corpo} para a OS. Validade/garantia vêm do config (null = pendente -> "[CONFIRMAR …]", que bloqueia o envio). */
   V.montarEmail = function (tipo, o, c, cfg) {
     cfg = cfg || {}; var t = V.EMAILS[tipo]; o = o || {};
@@ -84,7 +85,7 @@
       validade_dias: cfg.VALIDADE_ORCAMENTO_DIAS ? String(cfg.VALIDADE_ORCAMENTO_DIAS) : '[CONFIRMAR validade]',
       garantia_dias: cfg.GARANTIA_DIAS ? String(cfg.GARANTIA_DIAS) : '[CONFIRMAR garantia]', whatsapp_loja: cfg.WHATSAPP_LOJA || '[WhatsApp da loja]' };
     var f = function (x) { return x.replace(/\{(\w+)\}/g, function (m, k) { return k in dados ? dados[k] : m; }); };
-    return { assunto: f(t.assunto), corpo: f(t.corpo) + '\n\n' + V.RODAPE_LGPD };
+    return { assunto: f(t.assunto), corpo: f(t.corpo) };
   };
   V.temPendencia = function (texto) { return /\[CONFIRMAR/.test(String(texto || '')); };
   V.PRI = ['Alta', 'Média', 'Baixa'];
