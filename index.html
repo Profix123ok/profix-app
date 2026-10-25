@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b5cab">
+<meta name="description" content="App da ProFix Computadores: clientes, serviços e vendas no celular e no PC.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ProFix">
+<title>ProFix</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div id="faixa" class="faixa" hidden></div>
+<section id="tela-chave" class="chave" hidden>
+  <img src="icons/icon-192.png" alt="" width="72" height="72">
+  <h1>Bem-vindo ao app da ProFix</h1>
+  <p>Para proteger os dados dos clientes, este aparelho precisa da <b>chave de acesso</b> (você cria ela uma vez no Apps Script).</p>
+  <form id="form-chave">
+    <label for="chave">Chave de acesso</label>
+    <input id="chave" type="password" autocomplete="current-password" required minlength="16" placeholder="cole a chave aqui">
+    <button class="btn" type="submit">Entrar</button>
+    <p id="erro-chave" class="erro" role="alert"></p>
+  </form>
+  <p id="dica-demo" class="muted" hidden>Modo demonstração (dados fictícios). Chave de teste: <code>demo-profix-chave-ficticia</code></p>
+</section>
+<div id="app" class="app" hidden>
+  <nav id="menu" class="menu" aria-label="Menu principal">
+    <div class="marca"><img src="icons/icon-192.png" alt="" width="32" height="32"> ProFix</div>
+    <a href="#hoje" data-tela="hoje"><span>🏠</span><b>Hoje</b></a>
+    <a href="#servicos" data-tela="servicos"><span>🛠</span><b>Serviços</b></a>
+    <a href="#clientes" data-tela="clientes"><span>👤</span><b>Clientes</b></a>
+    <a href="#vendas" data-tela="vendas"><span>📈</span><b>Vendas</b></a>
+    <a href="#mais" data-tela="mais"><span>⚙</span><b>Mais</b></a>
+  </nav>
+  <main id="conteudo" class="conteudo" tabindex="-1"></main>
+</div>
+<dialog id="modal"></dialog>
+<div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+<script src="config.js"></script>
+<script src="mock-dados.js"></script>
+<script src="api.js"></script>
+<script src="vista.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
