@@ -78,15 +78,18 @@
     api.salvarToken = function (t) { t = String(t || '').trim(); if (t.length < 16) throw new Error('A chave precisa ter pelo menos 16 caracteres.'); arm.setItem(CH.token, t); };
     api.esquecerToken = function () { arm.removeItem(CH.token); };
     /** Testa a chave com uma leitura. Retorna true/false. */
-    api.validarToken = function () { return chamar('getDados', []).then(function (d) { guardar(d); return true; }, function (e) { if (e.codigo === 'TOKEN_INVALIDO') return false; throw e; }); };
+    api.validarToken = function () { return chamar('getDados', []).then(function (d) { guardar(d); api._recemValidado = true; return true; }, function (e) { if (e.codigo === 'TOKEN_INVALIDO') return false; throw e; }); };
     api.fila = function () { return lerJSON(arm, CH.fila, []); };
     api.ultimaAtualizacao = function () { return arm.getItem(CH.quando) || ''; };
-    function guardar(d) { arm.setItem(CH.cache, JSON.stringify(d)); arm.setItem(CH.quando, new Date().toISOString()); }
+    // Falha ao gravar no aparelho (cota cheia) não pode descartar os dados que acabaram de chegar.
+    function guardar(d) { try { arm.setItem(CH.cache, JSON.stringify(d)); arm.setItem(CH.quando, new Date().toISOString()); } catch (e) { try { arm.removeItem(CH.cache); } catch (e2) {} } }
+    api.cacheLocal = function () { return lerJSON(arm, CH.cache, null); };
 
     /** Lê dados: online -> servidor (e guarda cópia); offline/erro de rede -> última cópia. */
     api.carregar = function () {
       var cache = lerJSON(arm, CH.cache, null);
       if (!online()) return Promise.resolve({ dados: cache, offline: true });
+      if (api._recemValidado && cache) { var d0 = cache; api._recemValidado = false; return Promise.resolve({ dados: d0, offline: false }); } // acabou de baixar ao validar a chave
       return api.sincronizar().then(function () { return chamar('getDados', []); }).then(function (d) {
         if (d && !d.agenda && tipo === 'gas' && api.pode('listarAgenda')) return chamar('listarAgenda', [7]).then(function (a) { d.agenda = a; return d; }, function () { return d; });
         return d;

@@ -38,15 +38,19 @@
   function iniciar() {
     if (!api.temToken()) return Promise.resolve(telaChave());
     $('tela-chave').hidden = true; $('app').hidden = false;
-    return api.carregar().then(function (r) { D = r.dados; offline = r.offline; faixa(); render(); },
-      function (er) { if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave('A chave mudou. Digite a nova chave.'); } else aviso(er.message); });
+    carregando = true;
+    if (!D) { var c0 = api.cacheLocal(); if (c0) D = c0; } // mostra a última cópia enquanto atualiza
+    render();
+    return api.carregar().then(function (r) { carregando = false; if (r.dados) D = r.dados; offline = r.offline; faixa(); render(); },
+      function (er) { carregando = false; render(); if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave('A chave mudou. Digite a nova chave.'); } else aviso(er.message); });
   }
   function rota() { var h = (location.hash || '#hoje').slice(1).split('/'); return { tela: h[0] || 'hoje', sub: h[1] || '' }; }
+  var carregando = false;
   function render() {
     var r = rota();
     document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === r.tela; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var c = $('conteudo');
-    if (!D) { c.innerHTML = '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; return; }
+    if (!D) { c.innerHTML = carregando ? '<div class="vazio">Carregando dados da planilha… (pode levar uns 20 segundos)</div>' : '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; return; }
     c.innerHTML = (TELAS[r.tela] || TELAS.hoje)(r.sub);
     ligar(c);
   }
