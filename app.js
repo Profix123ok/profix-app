@@ -6,7 +6,7 @@
   var api = demo ? ProFixAPI.criarAdaptadorMock({ hoje: CFG.HOJE_FIXO, enviarSenha: true, semAcoes: ((location.search.match(/[?&]semAcoes=([\w,]+)/) || [])[1] || '').split(',').filter(Boolean) })
     : ProFixAPI.criarAdaptadorGas(CFG.API_URL, { liberadas: CFG.ACOES_SERVIDOR });
   var D = null, offline = false;
-  var F = { op: { status: '', prioridade: '', segmento: '', q: '' }, os: { status: '', q: '' }, cli: { q: '' } };
+  var F = { op: { status: '', prioridade: '', segmento: '', q: '' }, os: { status: '', q: '' }, cli: { q: '' }, lead: { sit: 'Novo' } };
   var $ = function (id) { return document.getElementById(id); }, e = V.esc;
   var AJ = 'profix.ajustes', ajustes = (function () { try { return JSON.parse(localStorage.getItem(AJ)) || {}; } catch (x) { return {}; } })();
   var WAF = 'profix.waOp'; try { F.op.wa = localStorage.getItem(WAF) === '1'; } catch (x) { F.op.wa = false; }
@@ -127,13 +127,22 @@
   var tagStatusOS = function (s) { return tag(s, s === 'Pronto' ? 'media' : s === 'Aguardando aprovação' || s === 'Aguardando peça' ? 'alta' : 'cinza'); };
 
   // v0.5.4: leads que chegaram pela página pública de cadastro (leadsLink). WhatsApp só manual, um a um (link wa.me).
-  function leadsNovos() { return (D && D.leadsLink || []).filter(function (l) { return !/convert|descart|conclu|atendid/i.test(String(l.status || '')); }); }
+  // v0.7.1: leads com situação do servidor (Novo, Contatado, Sem interesse, Convertido) + chips + definirStatusLead.
+  var SIT_LEAD = ['Novo', 'Contatado', 'Sem interesse', 'Convertido'];
+  function situacaoLead(l) { if (l.situacao) return l.situacao; var s = String(l.status || '').trim(); return !s || /^novo/i.test(s) ? 'Novo' : /^convert/i.test(s) ? 'Convertido' : /^contatad/i.test(s) ? 'Contatado' : /^sem interesse/i.test(s) ? 'Sem interesse' : /^exclu/i.test(s) ? 'Excluído' : s; }
+  function leadsVisiveis() { return (D && D.leadsLink || []).filter(function (l) { return situacaoLead(l) !== 'Excluído'; }); }
+  function leadsNovos() { return leadsVisiveis().filter(function (l) { return situacaoLead(l) === 'Novo'; }); }
   function waLead(l) { var n = l.consentimento === true || /^(sim|true)$/i.test(String(l.consentimento)) ? V.numeroWa(l.telefone) : null;
     var t = 'Olá ' + String(l.nome || '').split(' ')[0] + ', aqui é da ProFix Computadores. Recebemos seu cadastro' + (l.servico ? ' sobre: ' + l.servico : '') + '. Como podemos ajudar?';
-    return n ? '<a class="btn wa peq" data-wa-lead target="_blank" rel="noopener" href="' + e('https://wa.me/' + n + '?text=' + encodeURIComponent(t)) + '">📲 WhatsApp</a>' : '<span class="muted">Telefone inválido ou sem consentimento.</span>'; }
-  function secaoLeadsLink() { var l = leadsNovos(); if (!l.length) return '';
-    return '<h2 id="leads-link">🔗 Cadastros pelo link <span class="tag alta">' + l.length + '</span></h2>' + lista(l, function (x) {
-      return card(e(x.nome), [e(x.telefone), x.cidade ? e(x.cidade) : '', x.servico ? e(x.servico) : '', x.dataHora ? '⏰ ' + e(x.dataHora) : ''].filter(Boolean).join(' · '), tag(x.status || 'Novo', 'cinza'), waLead(x)); }, ''); }
+    return n ? '<a class="btn wa peq" data-wa-lead="' + l._row + '" target="_blank" rel="noopener" href="' + e('https://wa.me/' + n + '?text=' + encodeURIComponent(t)) + '">📲 WhatsApp</a>' : '<span class="muted">Telefone inválido ou sem consentimento.</span>'; }
+  function secaoLeadsLink() { var todos = leadsVisiveis(); if (!todos.length) return '';
+    var sit = F.lead.sit, cont = {}; SIT_LEAD.forEach(function (k) { cont[k] = 0; }); todos.forEach(function (l) { var k = situacaoLead(l); cont[k] = (cont[k] || 0) + 1; });
+    var l = todos.filter(function (x) { return !sit || situacaoLead(x) === sit; });
+    var chips = '<div class="chips" id="fLeadChips" role="group" aria-label="Filtrar leads">' + [['', 'Todos (' + todos.length + ')']].concat(SIT_LEAD.map(function (k) { return [k, k + ' (' + cont[k] + ')']; })).map(function (k) { return '<button type="button" class="chip" data-chip-lead="' + e(k[0]) + '" aria-pressed="' + (sit === k[0]) + '">' + e(k[1]) + '</button>'; }).join('') + '</div>';
+    return '<h2 id="leads-link">🔗 Cadastros pelo link <span class="tag alta">' + cont.Novo + '</span></h2>' + chips + lista(l, function (x) {
+      var st = situacaoLead(x), muda = api.pode('definirStatusLead') ? SIT_LEAD.filter(function (k) { return k !== st && st !== 'Convertido'; }).map(function (k) { return botao(k === 'Convertido' ? '✅ Converter em cliente' : '→ ' + k, 'lead-st', x._row + '|' + k); }).join('') : '';
+      return card(e(x.nome), [e(x.telefone), x.cidade ? e(x.cidade) : '', x.servico ? e(x.servico) : '', x.dataHora ? '⏰ ' + e(x.dataHora) : ''].filter(Boolean).join(' · ') + (x.clienteExistente ? '<br>⚠️ Telefone já é do cliente ' + e(x.clienteExistente.nome) + ' (não junta sozinho).' : '') + (x.statusEm ? '<br><span class="muted">' + e(st) + ' em ' + e(x.statusEm) + '</span>' : ''),
+        tag(st, st === 'Novo' ? 'alta' : st === 'Convertido' ? 'ok' : 'cinza') + (x.followup ? tag('follow-up', 'media') : ''), (st !== 'Convertido' ? waLead(x) : '') + muda + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'lead-excluir', x._row, 'perigo') : ''), ' data-lead="' + x._row + '"'); }, 'Nenhum lead com esse filtro.'); }
   // ---------- Telas ----------
   var TELAS = {
     hoje: function () {
@@ -198,10 +207,11 @@
         }, 'Nenhuma empresa com esse filtro.');
     },
     mais: function (sub) {
-      var cab = '<h1>Mais</h1>' + abas('mais', [['financeiro', 'Financeiro'], ['visitas', 'Visitas'], ['mes', 'Mês'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['ajustes', 'Ajustes']], sub);
+      var cab = '<h1>Mais</h1>' + abas('mais', [['financeiro', 'Financeiro'], ['visitas', 'Visitas'], ['mes', 'Mês'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['lixeira', 'Lixeira'], ['ajustes', 'Ajustes']], sub);
       if (sub === 'precos') return cab + telaPrecos();
       if (sub === 'visitas') return cab + telaVisitas();
       if (sub === 'mes') return cab + telaMes();
+      if (sub === 'lixeira') return cab + telaLixeira();
       if (sub === 'catalogo') return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' + lista(D.catalogo || [], function (s) { return card(e(s.servico), e(s.tipo || '') + ' · ' + V.brl(s.preco) + (s.sugerido ? '<br>Sugerido: ' + e(s.sugerido) : '') + (s.descricao ? '<br>' + e(s.descricao) : ''), tag(s.status || (s.ativo === 'Sim' ? 'Ativo' : 'Inativo')), botao('Editar', 'cat-editar', s._row)); }, 'Catálogo vazio.');
       if (sub === 'modelos') return cab + '<div class="row">' + botao('+ Novo modelo', 'mod-novo', '', '') + '</div>' + lista(D.modelos || [], function (m) { return card(e(m.modelo), e(m.quando || '') + '<br><span class="pre">' + e(String(m.texto || '').slice(0, 160)) + (String(m.texto || '').length > 160 ? '…' : '') + '</span>', '', botao('Editar', 'mod-editar', m._row)); }, 'Nenhum modelo.') +
         '<p class="muted">Backup: continua pela planilha (menu ProFix CRM > Fazer backup agora / backup semanal).</p>';
@@ -253,13 +263,13 @@
   /** Tela de confirmação do e-mail: texto pronto e editável; só envia depois do "Enviar e-mail". */
   function emailTela(c, o) {
     var tipo = o && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? 'pronto' : 'orcamento';
-    var t = o ? V.montarEmail(tipo, o, c, CFG) : { assunto: 'ProFix Computadores', corpo: 'Oi, ' + c.nome.split(' ')[0] + '!\n\n\nPedro — ProFix Computadores' };
+    var t = o ? V.montarEmail(tipo, o, c, cfgEmail()) : { assunto: 'ProFix Computadores', corpo: 'Oi, ' + c.nome.split(' ')[0] + '!\n\n\nPedro — ProFix Computadores' };
     var cota = D.cotaEmail == null ? 'não informada' : String(D.cotaEmail);
     var p = formulario('✉️ Enviar e-mail', (o ? [{ k: 'modelo', r: 'Modelo', t: 'select', o: [V.EMAILS.orcamento.rotulo, V.EMAILS.pronto.rotulo] }] : []).concat([{ k: 'assunto', r: 'Assunto', req: true }, { k: 'corpo', r: 'Texto (pode editar)', t: 'textarea', req: true }]),
       { modelo: V.EMAILS[tipo].rotulo, assunto: t.assunto, corpo: t.corpo },
       '<div class="muted">Para: <b id="emPara">' + e(c.email) + '</b> · cota restante hoje: <b id="emCota">' + e(cota) + '</b><br>O rodapé LGPD (\u201c' + e(V.RODAPE_LGPD_SERVIDOR) + '\u201d) é colocado automaticamente.</div><p class="alerta" id="emPend"' + (V.temPendencia(t.corpo) ? '' : ' hidden') + '>Texto com [CONFIRMAR …]: troque pelo valor certo antes de enviar (validade/garantia ainda não confirmadas no config.js).</p>');
     $('c_corpo').rows = 12; $('fSalvar').textContent = 'Enviar e-mail';
-    if ($('c_modelo')) $('c_modelo').onchange = function () { var k = this.value === V.EMAILS.pronto.rotulo ? 'pronto' : 'orcamento', n = V.montarEmail(k, o, c, CFG); $('c_assunto').value = n.assunto; $('c_corpo').value = n.corpo; $('c_corpo').oninput(); };
+    if ($('c_modelo')) $('c_modelo').onchange = function () { var k = this.value === V.EMAILS.pronto.rotulo ? 'pronto' : 'orcamento', n = V.montarEmail(k, o, c, cfgEmail()); $('c_assunto').value = n.assunto; $('c_corpo').value = n.corpo; $('c_corpo').oninput(); };
     $('c_corpo').oninput = function () { $('emPend').hidden = !V.temPendencia(this.value); };
     $('fSalvar').addEventListener('click', function (ev) { if (V.temPendencia($('c_corpo').value)) { ev.preventDefault(); $('fErro').textContent = 'Troque o [CONFIRMAR …] antes de enviar.'; } });
     p.then(function (v) {
@@ -267,6 +277,8 @@
       escrever('enviarEmailCliente', [{ clienteId: c.id, assunto: v.assunto, corpo: v.corpo, refId: o ? o.num : '' }], function (cache, r) { if (r && r.restanteCota != null) cache.cotaEmail = r.restanteCota; });
     });
   }
+  // v0.7.1: validade/garantia do e-mail vêm do servidor (getDados().config), nunca de valor fixo no app.
+  function cfgEmail() { var p = window.ProFixDif.padroes(D); return Object.assign({}, CFG, { validadeDias: p.validadeDias, garantiaDias: p.garantiaDias }); }
   function escrever(acao, args, local) {
     return api.escrever(acao, args, local).then(function (r) { aviso(r.msg); return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); });
   }
@@ -294,7 +306,7 @@
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<div class="acoes">' + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
+        '<div class="acoes">' + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
       m.onclose = null; m.showModal(); ligarAcoes(m, true);
@@ -339,9 +351,10 @@
     'cli-editar': function (row) {
       var c = row ? achar('clientes', row) : {};
       formulario(row ? e(c.nome) : 'Novo cliente', [{ k: 'nome', r: 'Nome', req: true }, { k: 'whatsapp', r: 'WhatsApp' }, { k: 'bairro', r: 'Bairro' }, { k: 'origem', r: 'Origem do contato', t: 'select', o: D.origens },
-        { k: 'indicadoPor', r: 'Indicado por' }, { k: 'consent', r: 'Consentimento de contato (LGPD)', t: 'select', o: ['Sim', 'Não'] }].concat(temCol('clientes', 'email') ? [{ k: 'email', r: 'E-mail', t: 'email' }] : [], temCol('clientes', 'endereco') ? [{ k: 'endereco', r: 'Endereço (para o Maps)' }] : [], [ { k: 'proximo', r: 'Próximo contato', t: 'date' }, { k: 'acao', r: 'Próxima ação' },
+        { k: 'indicadoPor', r: 'Indicado por' }, { k: 'consent', r: 'Consentimento de contato (LGPD)', t: 'select', o: ['Sim', 'Não'] },
+        { k: 'aniversario', r: 'Aniversário (dd/mm)', ajuda: 'Ex.: 25/12. Usado no chip “aniversariantes”.' }, { k: 'naoContatar', r: 'Não contatar', t: 'select', o: ['Não', 'Sim'], ajuda: '“Sim” bloqueia WhatsApp, ligação e marketing para este cliente.' }].concat(temCol('clientes', 'email') ? [{ k: 'email', r: 'E-mail', t: 'email' }] : [], temCol('clientes', 'endereco') ? [{ k: 'endereco', r: 'Endereço (para o Maps)' }] : [], [ { k: 'proximo', r: 'Próximo contato', t: 'date' }, { k: 'acao', r: 'Próxima ação' },
         { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'obs', r: 'Observações', t: 'textarea' }]), c)
-        .then(function (v) { if (!v) return; var d = Object.assign({}, v); if (v.consent === 'Sim' && c.consent !== 'Sim') d.dataConsent = D.hoje; if (row) { d._row = c._row; d._nomeOriginal = c.nome; } escrever('salvarCliente', [d], row ? aplicar('clientes', row, v) : null); });
+        .then(function (v) { if (!v) return; var an = window.ProFixDif.normalizarAniversario(v.aniversario); if (an === null) return aviso('Aniversário inválido: use dd/mm (ex.: 25/12).'); v.aniversario = an; if (!v.naoContatar) v.naoContatar = 'Não'; var d = Object.assign({}, v); if (v.consent === 'Sim' && c.consent !== 'Sim') d.dataConsent = D.hoje; if (row) { d._row = c._row; d._nomeOriginal = c.nome; } escrever('salvarCliente', [d], row ? aplicar('clientes', row, v) : null); });
     },
     'cli-novo': function () { ACOES['cli-editar'](''); },
     'cli-inter': function (row) {
@@ -443,7 +456,8 @@
       '<b class="osm-lt" data-lt="' + pref + '.' + j + '"></b>' +
       '<button type="button" class="btn sec peq" data-osm="rem-item" data-p="' + pref + '.' + j + '" aria-label="Remover item">✕</button></div>';
   }
-  function atalhos(alvo) { return '<div class="chips">' + O.ATALHOS.map(function (a, k) { return '<button type="button" class="chip" data-osm="atalho" data-p="' + alvo + '.' + k + '">' + e(a.rot) + '</button>'; }).join('') + '</div>'; }
+  function atalhosLista() { var p = window.ProFixDif.padroes(D).indicacaoPct, l = O.ATALHOS.slice(); if (p) l.push({ rot: 'Indicação −' + String(p).replace('.', ',') + '%', tipo: 'desconto', modo: '%', valorUnit: p, descricao: 'Desconto de indicação' }); return l; } // v0.7.1: % de indicação vem do servidor
+  function atalhos(alvo) { return '<div class="chips">' + atalhosLista().map(function (a, k) { return '<button type="button" class="chip" data-osm="atalho" data-p="' + alvo + '.' + k + '">' + e(a.rot) + '</button>'; }).join('') + '</div>'; }
   function telaOSM(sub) {
     if (!OSM || OSM.chave !== sub) abrirOSM(sub);
     var d = OSM.d, nomes = (D.clientes || []).map(function (c) { return c.nome; }), ap = aprovada(), cond = O.condicaoDe(d);
@@ -530,7 +544,7 @@
       if (a === 'rem-eq') { if (confirm('Remover a máquina ' + (+p[0] + 1) + ' e os itens dela?')) { d.equipamentos.splice(+p[0], 1); OSM.sujo = true; redesenhar(); } return; }
       if (a === 'add-item') { var tp = p.slice(1).join('.'), lst = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[0]].itens; lst.push({ tipo: tp, descricao: '', qtd: '1', valorUnit: '', modo: O.ehAjuste({ tipo: tp }) ? 'R$' : '', origem: '' }); OSM.sujo = true; redesenhar(); return; }
       if (a === 'rem-item') { var l2 = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[1]].itens; l2.splice(+p[p.length - 1], 1); OSM.sujo = true; redesenhar(); return; }
-      if (a === 'atalho') { var at = O.ATALHOS[+p[1]], dest = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[0].slice(2)].itens; dest.push({ tipo: at.tipo, descricao: at.descricao, qtd: '1', valorUnit: String(at.valorUnit), modo: at.modo, origem: 'atalho' }); OSM.sujo = true; redesenhar(); return; }
+      if (a === 'atalho') { var at = atalhosLista()[+p[1]], dest = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[0].slice(2)].itens; dest.push({ tipo: at.tipo, descricao: at.descricao, qtd: '1', valorUnit: String(at.valorUnit), modo: at.modo, origem: 'atalho' }); OSM.sujo = true; redesenhar(); return; }
       if (a === 'cat' || a === 'livre') {
         var i = +p[0], q = $('osmQ' + i).value.trim(), ci = a === 'cat' ? CAT[+p[1]] : null;
         d.equipamentos[i].itens.push(ci ? { tipo: O.tipoDaCategoria(ci.categoria), descricao: ci.descricao, qtd: '1', valorUnit: ci.valor === '' || ci.valor == null ? '' : String(ci.valor), modo: '', origem: ci.origem || 'Catálogo OS' }
@@ -747,7 +761,7 @@
       '<div class="grandes" id="acoesFicha">' + waCli(c, '', tipoWa).replace('btn wa peq', 'btn wa') + (tel ? '<a class="btn sec" id="bLigar" href="' + e(tel) + '">📞 Ligar</a>' : '<span class="muted">Sem telefone para ligar.</span>') +
       botao('🧾 Nova OS', 'cli-os', c._row, '').replace(' peq', '') + (api.pode('salvarOSMulti') ? botao('💻 Nova OS com vários equipamentos', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
       '<div class="acoes">' + botao('📅 Agendar retorno', 'cli-retorno', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Editar', 'cli-editar', c._row) +
-      (selo.chave === 'sim' ? botao('🛡 Revogar consentimento', 'cli-lgpd', c._row) : selo.chave === 'nao' ? botao('🛡 Registrar consentimento', 'cli-lgpd', c._row, '') : '') + '</div>' +
+      (selo.chave === 'sim' ? botao('🛡 Revogar consentimento', 'cli-lgpd', c._row) : selo.chave === 'nao' ? botao('🛡 Registrar consentimento', 'cli-lgpd', c._row, '') : '') + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'cli-excluir', c._row, 'perigo') : '') + '</div>' +
       (c.proximo ? '<p id="proxRetorno">⏰ Retorno: <b>' + V.dataBR(c.proximo) + '</b> ' + e(c.acao || '') + '</p>' : '') +
       '<div class="tiles">' + tile('Total gasto', V.brl(nu.totalGasto || 0), 'tTotal') + tile('Nº de OS', nu.nOS || 0) + tile('Ticket médio', V.brl(nu.ticketMedio || 0)) + tile('Lucro', V.brl(nu.lucro || 0)) +
       tile('Último atendimento', e(Dif.tempoDesde(R.diasSemRetorno)), 'tDesde') + tile('Garantia até', nu.garantiaAte ? Dif.dataBR(nu.garantiaAte) : '—') + tile('Preventiva em', nu.preventivaEm ? Dif.dataBR(nu.preventivaEm) : '—') + tile('Indicou', (f.indicou || []).length) + '</div>' +
@@ -782,16 +796,18 @@
         else escreverFicha('salvarCliente', [{ _row: c._row, _nomeOriginal: c.nome, nome: c.nome, proximo: x.data, acao: x.acao }], aplicar('clientes', row, { proximo: x.data, acao: x.acao })); });
     document.querySelectorAll('#atalhosRetorno [data-dias]').forEach(function (b) { b.onclick = function () { $('c_data').value = Dif.somaDias(D.hoje, +b.dataset.dias); }; });
   };
-  // Não existe "registrarConsentimento" no crm-v3: usa salvarCliente (o servidor grava a data do consentimento) + registra a conversa.
+  // v0.7.1: registrarConsentimento {cliente, aceita} (API @43): grava Sim/Não + data e registra na linha do tempo.
+  // Sem internet: vai para a fila e o aparelho já mostra o novo selo. Servidor antigo (sem a ação): salvarCliente + registrarInteracao.
   ACOES['cli-lgpd'] = function (row) {
     var c = achar('clientes', row), dar = c.consent !== 'Sim';
     if (!confirm(dar ? 'Registrar que ' + c.nome + ' AUTORIZOU receber mensagens da ProFix (LGPD)?' : 'Revogar o consentimento de ' + c.nome + '? Mensagens de marketing deixam de aparecer; as da OS continuam com aviso.')) return;
-    var mud = { consent: dar ? 'Sim' : 'Não', dataConsent: dar ? D.hoje : '' }, d = { _row: c._row, _nomeOriginal: c.nome, nome: c.nome, consent: mud.consent };
-    if (dar) d.dataConsent = D.hoje;
+    var mud = { consent: dar ? 'Sim' : 'Não', dataConsent: D.hoje }, fim = function (r) { aviso((dar ? 'Consentimento registrado.' : 'Consentimento revogado.') + (r && r.enfileirado ? ' (vai para a planilha quando voltar a internet)' : '')); return iniciar(); };
     FICHA.nome = '';
+    if (api.pode('registrarConsentimento')) return api.escrever('registrarConsentimento', [{ cliente: c.nome, aceita: dar }], aplicar('clientes', row, mud)).then(fim, function (er) { aviso('Não salvou: ' + er.message); });
+    var d = { _row: c._row, _nomeOriginal: c.nome, nome: c.nome, consent: mud.consent }; if (dar) d.dataConsent = D.hoje;
     api.escrever('salvarCliente', [d], aplicar('clientes', row, mud)).then(function () {
       return api.escrever('registrarInteracao', [{ cliente: c.nome, _rowCliente: c._row, canal: 'Presencial', resumo: dar ? 'Consentimento LGPD registrado (cliente autorizou contato)' : 'Consentimento LGPD revogado a pedido do cliente' }]);
-    }).then(function (r) { aviso(dar ? 'Consentimento registrado.' : 'Consentimento revogado.' + (r.enfileirado ? ' (vai para a planilha quando voltar a internet)' : '')); return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); });
+    }).then(fim, function (er) { aviso('Não salvou: ' + er.message); });
   };
   ACOES['cli-maq'] = function (row) {
     var c = achar('clientes', row);
@@ -808,14 +824,14 @@
 
   // ---- OS: checklist, laudo, garantia, link de acompanhamento e mensagem de status ----
   function blocoGarantiaOS(o) {
-    var g = Dif.garantiasDaOS(o, D.hoje, (D.config && D.config.garantiaDiasProfix) || Dif.GARANTIA_PADRAO)[0]; if (!g) return '';
+    var g = Dif.garantiasDaOS(o, D.hoje, Dif.padroes(D).garantiaDias)[0]; if (!g) return '';
     return '<div id="garantiaOS">' + (g.restam >= 0 ? tag('🛡 Garantia ' + g.dias + ' dias · até ' + Dif.dataBR(g.ate) + ' · faltam ' + g.restam + (g.restam === 1 ? ' dia' : ' dias'), 'ok') : tag('Garantia vencida em ' + Dif.dataBR(g.ate), 'vencido')) + '</div>';
   }
   function botoesDifOS(o) {
     return '<div class="grandes" id="acoesDifOS">' + (api.pode('salvarChecklistOS') ? botao('✅ Checklist', 'os-chk', o._row, '').replace(' peq', '') : '') +
       (api.pode('textoStatusOS') ? botao('📲 Avisar status', 'os-msg', o._row, 'sec').replace(' peq', '') : '') +
       (api.pode('linkClienteOS') ? botao('🔗 Link de acompanhamento', 'os-link', o._row, 'sec').replace(' peq', '') : '') +
-      (api.pode('laudoTecnicoOS') ? botao('📄 Laudo técnico', 'os-laudo', o._row, 'sec').replace(' peq', '') : '') + '</div>';
+      (api.pode('laudoTecnicoOS') ? botao('📄 Laudo técnico', 'os-laudo', o._row, 'sec').replace(' peq', '') : '') + botaoAvaliar(o) + '</div>';
   }
   ACOES['os-chk'] = function (row) {
     var o = achar('os', row), m = $('modal'), mom0 = ['Pronto', 'Entregue'].indexOf(Dif.statusCanon(o.status)) >= 0 ? 'Saída' : 'Entrada';
@@ -917,6 +933,97 @@
       '<div class="card"><div class="m">OS em andamento: ' + obj(r.osPorStatus) + '<br>Como conheceu: ' + obj(r.comoConheceu) + '<br>Motivos de recusa: ' + obj(r.motivosRecusa) + '</div></div>';
   }
 
+  // ---------- v0.7.1: Lixeira (excluirRegistro / listarLixeira / restaurarRegistro / apagarDefinitivo), leads, avaliação no Google ----------
+  var LX = null;
+  function rotTipo(t) { return { lead: 'Lead', cliente: 'Cliente', os: 'OS', oportunidade: 'Oportunidade', maquina: 'Máquina', contrato: 'Contrato mensal', contratoRecorrente: 'Contrato recorrente' }[t] || t; }
+  function semNet() { if (offline || (typeof navigator !== 'undefined' && navigator.onLine === false)) { aviso('Sem internet: a Lixeira só funciona com conexão. Nada foi alterado.'); return true; } return false; }
+  /** Excluir: 1º confirma; manda SEM cascata. Cliente com OS/máquinas/contratos volta com o impacto: mostra e só exclui tudo se o Pedro confirmar. */
+  function excluir(ref, desc) {
+    if (!api.pode('excluirRegistro')) return aviso('Esta função ainda não foi liberada no servidor (crm-v3).');
+    if (semNet()) return;
+    if (!confirm('Mandar ' + desc + ' para a Lixeira?\nDá para restaurar depois em Mais › Lixeira.')) return;
+    var ok = function (r) { aviso(r.msg || 'Foi para a Lixeira.'); LX = null; FICHA.nome = ''; if (ref.tipo === 'cliente' && rota().tela === 'cliente') location.hash = '#clientes'; return iniciar(); };
+    escreverResp('excluirRegistro', [ref]).then(function (r) {
+      if (!r || !r.precisaConfirmar) return ok(r || {});
+      mostrarImpacto(r, function () { escreverResp('excluirRegistro', [Object.assign({}, ref, { cascata: true })]).then(function (r2) { if (r2 && r2.precisaConfirmar) return aviso('O servidor não confirmou a exclusão. Nada foi alterado.'); ok(r2 || {}); }, function () {}); });
+    }, function () {});
+  }
+  function mostrarImpacto(r, sim) {
+    var imp = r.impacto || {}, m = $('modal'), grupo = function (rot, l) { return (l || []).length ? '<div><b>' + rot + ' (' + l.length + ')</b><ul>' + l.map(function (x) { return '<li>' + e(x.descricao || x.id) + '</li>'; }).join('') + '</ul></div>' : ''; };
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fImpacto"><h2 style="margin:0">🗑 Excluir ' + e(r.nome || 'cliente') + '?</h2><p class="alerta" id="impactoMsg">' + e(r.msg || 'Este cliente tem registros ligados.') + '</p>' +
+      grupo('OS', imp.os) + grupo('Máquinas', imp.maquinas) + grupo('Contratos mensais', imp.contratos) + grupo('Contratos recorrentes', imp.contratosRecorrentes) +
+      '<p class="muted">Tudo vai junto para a Lixeira (um grupo só) e pode ser restaurado em Mais › Lixeira.</p><div class="grandes"><button class="btn perigo" value="ok" id="bExcluirTudo">Excluir o cliente e os ' + (imp.total || 0) + ' registro(s) ligados</button><button class="btn sec" value="cancelar">Cancelar</button></div></form>';
+    m.onclose = function () { m.onclose = null; if (m.returnValue === 'ok') sim(); else aviso('Cancelado: nada foi excluído.'); };
+    m.returnValue = ''; m.showModal();
+  }
+  ACOES['cli-excluir'] = function (row) { var c = achar('clientes', row); excluir({ tipo: 'cliente', id: c.id || '', _row: c._row, nome: c.nome }, 'o cliente “' + c.nome + '”'); };
+  ACOES['os-excluir'] = function (row) { var o = achar('os', row); excluir({ tipo: 'os', id: o.num, _row: o._row }, 'a ' + o.num + ' (' + o.cliente + ')'); };
+  ACOES['lead-excluir'] = function (row) { var l = (D.leadsLink || []).filter(function (x) { return x._row === Number(row); })[0]; excluir({ tipo: 'lead', _row: Number(row) }, 'o lead “' + (l ? l.nome : row) + '”'); };
+  PRECISA['cli-excluir'] = PRECISA['os-excluir'] = PRECISA['lead-excluir'] = 'excluirRegistro';
+
+  function carregarLX() {
+    if (carregarLX.indo) return; carregarLX.indo = true;
+    api.ler('listarLixeira', [{}]).then(function (r) { carregarLX.indo = false; LX = { itens: (r && r.itens) || [] }; if (rota().tela === 'mais') render(); },
+      function (er) { carregarLX.indo = false; LX = { itens: [], erro: (offline ? 'Sem internet: a Lixeira só funciona com conexão.' : 'Não deu para abrir a Lixeira: ' + er.message) }; if (rota().tela === 'mais') render(); });
+  }
+  function telaLixeira() {
+    if (!api.pode('listarLixeira')) return '<div class="vazio">A Lixeira ainda não foi liberada no servidor (crm-v3).</div>';
+    if (!LX) { carregarLX(); return '<div class="vazio">Abrindo a Lixeira…</div>'; }
+    var grupos = {}; LX.itens.forEach(function (x) { if (x.grupo) grupos[x.grupo] = (grupos[x.grupo] || 0) + 1; });
+    return '<div class="row"><p class="muted">Excluídos ficam aqui até você restaurar ou apagar de vez. Só funciona com internet.</p><button class="btn sec peq" id="bLxAtualizar">🔄 Atualizar</button></div>' + (LX.erro ? '<p class="alerta" id="lxErro">' + e(LX.erro) + '</p>' : '') +
+      '<p class="muted" id="contagemLx">' + LX.itens.length + ' na Lixeira</p>' + lista(LX.itens, function (x) {
+        var g = x.grupo && grupos[x.grupo] > 1 ? ' · grupo ' + e(x.grupo) + ' (' + grupos[x.grupo] + ' itens, voltam juntos)' : '';
+        return card(e(x.id) + ' · ' + e(rotTipo(x.tipo)), e(x.descricao || x.chave || '') + '<br><span class="muted">Excluído em ' + e(x.excluidoEm || '') + (x.por ? ' por ' + e(x.por) : '') + g + '</span>', '',
+          (api.pode('restaurarRegistro') ? botao('↩️ Restaurar', 'lx-rest', x.id, '') : '') + (api.pode('apagarDefinitivo') ? botao('Apagar definitivamente', 'lx-apagar', x.id, 'perigo') : ''), ' data-lx="' + e(x.id) + '"');
+      }, 'A Lixeira está vazia.');
+  }
+  ACOES['lx-rest'] = function (id) {
+    if (semNet()) return;
+    escreverResp('restaurarRegistro', [{ id: id }]).then(function (r) { aviso(r.msg || 'Restaurado.'); LX = null; return iniciar(); }, function () {});
+  };
+  ACOES['lx-apagar'] = function (id) {
+    if (semNet()) return;
+    var x = ((LX && LX.itens) || []).filter(function (k) { return k.id === id; })[0] || { id: id }, m = $('modal');
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fApagar"><h2 style="margin:0">Apagar ' + e(id) + ' definitivamente?</h2><p class="alerta">Não dá para desfazer. Os dados de “' + e(x.descricao || id) + '” somem (fica só o ID)' + (x.grupo ? ' – vale para o grupo ' + e(x.grupo) + ' inteiro' : '') + '.</p>' +
+      '<label for="cApagar">Digite <b>APAGAR</b> para confirmar</label><input id="cApagar" autocomplete="off" autocapitalize="characters" spellcheck="false">' +
+      '<div class="grandes"><button class="btn perigo" value="ok" id="bApagar" disabled>Apagar definitivamente</button><button class="btn sec" value="cancelar" formnovalidate>Cancelar</button></div></form>';
+    $('cApagar').oninput = function () { $('bApagar').disabled = this.value.trim() !== 'APAGAR'; };
+    m.onclose = function () { m.onclose = null; var t = $('cApagar') ? $('cApagar').value.trim() : '';
+      if (m.returnValue !== 'ok' || t !== 'APAGAR') return aviso('Nada foi apagado.');
+      escreverResp('apagarDefinitivo', [{ id: id, confirmar: 'APAGAR' }]).then(function (r) { aviso(r.msg || 'Apagado.'); LX = null; render(); }, function () {}); };
+    m.returnValue = ''; m.showModal(); $('cApagar').focus();
+  };
+  PRECISA['lx-rest'] = 'restaurarRegistro'; PRECISA['lx-apagar'] = 'apagarDefinitivo';
+
+  // Leads: definirStatusLead (Convertido = converterLeadLink no servidor). Sem internet: fila + tela já atualizada.
+  ACOES['lead-st'] = function (k) {
+    var p = String(k).split('|'), row = Number(p[0]), st = p[1], l = (D.leadsLink || []).filter(function (x) { return x._row === row; })[0];
+    if (st === 'Convertido' && !confirm('Converter “' + (l ? l.nome : row) + '” em cliente? O lead fica marcado como convertido (não é apagado).')) return;
+    escrever('definirStatusLead', [{ _row: row, status: st }], function (cache) { (cache.leadsLink || []).forEach(function (x) { if (x._row === row) { x.status = st; x.situacao = st; x.statusEm = Dif.agoraTxt(); } }); });
+  };
+  PRECISA['lead-st'] = 'definirStatusLead';
+  function registrarLeadAberto(row, canal) {
+    if (!api.pode('registrarMensagemAberta')) return;
+    var marca = function (lst) { (lst || []).forEach(function (x) { if (x._row === row && situacaoLead(x) === 'Novo') { x.status = 'Contatado'; x.situacao = 'Contatado'; } }); };
+    marca(D.leadsLink);
+    api.escrever('registrarMensagemAberta', [{ lead: row, canal: canal || 'WhatsApp' }], function (cache) { marca(cache.leadsLink); })
+      .then(function (r) { aviso(r.enfileirado ? 'Lead marcado como Contatado (envio quando voltar a internet).' : 'Lead marcado como Contatado.'); }, function () { /* registro é opcional */ });
+  }
+
+  // Pedir avaliação no Google: só com googleReviewUrl do servidor, só OS Entregue; regra LGPD das mensagens da OS.
+  function botaoAvaliar(o) {
+    var url = Dif.padroes(D).googleReviewUrl; if (!url || Dif.statusCanon(o.status) !== 'Entregue') return '';
+    var c = V.clienteDaOS(D, o); if (Dif.naoContatar(c)) return '<span class="muted" id="avaliarBloq">⛔ Pedir avaliação: cliente marcado como “Não contatar”.</span>';
+    return botao('⭐ Pedir avaliação no Google', 'os-avaliar', o._row, 'sec').replace(' peq', '');
+  }
+  ACOES['os-avaliar'] = function (row) {
+    var o = achar('os', row), c = V.clienteDaOS(D, o), url = Dif.padroes(D).googleReviewUrl;
+    if (!url || Dif.statusCanon(o.status) !== 'Entregue') return aviso('Pedir avaliação só depois da OS entregue.');
+    var texto = 'Oi, ' + String((c && c.nome) || o.cliente || '').split(' ')[0] + '! Obrigado por confiar na ProFix Computadores (' + o.num + '). Se puder, deixe sua avaliação no Google, leva 1 minutinho e ajuda muito: ' + url;
+    var b = c ? V.botaoWaCliente(c, 'os', texto) : null, r = Dif.regraContato(c, 'os');
+    abrirMsg({ titulo: '⭐ Avaliação no Google · ' + o.num, texto: texto, aviso: b && b.aviso ? r.aviso : '', waUrl: b ? b.href : '', semWa: Dif.naoContatar(c) ? 'Cliente marcado como “Não contatar”.' : 'WhatsApp inválido ou ausente.', cliente: c, os: o.num, tipo: 'avaliacao' });
+  };
+
   function ligarAcoes(raiz, dentroModal) {
     raiz.querySelectorAll('[data-a]').forEach(function (b) {
       b.onclick = function (ev) {
@@ -937,6 +1044,9 @@
     filtro('fOsSt', F.os, 'status'); filtro('fOsQ', F.os, 'q'); filtro('fCliQ', F.cli, 'q');
     c.querySelectorAll('[data-chip-cli]').forEach(function (b) { b.onclick = function () { F.cli.chip = b.dataset.chipCli; render(); var n = document.querySelector('[data-chip-cli="' + F.cli.chip + '"]'); if (n) n.focus(); }; });
     c.querySelectorAll('a[data-reg-nome]').forEach(function (a) { a.addEventListener('click', function () { registrarAberta(a); }); });
+    c.querySelectorAll('[data-chip-lead]').forEach(function (b) { b.onclick = function () { F.lead.sit = b.dataset.chipLead; render(); var n = document.querySelector('[data-chip-lead="' + F.lead.sit + '"]'); if (n) n.focus(); }; });
+    c.querySelectorAll('a[data-wa-lead]').forEach(function (a) { a.addEventListener('click', function () { registrarLeadAberto(Number(a.dataset.waLead), 'WhatsApp'); }); });
+    if ($('bLxAtualizar')) $('bLxAtualizar').onclick = function () { LX = null; render(); };
     if ($('fMes')) $('fMes').onchange = function () { RM.mesSel = this.value || ''; render(); };
     ligarAcoes(c);
     ligarOSM(c);

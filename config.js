@@ -15,10 +15,9 @@ window.PROFIX_CONFIG = {
     // crm-v3 API @41: diferenciais (ficha do cliente, checklist, laudo, garantia, contratos, visitas, painel do mês, link da OS).
     'fichaCliente', 'resumoMes', 'listaContratos', 'laudoTecnicoOS', 'extrasOS', 'textoMarketing',
     'registrarMensagemAberta', 'agendarRetorno', 'salvarMaquina', 'vincularMaquinaOS', 'salvarChecklistOS', 'linkClienteOS', 'textoStatusOS',
-    'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita'],
-  // PENDENTE de confirmação do Pedro: deixe null até ele confirmar (o e-mail sai com um aviso [CONFIRMAR …] e não envia).
-  VALIDADE_ORCAMENTO_DIAS: null, // rascunho sugere 10
-  GARANTIA_DIAS: null,           // rascunho sugere 90
+    'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita',
+    'listarClientesResumo', 'listarLixeira', 'registrarConsentimento', 'definirStatusLead', 'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo'], // v0.7.1: API @43
+  // v0.7.1: validade do orçamento, garantia e desconto de indicação NÃO ficam aqui: vêm do servidor (getDados().config: validadePadraoDias, garantiaDiasProfix, descontoIndicacaoPct).
   WHATSAPP_LOJA: '(15) 98112-8309',
-  VERSAO_APP: '0.7.0'
+  VERSAO_APP: '0.7.1'
 };

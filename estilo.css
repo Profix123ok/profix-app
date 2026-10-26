@@ -77,3 +77,6 @@ dialog.cheia{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:
 .opcoes input:checked+span{background:var(--verde);color:var(--sobre-verde);border-color:var(--verde);font-weight:700}.opcoes input:focus-visible+span{outline:2px solid var(--amar)}
 .msg-texto{background:var(--card2);border-radius:10px;padding:10px;white-space:pre-wrap}.laudo iframe{width:100%;height:60vh;border:0;background:#fff;border-radius:8px}
 @media (max-width:420px){.grandes{grid-template-columns:1fr}}
+/* v0.7.1: Lixeira, impacto da exclusão, leads */
+.btn.perigo{background:#3b1414;color:#fecaca;border:1px solid #7f1d1d}.btn.perigo:disabled{opacity:.5;cursor:not-allowed}
+#fImpacto ul{margin:4px 0 8px 18px;padding:0}#cApagar{text-transform:uppercase;letter-spacing:2px}

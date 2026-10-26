@@ -15,15 +15,18 @@
   // Lista FECHADA de ações = funções que já existem no crm-v3/Code.gs (mesma lista que o doPost deve aceitar).
   var LEITURA = ['getDados', 'listarAgenda', 'leadsLink', 'resumoOrigens',
     'lerOSMulti', 'catalogoOS', 'gerarOrcamentoOS', 'orcamentoOS', 'simularCondicaoOS',
-    'fichaCliente', 'resumoMes', 'listaContratos', 'laudoTecnicoOS', 'extrasOS', 'textoMarketing']; // v0.7.0: diferenciais (crm-v3 API @41). v0.6.0: OS com vários equipamentos (crm-v3 API v32)
+    'fichaCliente', 'resumoMes', 'listaContratos', 'laudoTecnicoOS', 'extrasOS', 'textoMarketing',
+    'listarClientesResumo', 'listarLixeira']; // v0.7.1: API @43. v0.7.0: diferenciais (crm-v3 API @41). v0.6.0: OS com vários equipamentos (crm-v3 API v32)
   var ESCRITA = ['salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento',
     'lancarRecebimento', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
     'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'registrarFollowup',
     'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente',
     'salvarOSMulti', 'salvarCatalogoOS', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS',
     'registrarMensagemAberta', 'agendarRetorno', 'salvarMaquina', 'vincularMaquinaOS', 'salvarChecklistOS', 'linkClienteOS', 'textoStatusOS',
-    'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita']; // v0.7.0 diferenciais; crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
-  var SO_ONLINE = ['linkClienteOS', 'textoStatusOS', 'iniciarVisita', // v0.7.0: precisam da resposta na hora (link/texto); início da visita usa a hora do servidor
+    'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita',
+    'registrarConsentimento', 'definirStatusLead', 'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo']; // v0.7.1 (API @43). v0.7.0 diferenciais; crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
+  var SO_ONLINE = ['excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo', // v0.7.1: Lixeira só com internet (precisa da resposta: impacto/confirmação)
+    'linkClienteOS', 'textoStatusOS', 'iniciarVisita', // v0.7.0: precisam da resposta na hora (link/texto); início da visita usa a hora do servidor
     'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS']; // nunca vão para a fila offline (e-mail não sai "depois" sem o Pedro ver; aprovação e condição especial são feitas na frente do cliente, com o servidor)
   var ACOES = {};
   LEITURA.forEach(function (a) { ACOES[a] = { escrita: false }; });
@@ -129,6 +132,10 @@
       }).then(function (d) {
         // v0.5.4: leads da página pública de cadastro (só leitura). Falha aqui não derruba o carregamento.
         if (d && !Array.isArray(d.leadsLink) && api.pode('leadsLink')) return chamar('leadsLink', []).then(function (l) { d.leadsLink = Array.isArray(l) ? l : []; return d; }, function () { return d; });
+        return d;
+      }).then(function (d) {
+        // v0.7.1: resumo dos clientes calculado pelo servidor (listarClientesResumo). Falhou? O app usa a conta local (diferenciais.js).
+        if (d && !Array.isArray(d.clientesResumo) && api.pode('listarClientesResumo')) return chamar('listarClientesResumo', []).then(function (r) { if (r && Array.isArray(r.clientes)) d.clientesResumo = r.clientes; return d; }, function () { return d; });
         return d;
       }).then(function (d) { guardar(d); return { dados: d, offline: false }; },
         function (e) { if (e.doServidor || e.codigo === 'SEM_TOKEN') throw e; return { dados: cache, offline: true }; });

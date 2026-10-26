@@ -1,10 +1,17 @@
-/* ProFix – v0.7.0: diferenciais do CRM no app (crm-v3 API @41, CONTRATO_DIFERENCIAIS.md).
+/* ProFix – v0.7.1: prazos vêm do servidor (getDados.config) e o resumo dos clientes vem de listarClientesResumo (API @43).
+ * v0.7.0: diferenciais do CRM no app (crm-v3 API @41, CONTRATO_DIFERENCIAIS.md).
  * Funções puras (sem tela): regra de contato, números do cliente, filtros, garantia, linha do tempo.
  * As contas seguem o crm-v3 (DiferenciaisC.gs situacaoCliente_ / Diferenciais.gs regraContato_) para a prévia sem internet;
  * quando o servidor responde (fichaCliente, getDados.dif.clientes), vale a resposta do servidor. Nada aqui envia mensagem. */
 (function (raiz, fabrica) { var m = fabrica(); if (typeof module === 'object' && module.exports) module.exports = m; else raiz.ProFixDif = m; })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var GARANTIA_PADRAO = 30;
+  // v0.7.1: sem prazos fixos no código. Garantia, validade e desconto de indicação vêm de getDados().config (Propriedades do script do crm-v3).
+  function numOuNulo(v) { if (v === '' || v == null) return null; var x = Number(String(v).replace(',', '.')); return isFinite(x) && x > 0 ? x : null; }
+  function padroes(D) {
+    var c = (D && D.config) || {}, d = (D && D.dif) || {};
+    return { garantiaDias: numOuNulo(c.garantiaDiasProfix != null ? c.garantiaDiasProfix : c.garantiaServDias), validadeDias: numOuNulo(c.validadePadraoDias != null ? c.validadePadraoDias : c.validadeOrcDias),
+      indicacaoPct: numOuNulo(c.descontoIndicacaoPct != null ? c.descontoIndicacaoPct : d.descontoIndicacaoPct), googleReviewUrl: /^https:\/\//i.test(String(c.googleReviewUrl || '')) ? String(c.googleReviewUrl) : '' };
+  }
   var LEGADO = { 'Orçamento': 'Aguardando aprovação', 'Em andamento': 'Em reparo' };
   function statusCanon(s) { s = String(s || '').trim(); return LEGADO[s] || s || 'Recebido'; }
   function iso(v) { var s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : ''; }
@@ -35,7 +42,7 @@
   // ---------- Números do cliente (igual a situacaoCliente_ do crm-v3) ----------
   function osDoCliente(nome, oss) { return (oss || []).filter(function (o) { return o.cliente === nome; }).sort(function (a, b) { return iso(a.entrada) < iso(b.entrada) ? -1 : iso(a.entrada) > iso(b.entrada) ? 1 : String(a.num) < String(b.num) ? -1 : 1; }); }
   function garantiasDaOS(o, hoje, dias) {
-    dias = dias || GARANTIA_PADRAO; if (statusCanon(o.status) !== 'Entregue' || !iso(o.entrega)) return [];
+    dias = numOuNulo(dias); if (!dias || statusCanon(o.status) !== 'Entregue' || !iso(o.entrega)) return [];
     var ate = somaDias(iso(o.entrega), dias);
     return [{ os: o.num, servico: String(o.itensOrc || o.servico || 'Serviço').split('\n')[0], dias: dias, inicio: iso(o.entrega), ate: ate, ativa: !hoje || ate >= hoje, restam: hoje ? diasEntre(hoje, ate) : null }];
   }
@@ -61,10 +68,19 @@
   }
   /** Resumo de todos os clientes: usa getDados().dif.clientes do servidor (se veio) e completa com a conta local. */
   function resumoClientes(D) {
-    var srv = (D && D.dif && D.dif.clientes) || {}, hoje = D.hoje, dg = (D.config && D.config.garantiaDiasProfix) || GARANTIA_PADRAO, out = {};
+    var srv = (D && D.dif && D.dif.clientes) || {}, hoje = D.hoje, dg = padroes(D).garantiaDias, out = {}, lst = {};
+    (Array.isArray(D.clientesResumo) ? D.clientesResumo : []).forEach(function (r) { if (r && r.nome) lst[r.nome] = r; });
     (D.clientes || []).forEach(function (c) {
       var loc = situacaoCliente(c, D.os, hoje, dg), s = Object.assign({}, loc, srv[c.nome] || {});
       s.ultimaOSNum = loc.ultimaOSNum; s.ultimaOSStatus = loc.ultimaOSStatus; s.ultimaOSRow = loc.ultimaOSRow;
+      var r = lst[c.nome]; // v0.7.1: listarClientesResumo (mesmos cálculos do painel) vale por cima da conta local
+      if (r) {
+        s.fonte = 'servidor'; s.totalGasto = n(r.totalGasto); if (r.situacao) s.situacao = r.situacao;
+        if (r.ultimaOS) { s.ultimaOSNum = r.ultimaOS.num || ''; s.ultimaOSStatus = statusCanon(r.ultimaOS.status); var ro = (D.os || []).filter(function (o) { return o.num === r.ultimaOS.num; })[0]; s.ultimaOSRow = ro ? ro._row : ''; }
+        else { s.ultimaOSNum = ''; s.ultimaOSStatus = ''; s.ultimaOSRow = ''; }
+        if (iso(r.ultimoAtendimento)) s.ultimaOS = iso(r.ultimoAtendimento);
+        s.garantiaAte = iso(r.garantiaAte) || ''; if (r.preventiva) s.preventivaEm = iso(r.preventiva) || s.preventivaEm;
+      }
       var ultCont = [iso(c.ultimo)].concat((D.interacoes || []).filter(function (i) { return i.cliente === c.nome; }).map(function (i) { return iso(i.data); })).filter(Boolean).sort().pop() || '';
       s.ultimoContato = ultCont; var ref = [s.ultimaOS, ultCont].filter(Boolean).sort().pop() || '';
       s.diasSemRetorno = ref ? diasEntre(ref, hoje) : null;
@@ -111,7 +127,7 @@
   /** Ficha local (sem internet ou sem a ação fichaCliente): mesmo formato do crm-v3. */
   function fichaLocal(D, nome) {
     var c = (D.clientes || []).filter(function (x) { return x.nome === nome; })[0]; if (!c) throw new Error('Cliente não encontrado.');
-    var dg = (D.config && D.config.garantiaDiasProfix) || GARANTIA_PADRAO, oss = D.os || [];
+    var dg = padroes(D).garantiaDias, oss = D.os || [];
     return { ok: true, local: true, nome: c.nome, id: c.id, numeros: situacaoCliente(c, oss, D.hoje, dg), origem: c.origem || '', indicadoPor: c.indicadoPor || '', codIndicacao: c.codIndic || '',
       contato: { consent: c.consent === 'Sim', naoContatar: naoContatar(c), proximo: c.proximo || '' },
       os: osDoCliente(c.nome, oss).reverse().map(function (o) { return { num: o.num, _row: o._row, entrada: o.entrada, status: o.status, equipamento: o.equipamento, valor: o.valor, orcamento: o.orcamento, aprovacao: o.aprovacao, validade: o.validade, entrega: o.entrega }; }),
@@ -163,7 +179,15 @@
   }
   /** Link público de acompanhamento: …/exec?os=<43 caracteres base64url>. */
   function linkAcompanhamentoOk(url) { return /^https:\/\/[^\s?#]+\?os=[A-Za-z0-9_-]{43}$/.test(String(url || '')); }
-  return { GARANTIA_PADRAO: GARANTIA_PADRAO, CHIPS: CHIPS, CHK_ITENS: CHK_ITENS, CHK_RESULT: CHK_RESULT, statusCanon: statusCanon, naoContatar: naoContatar, regraContato: regraContato, seloLgpd: seloLgpd,
+  /** Aniversário do formulário: '' fica vazio; 'd/m', 'dd/mm' ou 'dd-mm' vira 'dd/mm'; inválido = null. */
+  function normalizarAniversario(v) {
+    var t = String(v == null ? '' : v).trim(); if (!t) return '';
+    var m = t.match(/^(\d{1,2})\s*[\/\-.]\s*(\d{1,2})$/); if (!m) return null;
+    var d = +m[1], me = +m[2], max = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][me - 1];
+    if (!max || d < 1 || d > max) return null;
+    return ('0' + d).slice(-2) + '/' + ('0' + me).slice(-2);
+  }
+  return { padroes: padroes, normalizarAniversario: normalizarAniversario, CHIPS: CHIPS, CHK_ITENS: CHK_ITENS, CHK_RESULT: CHK_RESULT, statusCanon: statusCanon, naoContatar: naoContatar, regraContato: regraContato, seloLgpd: seloLgpd,
     situacaoCliente: situacaoCliente, resumoClientes: resumoClientes, filtrarClientes: filtrarClientes, contarChips: contarChips, aniversariante: aniversariante, aniversarioHoje: aniversarioHoje,
     tempoDesde: tempoDesde, corStatus: corStatus, garantiasDaOS: garantiasDaOS, garantiasAtivas: garantiasAtivas, fichaLocal: fichaLocal, linhaDoTempo: linhaDoTempo, diasRestantes: diasRestantes,
     idOperacao: idOperacao, maquinaParaOS: maquinaParaOS, validarChecklist: validarChecklist, horasEntre: horasEntre, agoraTxt: agoraTxt, resumoMesLocal: resumoMesLocal, linkAcompanhamentoOk: linkAcompanhamentoOk,

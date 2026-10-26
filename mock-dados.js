@@ -19,7 +19,8 @@
       formasPagFin: ['Dinheiro', 'Pix', 'Débito', 'Crédito à vista', 'Crédito parcelado'],
       tiposFin: ['Entrada', 'Saída'],
       categoriasFin: ['Serviço', 'Venda de peça', 'Revenda de usado', 'Compra de peça', 'Deslocamento', 'Ferramentas', 'DAS-MEI', 'Marketing', 'Outros'],
-      config: { linkAgenda: 'https://exemplo.invalid/agenda', whatsappProfix: '(15) 90000-0000', linkAvaliacao: '' },
+      config: { linkAgenda: 'https://exemplo.invalid/agenda', whatsappProfix: '(15) 90000-0000', linkAvaliacao: '', // v0.7.1: padrões do servidor (Propriedades do script; valores fictícios = padrões do contrato)
+        garantiaDiasProfix: 30, validadePadraoDias: 7, descontoIndicacaoPct: 10, googleReviewUrl: 'https://g.page/r/EXEMPLO-FICTICIO/review' },
       clientes: [
         { _row: 2, id: 'C0001', nome: 'Ana Exemplo Silva', whatsapp: '(15) 90000-0001', consent: 'Sim', dataConsent: d(-40), aniversario: hoje.slice(8, 10) + '/' + hoje.slice(5, 7), codIndic: 'ANA-EX10', origem: 'Instagram', etapa: 'Entregue', primeiro: d(-40), ultimo: d(-5), proximo: d(-1), acao: 'Perguntar se o notebook está ok', bairro: 'Centro', email: 'ana.exemplo@example.com', endereco: 'Rua Exemplo, 100 - Centro, Sorocaba - SP', indicadoPor: '', motivoPerda: '', valorEst: '' },
         { _row: 3, id: 'C0002', nome: 'Bruno Exemplo Lima', whatsapp: '(15) 90000-0002', consent: 'Não', origem: 'Google', etapa: 'Em serviço', primeiro: d(-6), ultimo: d(-2), proximo: hoje, acao: 'Ligar sobre a peça', bairro: 'Campolim', email: 'bruno.exemplo@example.com', endereco: 'Av. Fictícia, 200 - Campolim, Sorocaba - SP', indicadoPor: '', motivoPerda: '', valorEst: '' },
@@ -346,7 +347,7 @@
     var waUrl = function (tel, t) { return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(t); };
     var tokenOS = function (o) { if (!D.tokensOS[o.num]) { var a = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_', t = ''; for (var i = 0; i < 43; i++) t += a.charAt((i * 7 + o.num.length * 13 + Number(String(o.num).replace(/\D/g, ''))) % a.length); D.tokensOS[o.num] = t; } return D.tokensOS[o.num]; };
     var urlOS = function (o) { return 'https://script.google.com/macros/s/EXEMPLO-FICTICIO/exec?os=' + tokenOS(o); };
-    var garDias = function () { return (D.config && D.config.garantiaDiasProfix) || Dif.GARANTIA_PADRAO; };
+    var garDias = function () { return Dif.padroes(D).garantiaDias; };
     S.fichaCliente = function (x) {
       var c = cliNome(x && x.nome), f = Dif.fichaLocal(D, c.nome); delete f.local;
       f.maquinas = D.maquinas.filter(function (m) { return m.cliente === c.nome; }).map(function (m) { return { id: m.id, tipo: m.tipo, modelo: m.modelo, serie: m.serie }; });
@@ -435,6 +436,92 @@
       var fim = x.fim || agora(), km = Math.max(0, Number(String(x.km || 0).replace(',', '.')) || 0), horas = Dif.horasEntre(v.inicio, fim);
       v.fim = fim; v.km = km; v.horas = horas; v.status = 'Concluída'; evento(v.cliente, v.os, 'Visita técnica concluída', horas + ' h, ' + km + ' km');
       return { ok: true, horas: horas, km: km, msg: 'Visita encerrada: ' + String(horas).replace('.', ',') + ' h de mão de obra e ' + km + ' km de deslocamento (use no orçamento da OS).' };
+    };
+    // ---- v0.7.1: API @43 (Lixeira.gs): listarClientesResumo, registrarConsentimento, definirStatusLead, Lixeira ----
+    D.lixeira = D.lixeira || [];
+    var vivo = function (x) { return !x._excluido; };
+    var semExcluidos = function (c) { ['clientes', 'os', 'maquinas', 'contratos'].forEach(function (k) { if (Array.isArray(c[k])) c[k] = c[k].filter(vivo); }); if (Array.isArray(c.leadsLink)) c.leadsLink = c.leadsLink.filter(function (l) { return !/^exclu/i.test(String(l.status || '')); }); return c; };
+    var getDados0 = S.getDados; S.getDados = function () { return semExcluidos(getDados0()); };
+    var leads0 = S.leadsLink; S.leadsLink = function () { return leads0().filter(function (l) { return !/^exclu/i.test(String(l.status || '')); }).map(function (l) { l.situacao = sitLead(l.status); return l; }); };
+    var sitLead = function (st) { var s = String(st || '').trim(); return !s || /^novo/i.test(s) ? 'Novo' : /^convert/i.test(s) ? 'Convertido' : /^contatad/i.test(s) ? 'Contatado' : /^sem interesse/i.test(s) ? 'Sem interesse' : /^exclu/i.test(s) ? 'Excluído' : s; };
+    S.listarClientesResumo = function () {
+      var R = Dif.resumoClientes({ hoje: h(), clientes: D.clientes.filter(vivo), os: D.os.filter(vivo), config: D.config, interacoes: D.interacoes });
+      return { ok: true, hoje: h(), clientes: D.clientes.filter(vivo).map(function (c) { var s = R[c.nome] || {}, u, l = D.os.filter(function (o) { return vivo(o) && o.cliente === c.nome; }).sort(function (a, b) { return a.entrada < b.entrada ? -1 : 1; }); u = l[l.length - 1];
+        return { id: c.id || '', nome: c.nome, telefone: c.whatsapp || '', documento: c.doc || '', tipo: c.tipoCli || '', situacao: s.situacao || '', ultimaOS: u ? { num: u.num, status: u.status, data: u.entrada } : null,
+          totalGasto: s.totalGasto || 0, ultimoAtendimento: s.ultimaOS || '', diasDesde: s.diasSemRetorno == null ? null : s.diasSemRetorno, aniversario: c.aniversario || '', consentimento: c.consent || '', dataConsentimento: c.dataConsent || '',
+          naoContatar: Dif.naoContatar(c), garantiaAte: s.garantiaAte || '', preventiva: s.preventivaEm || '', origem: c.origem || '', indicadoPor: c.indicadoPor || '', indicacoes: 0, _row: c._row }; }) };
+    };
+    S.registrarConsentimento = function (x) {
+      x = x || {}; var a = x.aceita, sim = a === true || /^(sim|s|true|1)$/i.test(String(a)), nao = a === false || /^(n[ãa]o|n|false|0)$/i.test(String(a));
+      if (!sim && !nao) throw new Error('Informe aceita: true (Sim) ou false (Não).');
+      var c = cliNome(String(x.cliente || x.nome || '')); c.consent = sim ? 'Sim' : 'Não'; c.dataConsent = h();
+      evento(c.nome, '', 'Consentimento LGPD', (sim ? 'Aceitou (Sim)' : 'Não aceitou (Não)') + ' em ' + Dif.dataBR(h()) + ' · por app');
+      return { ok: true, consentimento: c.consent, data: h(), msg: 'Consentimento registrado: ' + c.consent + '.' };
+    };
+    var regMsg0 = S.registrarMensagemAberta;
+    S.registrarMensagemAberta = function (x) {
+      x = x || {}; if (x.lead == null) return regMsg0(x);
+      var l = (D.leadsLink || []).filter(function (k) { return k._row === Number(x.lead); })[0]; if (!l) throw new Error('Lead não encontrado.');
+      var st = sitLead(l.status); if (st === 'Novo' || st === 'Contatado') { l.status = 'Contatado'; l.statusEm = agora(); }
+      evento(l.nome, '', 'Lead do site contatado', (x.canal || 'WhatsApp') + ' aberto pelo Pedro');
+      return { ok: true, _row: l._row, status: sitLead(l.status), msg: 'Lead marcado como ' + sitLead(l.status) + '.' };
+    };
+    var proxLx = function () { return 'LX-' + ('000' + (D.lixeira.length + 1)).slice(-4); };
+    var guardarLx = function (tipo, chave, desc, alvo, grupo, modo) { var id = proxLx(); D.lixeira.push({ id: id, tipo: tipo, chave: chave, descricao: desc, excluidoEm: agora(), por: 'app', modo: modo || 'Marcado e oculto', situacao: 'Na lixeira', grupo: grupo || '', _alvo: alvo }); return id; };
+    var acharLx = function (x) {
+      var t = String(x.tipo || ''), row = Number(x._row) || 0, id = x.id == null ? '' : String(x.id), r;
+      if (t === 'lead') { r = (D.leadsLink || []).filter(function (l) { return l._row === row && !/^exclu/i.test(String(l.status || '')); })[0]; if (!r) throw new Error('Lead não encontrado (pode já estar na Lixeira).'); return { tipo: t, reg: r, chave: r.telefone, desc: r.nome + ' · ' + r.telefone }; }
+      var lst = { cliente: 'clientes', os: 'os', maquina: 'maquinas', contrato: 'contratos' }[t], campo = { cliente: 'id', os: 'num', maquina: 'id', contrato: 'id' }[t];
+      if (!lst) throw new Error('Tipo inválido. Use: lead, cliente, os, oportunidade, maquina, contrato, contratoRecorrente.');
+      r = D[lst].filter(function (o) { return vivo(o) && ((id && String(o[campo]) === id) || (!id && row && o._row === row) || (t === 'cliente' && x.nome && o.nome === x.nome)); })[0];
+      if (!r) throw new Error('Registro não encontrado (pode já estar na Lixeira). Atualize a tela.');
+      return { tipo: t, reg: r, chave: String(r[campo] || ''), desc: t === 'os' ? r.num + ' – ' + r.cliente + ' – ' + (r.equipamento || '') : t === 'cliente' ? r.nome : r[campo] + ' – ' + (r.cliente || '') };
+    };
+    S.excluirRegistro = function (x) {
+      x = x || {}; var a = acharLx(x);
+      if (a.tipo === 'lead') { a.reg._statusAntes = a.reg.status; a.reg.status = 'Excluído'; var idl = guardarLx('lead', a.chave, a.desc, a.reg); return { ok: true, ids: [idl], msg: 'Lead “' + a.desc + '” foi para a Lixeira (Mais › Lixeira para restaurar).' }; }
+      if (a.tipo === 'cliente') {
+        var nome = a.reg.nome, imp = { os: D.os.filter(function (o) { return vivo(o) && o.cliente === nome; }).map(function (o) { return { id: o.num, _row: o._row, descricao: o.num + ' – ' + (o.equipamento || '') + ' – ' + (o.status || '') }; }),
+          maquinas: D.maquinas.filter(function (m) { return vivo(m) && m.cliente === nome; }).map(function (m) { return { id: m.id, descricao: m.id + ' – ' + m.modelo }; }),
+          contratos: D.contratos.filter(function (k) { return vivo(k) && k.cliente === nome; }).map(function (k) { return { id: k.id, descricao: k.id + ' – ' + k.plano }; }), contratosRecorrentes: [] };
+        imp.total = imp.os.length + imp.maquinas.length + imp.contratos.length;
+        if (imp.total && !x.cascata) return { ok: false, precisaConfirmar: true, impacto: imp, nome: nome, msg: nome + ' tem ' + [imp.os.length + ' OS', imp.maquinas.length + ' máquina(s)', imp.contratos.length + ' contrato(s)'].join(', ') + '. Para excluir, confirme excluir também esses registros (vão juntos para a Lixeira) ou cancele.' };
+        var grupo = proxLx(), ids = [];
+        ids.push(guardarLx('cliente', a.chave, a.desc, a.reg, grupo)); a.reg._excluido = true;
+        imp.os.forEach(function (k) { var o = D.os.filter(function (y) { return y.num === k.id; })[0]; ids.push(guardarLx('os', o.num, k.descricao, o, grupo)); o._excluido = true; });
+        imp.maquinas.forEach(function (k) { var m = D.maquinas.filter(function (y) { return y.id === k.id; })[0]; ids.push(guardarLx('maquina', m.id, k.descricao, m, grupo)); m._excluido = true; });
+        imp.contratos.forEach(function (k) { var m = D.contratos.filter(function (y) { return y.id === k.id; })[0]; ids.push(guardarLx('contrato', m.id, k.descricao, m, grupo)); m._excluido = true; });
+        if (ids.length > 1) D.lixeira.forEach(function (it) { if (ids.indexOf(it.id) >= 0) it.grupo = ids[0]; }); else D.lixeira[D.lixeira.length - 1].grupo = '';
+        return { ok: true, ids: ids, msg: nome + (ids.length > 1 ? ' e ' + (ids.length - 1) + ' registro(s) ligado(s)' : '') + ' foram para a Lixeira (Mais › Lixeira para restaurar).' };
+      }
+      var idx = guardarLx(a.tipo, a.chave, a.desc, a.reg); a.reg._excluido = true;
+      return { ok: true, ids: [idx], msg: ({ os: 'OS', maquina: 'Máquina', contrato: 'Contrato mensal' }[a.tipo]) + ' “' + a.desc + '” foi para a Lixeira (Mais › Lixeira para restaurar).' };
+    };
+    S.listarLixeira = function (x) { var todas = !!(x && x.todas); return { ok: true, itens: D.lixeira.filter(function (r) { return todas || r.situacao === 'Na lixeira'; }).map(function (r) { var c = Object.assign({}, r); delete c._alvo; return c; }).reverse() }; };
+    var grupoLx = function (id) { var it = D.lixeira.filter(function (r) { return r.id === id; })[0]; if (!it) throw new Error('Item da Lixeira não encontrado.'); if (it.situacao !== 'Na lixeira') throw new Error('Esse item não está mais na Lixeira (' + it.situacao + ').'); return it.grupo ? D.lixeira.filter(function (r) { return r.grupo === it.grupo && r.situacao === 'Na lixeira'; }) : [it]; };
+    S.restaurarRegistro = function (x) {
+      var l = grupoLx(x && x.id); l.forEach(function (it) { if (it.tipo === 'lead') { it._alvo.status = it._alvo._statusAntes || 'Novo'; delete it._alvo._statusAntes; } else delete it._alvo._excluido; it.situacao = 'Restaurado'; it.restauradoEm = agora(); });
+      return { ok: true, ids: l.map(function (i) { return i.id; }), msg: l.length > 1 ? l.length + ' registros restaurados.' : 'Registro restaurado.' };
+    };
+    S.apagarDefinitivo = function (x) {
+      x = x || {}; if (String(x.confirmar || '') !== 'APAGAR') throw new Error('Para apagar definitivamente, confirme com confirmar:"APAGAR" (não dá para desfazer).');
+      var l = grupoLx(x.id); l.forEach(function (it) { var a = it._alvo; Object.keys(a).forEach(function (k) { if (['_row', 'id', 'num', '_excluido', 'status'].indexOf(k) < 0) a[k] = ''; }); a._apagado = true; it.descricao = '(apagado)'; it.situacao = 'Apagado'; });
+      return { ok: true, ids: l.map(function (i) { return i.id; }), msg: 'Apagado definitivamente (' + l.map(function (i) { return i.id; }).join(', ') + ').' };
+    };
+    S.definirStatusLead = function (x) {
+      x = x || {}; var st = String(x.status || '');
+      if (st === 'Excluir' || st === 'Excluído') return S.excluirRegistro({ tipo: 'lead', _row: x._row });
+      if (['Novo', 'Contatado', 'Sem interesse', 'Convertido'].indexOf(st) < 0) throw new Error('Status inválido. Use: Novo, Contatado, Sem interesse, Convertido ou Excluir.');
+      var l = (D.leadsLink || []).filter(function (k) { return k._row === Number(x._row) && !/^exclu/i.test(String(k.status || '')); })[0]; if (!l) throw new Error('Lead não encontrado.');
+      if (sitLead(l.status) === 'Convertido') throw new Error('Esse lead já foi convertido em cliente.');
+      if (st === 'Convertido') {
+        var ex = D.clientes.filter(function (c) { return vivo(c) && c.nome === l.nome; })[0];
+        if (!ex) { var n = { id: proxId('clientes', 'id', 'C'), nome: l.nome, whatsapp: l.telefone, origem: 'Link de cadastro', consent: l.consentimento === true ? 'Sim' : '', dataConsent: l.consentimento === true ? h() : '', primeiro: h(), etapa: 'Lead' }; anexar('clientes', n); }
+        l.status = 'Convertido'; l.statusEm = agora(); evento(l.nome, '', 'Lead do site convertido', 'Virou cliente pelo app');
+        return { ok: true, status: 'Convertido', msg: 'Lead convertido em cliente.' };
+      }
+      l.status = st; l.statusEm = agora(); evento(l.nome, '', 'Lead do site: ' + st, 'Status mudado à mão');
+      return { ok: true, status: st, msg: 'Lead marcado como ' + st + '.' };
     };
     return S;
   }

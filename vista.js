@@ -105,15 +105,15 @@
   };
   // O rodapé LGPD é acrescentado PELO SERVIDOR (crm-v3 RODAPE_LGPD_EMAIL); o app não repete para não sair duplicado.
   V.RODAPE_LGPD_SERVIDOR = 'ProFix Computadores. Você recebe esta mensagem porque autorizou o contato. Para não receber mais mensagens, responda SAIR.';
-  /** Monta {assunto, corpo} para a OS. Validade/garantia vêm do config (null = pendente -> "[CONFIRMAR …]", que bloqueia o envio). */
+  /** Monta {assunto, corpo} para a OS. Validade/garantia vêm do servidor (cfg.validadeDias/garantiaDias, de getDados().config; sem valor = pendente -> "[CONFIRMAR …]", que bloqueia o envio). */
   V.montarEmail = function (tipo, o, c, cfg) {
     cfg = cfg || {}; var t = V.EMAILS[tipo]; o = o || {};
     var nome = String((c && c.nome) || o.cliente || '').trim().split(' ')[0] || 'tudo bem';
     var val = o.orcamento || o.valor;
     var dados = { nome: nome, equipamento: o.equipamento || 'equipamento', diagnostico: o.diagnostico || '[descreva o diagnóstico]', servico: o.itensOrc || o.servico || '[descreva o serviço]',
       valor: val === '' || val == null ? '[valor]' : Number(val).toFixed(2).replace('.', ','), prazo: o.previsao ? V.dataBR(o.previsao) : 'a combinar',
-      validade_dias: cfg.VALIDADE_ORCAMENTO_DIAS ? String(cfg.VALIDADE_ORCAMENTO_DIAS) : '[CONFIRMAR validade]',
-      garantia_dias: cfg.GARANTIA_DIAS ? String(cfg.GARANTIA_DIAS) : '[CONFIRMAR garantia]', whatsapp_loja: cfg.WHATSAPP_LOJA || '[WhatsApp da loja]' };
+      validade_dias: cfg.validadeDias ? String(cfg.validadeDias) : '[CONFIRMAR validade]',
+      garantia_dias: cfg.garantiaDias ? String(cfg.garantiaDias) : '[CONFIRMAR garantia]', whatsapp_loja: cfg.WHATSAPP_LOJA || '[WhatsApp da loja]' };
     var f = function (x) { return x.replace(/\{(\w+)\}/g, function (m, k) { return k in dados ? dados[k] : m; }); };
     return { assunto: f(t.assunto), corpo: f(t.corpo) };
   };
