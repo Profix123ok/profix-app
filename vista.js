@@ -89,12 +89,35 @@
   };
   V.temPendencia = function (texto) { return /\[CONFIRMAR/.test(String(texto || '')); };
   V.PRI = ['Alta', 'Média', 'Baixa'];
+  // Cidade das oportunidades (getDados: oportunidades[].cidade). Vazia/ausente = "Sem cidade".
+  V.SEM_CIDADE = '__sem__';
+  V.limparCidade = function (c) { return String(c == null ? '' : c).replace(/\s+/g, ' ').trim(); };
+  V.chaveCidade = function (c) { var l = V.limparCidade(c); return l ? V.norm(l) : V.SEM_CIDADE; };
+  V.cidadesOps = function (lista) {
+    var g = {};
+    (lista || []).forEach(function (o) {
+      var k = V.chaveCidade(o.cidade), nome = V.limparCidade(o.cidade);
+      var x = g[k] || (g[k] = { chave: k, nome: k === V.SEM_CIDADE ? 'Sem cidade' : '', n: 0, variantes: {} });
+      x.n++; if (nome) x.variantes[nome] = (x.variantes[nome] || 0) + 1;
+    });
+    var bom = function (v) { return v !== v.toUpperCase() && v !== v.toLowerCase() ? 1 : 0; };
+    return Object.keys(g).map(function (k) {
+      var x = g[k];
+      if (!x.nome) {
+        var vs = Object.keys(x.variantes).sort(function (a, b) { return (bom(b) - bom(a)) || (x.variantes[b] - x.variantes[a]) || (a < b ? -1 : 1); });
+        x.nome = vs[0];
+        if (!bom(x.nome)) x.nome = x.nome.toLowerCase().replace(/(^|\s)(\S)/g, function (m, a, b) { return a + b.toUpperCase(); }).replace(/ (Da|De|Do|Das|Dos|E) /g, function (m) { return m.toLowerCase(); });
+      }
+      return { chave: x.chave, nome: x.nome, n: x.n };
+    }).sort(function (a, b) { return (b.n - a.n) || ((a.chave === V.SEM_CIDADE) - (b.chave === V.SEM_CIDADE)) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+  };
   V.filtrarOps = function (lista, f) {
     var q = V.norm(f.q);
     return (lista || []).filter(function (o) {
       if (f.status && o.status !== f.status) return false;
       if (f.prioridade && (o.prioridade || '') !== f.prioridade) return false;
       if (f.segmento && o.segmento !== f.segmento) return false;
+      if (f.cidade && V.chaveCidade(o.cidade) !== f.cidade) return false;
       if (q && V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' ')).indexOf(q) < 0) return false;
       return true;
     }).sort(function (a, b) {

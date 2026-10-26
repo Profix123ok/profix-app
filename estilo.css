@@ -20,6 +20,7 @@ h1{font-size:22px;margin:4px 0 12px}h2{font-size:17px;margin:18px 0 8px}
 .tag{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;background:#123821;color:#86efac;margin-left:4px}
 .tag.alta,.tag.vencido{background:#3b1414;color:#fca5a5}.tag.media{background:#3a2f06;color:#fde047}.tag.cinza{background:#232d28;color:#c7d2cc}
 .filtros{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.filtros .q{grid-column:1/-1}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}.chip{font:inherit;font-size:14px;font-weight:600;padding:6px 12px;min-height:38px;border-radius:999px;border:1px solid var(--borda);background:#1f2e26;color:#86efac;cursor:pointer}.chip[aria-pressed=true]{background:var(--azul);color:var(--sobre-verde);border-color:var(--azul)}.chip:focus-visible{outline:2px solid #86efac;outline-offset:2px}
 .abas{display:flex;gap:6px;margin-bottom:10px}.abas a{padding:8px 14px;border-radius:999px;background:#1f2e26;color:#86efac;text-decoration:none;font-weight:600}.abas a.ativo{background:var(--azul);color:var(--sobre-verde)}
 .resumo{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:6px}.resumo div{background:var(--card);border:1px solid var(--borda);border-radius:12px;padding:10px}.resumo b{display:block;font-size:22px}
 .vazio{color:var(--cinza);padding:14px;text-align:center;background:var(--card);border-radius:12px;border:1px dashed var(--borda)}
