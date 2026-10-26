@@ -111,6 +111,14 @@
   var LIMITE = 100;
   var tagStatusOS = function (s) { return tag(s, s === 'Pronto' ? 'media' : s === 'Aguardando aprovação' || s === 'Aguardando peça' ? 'alta' : 'cinza'); };
 
+  // v0.5.4: leads que chegaram pela página pública de cadastro (leadsLink). WhatsApp só manual, um a um (link wa.me).
+  function leadsNovos() { return (D && D.leadsLink || []).filter(function (l) { return !/convert|descart|conclu|atendid/i.test(String(l.status || '')); }); }
+  function waLead(l) { var n = l.consentimento === true || /^(sim|true)$/i.test(String(l.consentimento)) ? V.numeroWa(l.telefone) : null;
+    var t = 'Olá ' + String(l.nome || '').split(' ')[0] + ', aqui é da ProFix Computadores. Recebemos seu cadastro' + (l.servico ? ' sobre: ' + l.servico : '') + '. Como podemos ajudar?';
+    return n ? '<a class="btn wa peq" data-wa-lead target="_blank" rel="noopener" href="' + e('https://wa.me/' + n + '?text=' + encodeURIComponent(t)) + '">📲 WhatsApp</a>' : '<span class="muted">Telefone inválido ou sem consentimento.</span>'; }
+  function secaoLeadsLink() { var l = leadsNovos(); if (!l.length) return '';
+    return '<h2 id="leads-link">🔗 Cadastros pelo link <span class="tag alta">' + l.length + '</span></h2>' + lista(l, function (x) {
+      return card(e(x.nome), [e(x.telefone), x.cidade ? e(x.cidade) : '', x.servico ? e(x.servico) : '', x.dataHora ? '⏰ ' + e(x.dataHora) : ''].filter(Boolean).join(' · '), tag(x.status || 'Novo', 'cinza'), waLead(x)); }, ''); }
   // ---------- Telas ----------
   var TELAS = {
     hoje: function () {
@@ -121,6 +129,7 @@
       };
       return '<h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
         '<div class="resumo"><div><b>' + H.chamar.length + '</b>para chamar</div><div><b>' + H.semResposta.length + '</b>sem resposta</div><div><b>' + H.cobrar.length + '</b>OS para cobrar</div><div><b>' + (H.agenda || []).length + '</b>na agenda (7 dias)</div></div>' +
+        secaoLeadsLink() +
         '<h2>📞 Quem chamar hoje</h2>' + lista(H.chamar, itemContato, 'Ninguém para chamar hoje 🎉') +
         '<h2>⏳ Sem resposta há 3 dias ou mais</h2>' + lista(H.semResposta, itemContato, 'Nenhum contato parado.') +
         '<h2>💰 OS para cobrar</h2>' + lista(H.cobrar, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), 'Saldo ' + V.brl(x.saldo), tagStatusOS(x.status), botao('Receber', 'os-receber', x.ref._row, '') + botao('Abrir OS', 'os-abrir', x.ref._row)); }, 'Nenhuma OS para cobrar.') +

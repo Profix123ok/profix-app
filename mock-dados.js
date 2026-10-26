@@ -46,6 +46,10 @@
         { _row: 4, data: d(5), cliente: '', tarefa: 'Pagar DAS-MEI', tipo: 'Outro', status: 'Pendente', os: '' }
       ],
       cotaEmail: 95, // e-mails que ainda podem sair hoje (fictício)
+      leadsLink: [
+        { _row: 2, dataHora: hoje + ' 09:12', nome: 'Exemplo Lead Link Ana', telefone: '(15) 90000-1101', cidade: 'Sorocaba', servico: 'Notebook não liga', consentimento: true, dataConsentimento: hoje + ' 09:12', origem: 'pagina-cadastro', status: 'Novo', obs: '' },
+        { _row: 3, dataHora: hoje + ' 10:40', nome: 'Exemplo Lead Link Bruno', telefone: '1590000-1102', cidade: '', servico: '', consentimento: true, dataConsentimento: hoje + ' 10:40', origem: 'pagina-cadastro', status: 'Novo', obs: '' }
+      ],
       agenda: [
         { eventoId: 'evt-demo-a', titulo: 'Atendimento – Bruno Exemplo (fictício)', data: hoje, inicio: '19:30', fim: '20:30', local: 'Campolim' },
         { eventoId: 'evt-demo-b', titulo: 'Formatação – cliente exemplo', data: d(1), inicio: '10:00', fim: '11:00', local: 'Oficina' }
@@ -104,6 +108,7 @@
     var S = {
       getDados: function () { var c = JSON.parse(JSON.stringify(D)); if (!opc.enviarSenha) c.os.forEach(function (o) { delete o.senha; }); return c; },
       listarAgenda: function () { return D.agenda || []; },
+      leadsLink: function () { return JSON.parse(JSON.stringify(D.leadsLink || [])); },
       // ---- PROPOSTAS (ainda não existem no crm-v3) ----
       // Agenda (crm-v3 v11): refTipo 'os' -> refId = nº da OS (eventoId fica na coluna "Evento da agenda (ID)"; chamar de novo ATUALIZA);
       // refTipo 'agenda' -> refId = eventoId existente. Convite ao cliente não funciona (Clientes não tem coluna de e-mail).

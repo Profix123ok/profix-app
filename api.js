@@ -13,7 +13,7 @@
 
   // Ações permitidas -> função do crm-v3/Code.gs. "escrita" = entra na fila offline.
   // Lista FECHADA de ações = funções que já existem no crm-v3/Code.gs (mesma lista que o doPost deve aceitar).
-  var LEITURA = ['getDados', 'listarAgenda'];
+  var LEITURA = ['getDados', 'listarAgenda', 'leadsLink'];
   var ESCRITA = ['salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento',
     'lancarRecebimento', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
     'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'registrarFollowup',
@@ -119,6 +119,10 @@
       if (api._recemValidado && cache) { var d0 = cache; api._recemValidado = false; return Promise.resolve({ dados: d0, offline: false }); } // acabou de baixar ao validar a chave
       return api.sincronizar().then(function () { return chamar('getDados', []); }).then(function (d) {
         if (d && !d.agenda && tipo === 'gas' && api.pode('listarAgenda')) return chamar('listarAgenda', [7]).then(function (a) { d.agenda = a; return d; }, function () { return d; });
+        return d;
+      }).then(function (d) {
+        // v0.5.4: leads da página pública de cadastro (só leitura). Falha aqui não derruba o carregamento.
+        if (d && !Array.isArray(d.leadsLink) && api.pode('leadsLink')) return chamar('leadsLink', []).then(function (l) { d.leadsLink = Array.isArray(l) ? l : []; return d; }, function () { return d; });
         return d;
       }).then(function (d) { guardar(d); return { dados: d, offline: false }; },
         function (e) { if (e.doServidor || e.codigo === 'SEM_TOKEN') throw e; return { dados: cache, offline: true }; });
