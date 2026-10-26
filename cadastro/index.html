@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0F0D">
+<meta name="description" content="Cadastro ProFix Computadores: deixe seu nome e telefone e entramos em contato.">
+<title>Cadastro · ProFix Computadores</title>
+<link rel="icon" href="../icons/icon-192.png">
+<style>
+:root{color-scheme:dark;--v:#22C55E;--ve:#16a34a;--f:#0A0F0D;--c:#141c18;--t:#e5e7eb;--g:#a3b3ab;--r:#f87171;--b:#2a3a32}
+*{box-sizing:border-box}body{margin:0;background:var(--f);color:var(--t);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:480px;margin:0 auto;padding:20px 16px calc(24px + env(safe-area-inset-bottom))}
+.topo{display:flex;align-items:center;gap:10px;margin-bottom:8px}.topo img{border-radius:12px}.topo b{color:var(--v);font-size:20px}
+h1{font-size:22px;margin:8px 0 4px}p.sub{color:var(--g);margin:0 0 16px}
+form{background:var(--c);border:1px solid var(--b);border-radius:16px;padding:16px;display:grid;gap:12px}
+label{font-size:14px;font-weight:600;color:var(--g);display:grid;gap:4px}
+input,textarea{font:inherit;padding:12px;border:1px solid var(--b);border-radius:10px;background:#0f1612;color:var(--t);width:100%;min-height:48px}
+textarea{min-height:80px;resize:vertical}input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid #86efac;outline-offset:2px}
+input[aria-invalid=true]{border-color:var(--r)}
+.lgpd{display:flex;gap:10px;align-items:flex-start;font-weight:400;color:var(--t)}.lgpd input{width:24px;min-height:24px;height:24px;flex:none;margin:2px 0 0;accent-color:var(--v)}
+.hp{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;background:var(--v);color:#04110a;min-height:50px;cursor:pointer}button:disabled{opacity:.6;cursor:wait}
+.erro{color:var(--r);min-height:1.2em;margin:0}.ok{background:#0f2a1a;border:1px solid var(--ve);border-radius:16px;padding:18px;text-align:center}
+.opc{font-weight:400}
+</style>
+</head>
+<body>
+<main>
+  <div class="topo"><img src="../icons/icon-192.png" alt="" width="44" height="44"><b>ProFix Computadores</b></div>
+  <h1>Quer atendimento?</h1>
+  <p class="sub">Deixe seu nome e telefone que a gente entra em contato.</p>
+  <form id="form" novalidate>
+    <label>Nome<input id="nome" name="nome" autocomplete="name" required minlength="2" maxlength="80"></label>
+    <label>Telefone (WhatsApp)<input id="telefone" name="telefone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="(15) 99999-9999" required maxlength="15"></label>
+    <label>Cidade <span class="opc">(opcional)</span><input id="cidade" name="cidade" autocomplete="address-level2" maxlength="60"></label>
+    <label>O que você precisa? <span class="opc">(opcional)</span><textarea id="servico" name="servico" maxlength="300"></textarea></label>
+    <div class="hp" aria-hidden="true"><label>Site<input id="site" name="site" tabindex="-1" autocomplete="off"></label></div>
+    <label class="lgpd"><input id="consentimento" type="checkbox" required><span>A ProFix Computadores usa seu nome e telefone só para entrar em contato sobre o atendimento. Seus dados são apagados quando você pedir pelo WhatsApp (15) 98112-8309.</span></label>
+    <p id="erro" class="erro" role="alert" aria-live="assertive"></p>
+    <button id="enviar" type="submit">Enviar cadastro</button>
+  </form>
+  <div id="sucesso" class="ok" hidden role="status"><h2>Cadastro recebido! ✅</h2><p>Obrigado. A ProFix vai entrar em contato pelo telefone informado.</p></div>
+</main>
+<script src="../config.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (i) { return document.getElementById(i); };
+  var URL_API = (window.PROFIX_CONFIG || {}).API_URL || '';
+  function digitos(v) { return String(v || '').replace(/\D/g, ''); }
+  function mascara(v) { var d = digitos(v).slice(0, 11); if (d.length <= 2) return d.length ? '(' + d : '';
+    var r = '(' + d.slice(0, 2) + ') ', n = d.slice(2); return r + (n.length > 8 ? n.slice(0, 5) + '-' + n.slice(5) : n.length > 4 ? n.slice(0, 4) + '-' + n.slice(4) : n); }
+  function validar(c) {
+    if (c.nome.length < 2 || c.nome.length > 80) return ['nome', 'Informe seu nome (2 a 80 letras).'];
+    var d = digitos(c.telefone); if (d.length !== 10 && d.length !== 11) return ['telefone', 'Informe um telefone com DDD (10 ou 11 dígitos).'];
+    if (c.consentimento !== true) return ['consentimento', 'Marque a autorização para podermos entrar em contato.'];
+    return null;
+  }
+  $('telefone').addEventListener('input', function () { this.value = mascara(this.value); });
+  $('form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var b = $('enviar'); if (b.disabled) return;
+    ['nome', 'telefone', 'consentimento'].forEach(function (i) { $(i).removeAttribute('aria-invalid'); });
+    var c = { nome: $('nome').value.trim(), telefone: $('telefone').value.trim(), cidade: $('cidade').value.trim(), servico: $('servico').value.trim(),
+      consentimento: $('consentimento').checked === true, site: $('site').value, origemPagina: 'pagina-cadastro' };
+    var x = validar(c); if (x) { $('erro').textContent = x[1]; $(x[0]).setAttribute('aria-invalid', 'true'); $(x[0]).focus(); return; }
+    if (!URL_API) { $('erro').textContent = 'Cadastro indisponível no momento. Chame no WhatsApp (15) 98112-8309.'; return; }
+    $('erro').textContent = ''; b.disabled = true; b.textContent = 'Enviando…';
+    fetch(URL_API, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ acao: 'cadastroPublico', args: c }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok === true) { $('form').hidden = true; $('sucesso').hidden = false; return; }
+        throw Object.assign(new Error((j && j.erro) || 'Não foi possível enviar. Tente de novo.'), { srv: true });
+      })
+      .catch(function (e) { $('erro').textContent = e.srv ? e.message : 'Sem conexão. Confira a internet e tente de novo.'; })
+      .then(function () { b.disabled = false; b.textContent = 'Enviar cadastro'; });
+  });
+  window.ProFixCadastro = { mascara: mascara, validar: validar, digitos: digitos };
+})();
+</script>
+</body>
+</html>
