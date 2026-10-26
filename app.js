@@ -71,7 +71,7 @@
   var carregando = false;
   function render() {
     var r = rota();
-    var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela;
+    var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela === 'cliente' ? 'clientes' : r.tela;
     document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === telaMenu; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var c = $('conteudo');
     if (!D) { c.innerHTML = carregando ? '<div class="vazio">Carregando dados da planilha… (pode levar uns 20 segundos)</div>' : '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; return; }
@@ -107,8 +107,8 @@
   function waCli(c, texto, tipo, motivo) {
     tipo = tipo || V.tipoMsgCliente(D, c, [motivo, texto].filter(Boolean).join(' '));
     var b = V.botaoWaCliente(c, tipo, texto);
-    if (!b) return '<span class="muted" data-wa-tipo="' + tipo + '">' + (c && c.consent !== 'Sim' ? (tipo === 'marketing' ? 'Sem consentimento LGPD: mensagem de marketing não pode. Ligue.' : 'Sem consentimento para WhatsApp: ligue.') : 'WhatsApp inválido: ligue.') + '</span>';
-    return '<a class="btn wa peq" target="_blank" rel="noopener" data-wa-tipo="' + tipo + '" href="' + e(b.href) + '">📲 WhatsApp</a>' +
+    if (!b) return '<span class="muted" data-wa-tipo="' + tipo + '">' + (c && /^s/i.test(String(c.naoContatar || '').trim()) ? '⛔ Cliente marcado como “Não contatar”.' : c && c.consent !== 'Sim' ? (tipo === 'marketing' ? 'Sem consentimento LGPD: mensagem de marketing não pode. Ligue.' : 'Sem consentimento para WhatsApp: ligue.') : 'WhatsApp inválido: ligue.') + '</span>';
+    return '<a class="btn wa peq" target="_blank" rel="noopener" data-wa-tipo="' + tipo + '" href="' + e(b.href) + '"' + attrReg(c, tipo === 'os' ? 'servico' : tipo, texto || motivo || '') + '>📲 WhatsApp</a>' +
       (b.aviso ? '<span class="muted aviso-lgpd">⚠️ Sem consentimento LGPD: só mensagem sobre a OS.</span>' : '');
   }
   function abas(base, itens, sub) { return '<div class="abas">' + itens.map(function (x, i) { var on = (sub || itens[0][0]) === x[0]; return '<a href="#' + base + (i ? '/' + x[0] : '') + '" class="' + (on ? 'ativo' : '') + '">' + x[1] + '</a>'; }).join('') + '</div>'; }
@@ -170,13 +170,7 @@
           }).join('') || '<div class="muted">—</div>') + '</section>';
         }).join('') + '</div>';
       }
-      var q = V.norm(F.cli.q), l = (D.clientes || []).filter(function (c) { return !q || V.norm([c.nome, c.bairro, c.whatsapp, c.origem, c.indicadoPor].join(' ')).indexOf(q) >= 0; });
-      return cab + '<div class="filtros">' + busca('fCliQ', F.cli.q, 'Buscar nome, bairro, telefone…') + '</div><p class="muted" id="contagem">' + l.length + ' clientes</p>' +
-        lista(l, function (c) {
-          var inter = (D.interacoes || []).filter(function (i) { return i.cliente === c.nome; }).slice(-1)[0];
-          return card(e(c.nome), e(c.bairro || '') + ' · ' + e(c.origem || 'origem?') + (c.indicadoPor ? ' · indicado por ' + e(c.indicadoPor) : '') + (c.proximo ? '<br>⏰ ' + V.dataBR(c.proximo) + ' ' + e(c.acao || '') : '') + (inter ? '<br>Última conversa: ' + V.dataBR(inter.data) + ' – ' + e(inter.resumo) : ''),
-            tag(c.etapa) + (c.consent === 'Sim' ? '' : tag('sem consentimento')), waCli(c, '', '', c.acao) + emailBtn(c, 'em-cli', c._row) + mapsBtn(c.endereco) + botao('Editar', 'cli-editar', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Mover etapa', 'cli-etapa', c._row));
-        }, 'Nenhum cliente.');
+      return telaClientesLista(cab); // v0.7.0: busca única + chips + cartão (diferenciais.js)
     },
     vendas: function (sub) {
       var cab = '<h1>Vendas</h1>' + abas('vendas', [['oportunidades', 'Oportunidades'], ['revenda', 'Revenda']], sub);
@@ -204,8 +198,10 @@
         }, 'Nenhuma empresa com esse filtro.');
     },
     mais: function (sub) {
-      var cab = '<h1>Mais</h1>' + abas('mais', [['financeiro', 'Financeiro'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['ajustes', 'Ajustes']], sub);
+      var cab = '<h1>Mais</h1>' + abas('mais', [['financeiro', 'Financeiro'], ['visitas', 'Visitas'], ['mes', 'Mês'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['ajustes', 'Ajustes']], sub);
       if (sub === 'precos') return cab + telaPrecos();
+      if (sub === 'visitas') return cab + telaVisitas();
+      if (sub === 'mes') return cab + telaMes();
       if (sub === 'catalogo') return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' + lista(D.catalogo || [], function (s) { return card(e(s.servico), e(s.tipo || '') + ' · ' + V.brl(s.preco) + (s.sugerido ? '<br>Sugerido: ' + e(s.sugerido) : '') + (s.descricao ? '<br>' + e(s.descricao) : ''), tag(s.status || (s.ativo === 'Sim' ? 'Ativo' : 'Inativo')), botao('Editar', 'cat-editar', s._row)); }, 'Catálogo vazio.');
       if (sub === 'modelos') return cab + '<div class="row">' + botao('+ Novo modelo', 'mod-novo', '', '') + '</div>' + lista(D.modelos || [], function (m) { return card(e(m.modelo), e(m.quando || '') + '<br><span class="pre">' + e(String(m.texto || '').slice(0, 160)) + (String(m.texto || '').length > 160 ? '…' : '') + '</span>', '', botao('Editar', 'mod-editar', m._row)); }, 'Nenhum modelo.') +
         '<p class="muted">Backup: continua pela planilha (menu ProFix CRM > Fazer backup agora / backup semanal).</p>';
@@ -292,7 +288,7 @@
     'os-abrir': function (row) {
       var o = achar('os', row), pecas = V.pecasOS(D, o.num), m = $('modal');
       var lin = function (r, v) { return v === '' || v == null ? '' : '<div><span class="muted">' + r + ':</span> ' + v + '</div>'; };
-      m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(o.num) + ' · ' + e(o.cliente) + '</h2><div>' + tagStatusOS(o.status) + '</div>' +
+      m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(o.num) + ' · ' + e(o.cliente) + '</h2><div>' + tagStatusOS(o.status) + '</div>' + blocoGarantiaOS(o) + botoesDifOS(o) +
         lin('Equipamento', e(o.equipamento)) + lin('Defeito', e(o.defeito)) + lin('Serviço', e(o.servico)) + lin('Entrada', V.dataBR(o.entrada)) + lin('Previsão', V.dataBR(o.previsao)) +
         lin('Acessórios', e(o.acessorios)) + '<div><span class="muted">Senha do aparelho:</span> <span id="senhaOS">' + e(V.textoSenha(o, ajustes.mostrarSenha)) + '</span></div>' +
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
@@ -308,8 +304,8 @@
       formulario('Status da ' + e(o.num), [{ k: 'status', r: 'Novo status', t: 'select', o: D.statusOS, req: true }, { k: 'manterSenha', r: 'Na entrega, manter a senha do aparelho (o padrão é apagar – LGPD)', t: 'checkbox' }], { status: o.status })
         .then(function (v) { if (!v) return; var opc = v.status === 'Entregue' ? { entrega: D.hoje, apagarSenha: !v.manterSenha } : {}; if (v.status === 'Entregue' && !v.manterSenha) delete opc.apagarSenha; if (v.manterSenha) opc.apagarSenha = false; escrever('mudarStatusOS', [o.num, o._row, v.status, opc], aplicar('os', row, { status: v.status, statusEm: D.hoje })); });
     },
-    'os-editar': function (row) {
-      var o = row ? achar('os', row) : { cliente: '' }, nomes = (D.clientes || []).map(function (c) { return c.nome; });
+    'os-editar': function (row, pre) {
+      var o = row ? achar('os', row) : Object.assign({ cliente: '' }, pre), nomes = (D.clientes || []).map(function (c) { return c.nome; });
       formulario(row ? 'Editar ' + e(o.num) : 'Nova OS', [{ k: 'cliente', r: 'Cliente', t: 'select', o: nomes, req: true }, { k: 'equipamento', r: 'Equipamento', req: true }, { k: 'defeito', r: 'Defeito relatado' },
         { k: 'servico', r: 'Serviço', t: 'select', o: (D.catalogo || []).map(function (s) { return s.servico; }) }, { k: 'valor', r: 'Valor cobrado (R$)', t: 'number' }, { k: 'previsao', r: 'Previsão de entrega', t: 'date' },
         { k: 'acessorios', r: 'Acessórios deixados' }, { k: 'obsInt', r: 'Observações internas', t: 'textarea' }], o)
@@ -424,6 +420,7 @@
     OSM = { chave: chave, row: o ? o._row : '', num: o ? o.num : '', aprovacao: o ? o.aprovacao || '' : '', sujo: false, carregando: !!o,
       d: { cliente: o ? o.cliente : '', previsao: o ? o.previsao || '' : '', acessorios: o ? o.acessorios || '' : '', obsInt: o ? o.obsInt || '' : '', equipamentos: [eqVazio(1)], itensOS: [] } };
     if (o) { OSM.d.equipamentos[0].identificacao = o.equipamento || ''; OSM.d.equipamentos[0].defeito = o.defeito || ''; OSM.d.equipamentos[0].servico = o.servico || ''; }
+    if (!o && PRE_OSM) { OSM.d.cliente = PRE_OSM.cliente; if (PRE_OSM.equipamentos.length) OSM.d.equipamentos = PRE_OSM.equipamentos; PRE_OSM = null; } // v0.7.0: vindo da ficha do cliente
     carregarCatalogo();
     if (!o) return;
     var alvo = OSM;
@@ -680,6 +677,246 @@
       (CAT ? lista(l, function (x) { return card(e(x.c.descricao), e(x.c.categoria || '') + ' · ' + (x.c.valor === '' || x.c.valor == null ? 'sem preço' : O.brl(x.c.valor)) + (x.c.fonte ? '<br>' + e(x.c.fonte) : ''), '', botao('Editar', 'cos-editar', String(x.k))); }, 'Catálogo OS vazio.') : '<div class="vazio">Carregando o catálogo…</div>');
   }
 
+  // ---------- v0.7.0: Clientes 360 (ficha, LGPD, linha do tempo, máquinas), checklist, laudo, garantia, link da OS, contratos/visitas, painel do mês ----------
+  var Dif = window.ProFixDif, FICHA = { nome: '', dados: null, estado: '' }, PRE_OSM = null, CT = null, RM = { mes: '', dados: null };
+  F.cli.chip = F.cli.chip || '';
+  function escreverFicha(acao, args, local) { FICHA.nome = ''; return escrever(acao, args, local); }
+  function telLink(c) { var n = V.numeroWa(c && c.whatsapp); return n && !Dif.naoContatar(c) ? 'tel:+' + n : ''; }
+  function attrReg(c, tipo, texto, os) { return api.pode('registrarMensagemAberta') && c ? ' data-reg-nome="' + e(c.nome) + '" data-reg-tipo="' + e(tipo || '') + '" data-reg-texto="' + e(texto || '') + '" data-reg-os="' + e(os || '') + '"' : ''; }
+  /** Contrato: registrarMensagemAberta quando o wa.me é aberto (só registra; não envia nada). */
+  function registrarAberta(a) {
+    var d = a.dataset; if (!d.regNome || !api.pode('registrarMensagemAberta')) return;
+    var cli = (D.clientes || []).filter(function (k) { return k.nome === d.regNome; })[0]; if (cli) cli.ultimo = D.hoje;
+    FICHA.nome = '';
+    api.escrever('registrarMensagemAberta', [{ nome: d.regNome, os: d.regOs || '', tipo: d.regTipo || 'mensagem', texto: d.regTexto || '' }],
+      function (cache) { (cache.clientes || []).forEach(function (k) { if (k.nome === d.regNome) k.ultimo = cache.hoje || D.hoje; }); })
+      .then(function (r) { aviso(r.enfileirado ? 'Mensagem aberta: registro guardado para enviar quando voltar a internet.' : 'Mensagem aberta registrada no histórico do cliente.'); }, function () { /* registro é opcional */ });
+  }
+  /** Modal com o texto pronto e o botão wa.me (o envio é sempre manual, no WhatsApp). */
+  function abrirMsg(p) {
+    var m = $('modal');
+    m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(p.titulo) + '</h2>' + (p.aviso ? '<p class="alerta" id="msgAviso">' + e(p.aviso) + '</p>' : '') +
+      (p.texto ? '<div class="pre msg-texto" id="msgTexto">' + e(p.texto) + '</div>' : '') +
+      (p.link ? '<div><span class="muted">Link de acompanhamento:</span><br><a id="msgLink" href="' + e(p.link) + '" target="_blank" rel="noopener">' + e(p.link) + '</a></div><div class="grandes"><button type="button" class="btn sec" id="bCopiar">📋 Copiar link</button><a class="btn sec" target="_blank" rel="noopener" href="' + e(p.link) + '">🔗 Abrir</a></div>' : '') +
+      '<div class="grandes">' + (p.waUrl ? '<a class="btn wa" id="msgWa" target="_blank" rel="noopener" href="' + e(p.waUrl) + '"' + attrReg(p.cliente, p.tipo, p.texto, p.os) + '>📲 Abrir no WhatsApp</a>' : '<span class="muted" id="msgSemWa">' + e(p.semWa || 'WhatsApp não pode ser aberto para este cliente.') + '</span>') +
+      '<button class="btn sec" value="fechar">Fechar</button></div><p class="muted">O app só abre o WhatsApp com o texto pronto: quem envia é você.</p></form>';
+    m.onclose = null; m.showModal();
+    if ($('msgWa')) $('msgWa').addEventListener('click', function () { registrarAberta(this); setTimeout(function () { m.close(''); }, 0); });
+    if ($('bCopiar')) $('bCopiar').onclick = function () { var t = p.link; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Link copiado.'); }, function () { prompt('Copie o link:', t); }); };
+  }
+  function lerOuAviso(acao, args) { if (!api.pode(acao)) { aviso('Esta função ainda não foi liberada no servidor (crm-v3).'); return Promise.reject(new Error('bloq')); } return api.ler(acao, args).catch(function (er) { aviso('Não deu: ' + er.message + (offline ? ' (sem internet)' : '')); throw er; }); }
+  function escreverResp(acao, args) { if (!api.pode(acao)) { aviso('Esta função ainda não foi liberada no servidor (crm-v3).'); return Promise.reject(new Error('bloq')); } return api.escrever(acao, args).then(function (r) { return r.dados || r; }).catch(function (er) { aviso('Não deu: ' + er.message); throw er; }); }
+
+  // ---- Lista de clientes: busca única + chips + cartão com última OS, total gasto e tempo desde o último atendimento ----
+  function cartaoCliente(c, s) {
+    var inter = (D.interacoes || []).filter(function (i) { return i.cliente === c.nome; }).slice(-1)[0], selo = Dif.seloLgpd(c);
+    var ult = s.ultimaOSNum ? '<span class="ult-os">Última OS: <b>' + e(s.ultimaOSNum) + '</b> ' + tag(s.ultimaOSStatus, Dif.corStatus(s.ultimaOSStatus)) + '</span>' : '<span class="muted">Sem OS</span>';
+    return card('<a class="nome-cli" href="#cliente/' + c._row + '">' + e(c.nome) + '</a>',
+      ult + '<div class="nums-cli"><span>💰 ' + V.brl(s.totalGasto || 0) + '</span><span data-tempo>🕒 ' + e(Dif.tempoDesde(s.diasSemRetorno)) + '</span>' + (s.garantiaAte ? '<span>🛡 garantia ' + Dif.diasRestantes(s.garantiaAte, D.hoje) + 'd</span>' : '') + '</div>' +
+      e(c.bairro || '') + ' · ' + e(c.origem || 'origem?') + (c.indicadoPor ? ' · indicado por ' + e(c.indicadoPor) : '') + (c.proximo ? '<br>⏰ ' + V.dataBR(c.proximo) + ' ' + e(c.acao || '') : '') + (inter ? '<br>Última conversa: ' + V.dataBR(inter.data) + ' – ' + e(inter.resumo) : ''),
+      tag(c.etapa) + (selo.chave === 'sim' ? '' : tag(selo.chave === 'bloq' ? 'não contatar' : 'sem consentimento', selo.cls)) + (Dif.aniversariante(c, D.hoje) ? tag('🎂 ' + c.aniversario, 'roxo') : ''),
+      botao('📇 Ficha', 'cli-ficha', c._row, '') + waCli(c, '', '', c.acao) + emailBtn(c, 'em-cli', c._row) + mapsBtn(c.endereco) + botao('Editar', 'cli-editar', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Mover etapa', 'cli-etapa', c._row), ' data-cli="' + c._row + '"');
+  }
+  function telaClientesLista(cab) {
+    var R = Dif.resumoClientes(D), cont = Dif.contarChips(D, R), l = Dif.filtrarClientes(D, F.cli, R);
+    var chips = '<div class="chips" id="fCliChips" role="group" aria-label="Filtrar clientes">' + Dif.CHIPS.map(function (k) { return '<button type="button" class="chip" data-chip-cli="' + k[0] + '" aria-pressed="' + ((F.cli.chip || '') === k[0]) + '">' + e(k[1]) + ' (' + cont[k[0]] + ')</button>'; }).join('') + '</div>';
+    return cab + '<div class="filtros">' + busca('fCliQ', F.cli.q, 'Buscar nome, telefone, OS, equipamento, série…') + '</div>' + chips + '<p class="muted" id="contagem">' + l.length + ' clientes</p>' +
+      lista(l, function (c) { return cartaoCliente(c, R[c.nome] || {}); }, 'Nenhum cliente com esse filtro.');
+  }
+
+  // ---- Ficha do cliente (#cliente/<linha>) ----
+  function carregarFicha(c) {
+    FICHA = { nome: c.nome, dados: null, estado: 'carregando' };
+    if (!api.pode('fichaCliente')) { FICHA.estado = 'local'; return; }
+    var alvo = FICHA;
+    api.ler('fichaCliente', [{ nome: c.nome }]).then(function (f) { if (FICHA !== alvo) return; FICHA.dados = f; FICHA.estado = 'ok'; if (rota().tela === 'cliente') render(); },
+      function () { if (FICHA !== alvo) return; FICHA.estado = 'local'; if (rota().tela === 'cliente') render(); });
+  }
+  function tile(rot, v, id) { return '<div class="tile"' + (id ? ' id="' + id + '"' : '') + '><span class="muted">' + rot + '</span><b>' + v + '</b></div>'; }
+  function telaFicha(row) {
+    var c = achar('clientes', row);
+    if (!c) return '<div class="row"><a href="#clientes" class="btn sec peq">← Clientes</a></div><div class="vazio">Cliente não encontrado (a lista pode ter mudado).</div>';
+    if (FICHA.nome !== c.nome) carregarFicha(c);
+    var f = FICHA.dados || Dif.fichaLocal(D, c.nome), nu = f.numeros || {}, selo = Dif.seloLgpd(c), R = Dif.resumoClientes(D)[c.nome] || {};
+    var gar = (f.garantias || []).filter(function (g) { return g.ativa !== false && Dif.diasRestantes(g.ate, D.hoje) >= 0; });
+    var tipoWa = nu.nOS || nu.osAberta ? 'os' : 'marketing', tel = telLink(c), mk = Dif.regraContato(c, 'marketing');
+    var h = '<div class="row"><a href="#clientes" class="btn sec peq">← Clientes</a>' + (FICHA.estado === 'carregando' ? '<span class="muted">atualizando…</span>' : FICHA.estado === 'local' ? '<span class="muted">prévia do aparelho</span>' : '') + '</div>' +
+      '<div class="ficha-topo"><div class="avatar" aria-hidden="true">' + e(c.nome.split(' ').map(function (p) { return p[0]; }).slice(0, 2).join('')) + '</div><div><h1 id="fichaNome">' + e(c.nome) + '</h1>' +
+      '<div class="muted">' + [c.id, c.tipoCli, nu.situacao, f.origem || c.origem].filter(Boolean).map(e).join(' · ') + '</div>' +
+      '<div><span class="tag ' + selo.cls + '" id="seloLgpd">' + e(selo.texto) + '</span>' + (gar.length ? tag('🛡 Garantia até ' + Dif.dataBR(gar[0].ate) + ' · faltam ' + Dif.diasRestantes(gar[0].ate, D.hoje) + ' dias', 'ok') : '') + (Dif.aniversariante(c, D.hoje) ? tag('🎂 Aniversário ' + c.aniversario, 'roxo') : '') + '</div></div></div>' +
+      '<div class="grandes" id="acoesFicha">' + waCli(c, '', tipoWa).replace('btn wa peq', 'btn wa') + (tel ? '<a class="btn sec" id="bLigar" href="' + e(tel) + '">📞 Ligar</a>' : '<span class="muted">Sem telefone para ligar.</span>') +
+      botao('🧾 Nova OS', 'cli-os', c._row, '').replace(' peq', '') + (api.pode('salvarOSMulti') ? botao('💻 Nova OS com vários equipamentos', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
+      '<div class="acoes">' + botao('📅 Agendar retorno', 'cli-retorno', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Editar', 'cli-editar', c._row) +
+      (selo.chave === 'sim' ? botao('🛡 Revogar consentimento', 'cli-lgpd', c._row) : selo.chave === 'nao' ? botao('🛡 Registrar consentimento', 'cli-lgpd', c._row, '') : '') + '</div>' +
+      (c.proximo ? '<p id="proxRetorno">⏰ Retorno: <b>' + V.dataBR(c.proximo) + '</b> ' + e(c.acao || '') + '</p>' : '') +
+      '<div class="tiles">' + tile('Total gasto', V.brl(nu.totalGasto || 0), 'tTotal') + tile('Nº de OS', nu.nOS || 0) + tile('Ticket médio', V.brl(nu.ticketMedio || 0)) + tile('Lucro', V.brl(nu.lucro || 0)) +
+      tile('Último atendimento', e(Dif.tempoDesde(R.diasSemRetorno)), 'tDesde') + tile('Garantia até', nu.garantiaAte ? Dif.dataBR(nu.garantiaAte) : '—') + tile('Preventiva em', nu.preventivaEm ? Dif.dataBR(nu.preventivaEm) : '—') + tile('Indicou', (f.indicou || []).length) + '</div>' +
+      '<h2>💬 Mensagens de relacionamento</h2>' + (mk.pode ? '<div class="acoes" id="mktFicha">' + [['reativacao', '👋 Reativação'], ['aniversario', '🎂 Aniversário'], ['preventiva', '🧽 Preventiva'], ['indicacao', '🤝 Indicação']].map(function (t) { return botao(t[1], 'cli-mkt', c._row + '|' + t[0]); }).join('') + '</div>'
+        : '<p class="muted" id="mktOculto">' + e(mk.aviso) + '</p>') +
+      '<h2>💻 Equipamentos salvos (' + (f.maquinas || []).length + ')</h2>' + ((f.maquinas || []).length ? '<div class="lista-maq">' + f.maquinas.map(function (m) { return '<label class="chk maq"><input type="checkbox" data-maq="' + e(m.id) + '"> <b>' + e(m.id) + '</b> ' + e([m.tipo, m.modelo].filter(Boolean).join(' · ')) + (m.serie ? ' <span class="muted">série ' + e(m.serie) + '</span>' : '') + '</label>'; }).join('') + '</div><p class="muted">Marque e toque em “Nova OS com vários equipamentos” para levar as máquinas para a OS.</p>' : '<p class="muted">Nenhum equipamento salvo.</p>') +
+      '<div class="acoes">' + (api.pode('salvarMaquina') ? botao('+ Salvar equipamento', 'cli-maq', c._row) : '') + '</div>' +
+      '<h2>🧾 OS (' + (f.os || []).length + ')</h2>' + lista(f.os || [], function (o) { return card(e(o.num) + ' · ' + e(o.equipamento || ''), V.dataBR(o.entrada) + (o.valor ? ' · ' + V.brl(o.valor) : o.orcamento ? ' · orçamento ' + V.brl(o.orcamento) : ''), tag(Dif.statusCanon(o.status), Dif.corStatus(o.status)), o._row ? botao('Abrir', 'os-abrir', o._row, '') : ''); }, 'Nenhuma OS.') +
+      (f.contrato ? '<p>📄 Contrato ' + e(f.contrato.id) + ' · ' + e(f.contrato.plano || '') + ' · ' + V.brl(f.contrato.valor) + '/mês</p>' : '') +
+      '<h2>🕒 Linha do tempo</h2>' + linhaTempoHtml(Dif.linhaDoTempo(f, D.hoje));
+    return h;
+  }
+  function linhaTempoHtml(ev) {
+    if (!ev.length) return '<div class="vazio">Nada registrado ainda.</div>';
+    return '<ol class="tl" id="linhaTempo">' + ev.slice(0, 80).map(function (x) { return '<li class="tl-' + x.tipo + '"><span class="muted">' + e(Dif.dataBR(x.quando) + (x.quando.length > 10 ? ' ' + x.quando.slice(11, 16) : '')) + (x.os ? ' · ' + e(x.os) : '') + '</span><br><b>' + e(x.titulo) + '</b>' + (x.detalhe ? ' – ' + e(x.detalhe) : '') + '</li>'; }).join('') + '</ol>';
+  }
+  TELAS.cliente = telaFicha;
+  ACOES['cli-ficha'] = function (row) { location.hash = '#cliente/' + row; };
+  ACOES['cli-os'] = function (row) { var c = achar('clientes', row); ACOES['os-editar']('', { cliente: c.nome }); };
+  ACOES['cli-osm'] = function (row) {
+    var c = achar('clientes', row), f = FICHA.nome === c.nome && FICHA.dados ? FICHA.dados : { maquinas: [] }, marc = {};
+    document.querySelectorAll('[data-maq]:checked').forEach(function (i) { marc[i.dataset.maq] = 1; });
+    var eqs = (f.maquinas || []).filter(function (m) { return marc[m.id]; }).map(function (m, i) { return Dif.maquinaParaOS(m, i + 1); });
+    PRE_OSM = { cliente: c.nome, equipamentos: eqs }; OSM = null; location.hash = '#osm';
+  };
+  ACOES['cli-retorno'] = function (row) {
+    var c = achar('clientes', row);
+    formulario('📅 Agendar retorno – ' + e(c.nome), [{ k: 'data', r: 'Quando', t: 'date', req: true }, { k: 'acao', r: 'O que fazer' }], { data: Dif.somaDias(D.hoje, 7), acao: c.acao || 'Retorno' },
+      '<div class="chips" id="atalhosRetorno">' + [[1, 'Amanhã'], [7, '7 dias'], [30, '30 dias'], [90, '90 dias']].map(function (x) { return '<button type="button" class="chip" data-dias="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>')
+      .then(function (v) { if (!v) return; var x = { nome: c.nome, data: v.data, acao: v.acao || 'Retorno' };
+        if (api.pode('agendarRetorno')) escreverFicha('agendarRetorno', [x], aplicar('clientes', row, { proximo: x.data, acao: x.acao }));
+        else escreverFicha('salvarCliente', [{ _row: c._row, _nomeOriginal: c.nome, nome: c.nome, proximo: x.data, acao: x.acao }], aplicar('clientes', row, { proximo: x.data, acao: x.acao })); });
+    document.querySelectorAll('#atalhosRetorno [data-dias]').forEach(function (b) { b.onclick = function () { $('c_data').value = Dif.somaDias(D.hoje, +b.dataset.dias); }; });
+  };
+  // Não existe "registrarConsentimento" no crm-v3: usa salvarCliente (o servidor grava a data do consentimento) + registra a conversa.
+  ACOES['cli-lgpd'] = function (row) {
+    var c = achar('clientes', row), dar = c.consent !== 'Sim';
+    if (!confirm(dar ? 'Registrar que ' + c.nome + ' AUTORIZOU receber mensagens da ProFix (LGPD)?' : 'Revogar o consentimento de ' + c.nome + '? Mensagens de marketing deixam de aparecer; as da OS continuam com aviso.')) return;
+    var mud = { consent: dar ? 'Sim' : 'Não', dataConsent: dar ? D.hoje : '' }, d = { _row: c._row, _nomeOriginal: c.nome, nome: c.nome, consent: mud.consent };
+    if (dar) d.dataConsent = D.hoje;
+    FICHA.nome = '';
+    api.escrever('salvarCliente', [d], aplicar('clientes', row, mud)).then(function () {
+      return api.escrever('registrarInteracao', [{ cliente: c.nome, _rowCliente: c._row, canal: 'Presencial', resumo: dar ? 'Consentimento LGPD registrado (cliente autorizou contato)' : 'Consentimento LGPD revogado a pedido do cliente' }]);
+    }).then(function (r) { aviso(dar ? 'Consentimento registrado.' : 'Consentimento revogado.' + (r.enfileirado ? ' (vai para a planilha quando voltar a internet)' : '')); return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); });
+  };
+  ACOES['cli-maq'] = function (row) {
+    var c = achar('clientes', row);
+    formulario('+ Equipamento de ' + e(c.nome), [{ k: 'tipo', r: 'Tipo', t: 'select', o: TIPOS_EQ, req: true }, { k: 'modelo', r: 'Marca / modelo' }, { k: 'serie', r: 'Nº de série' }, { k: 'obs', r: 'Observações', t: 'textarea' }], { tipo: 'Notebook' })
+      .then(function (v) { if (!v) return; escreverFicha('salvarMaquina', [Object.assign({ cliente: c.nome }, v)]); });
+  };
+  ACOES['cli-mkt'] = function (k) {
+    var p = String(k).split('|'), c = achar('clientes', p[0]), rot = { reativacao: 'Reativação', aniversario: 'Aniversário', preventiva: 'Preventiva', indicacao: 'Indicação' }[p[1]];
+    if (!Dif.regraContato(c, 'marketing').pode) return aviso(Dif.regraContato(c, 'marketing').aviso);
+    lerOuAviso('textoMarketing', [{ nome: c.nome, tipo: p[1] }]).then(function (r) {
+      abrirMsg({ titulo: '💬 ' + rot + ' – ' + c.nome, texto: r.texto, aviso: r.aviso, waUrl: r.podeAbrir ? r.waUrl : '', semWa: r.aviso, cliente: c, tipo: p[1] });
+    }, function () {});
+  };
+
+  // ---- OS: checklist, laudo, garantia, link de acompanhamento e mensagem de status ----
+  function blocoGarantiaOS(o) {
+    var g = Dif.garantiasDaOS(o, D.hoje, (D.config && D.config.garantiaDiasProfix) || Dif.GARANTIA_PADRAO)[0]; if (!g) return '';
+    return '<div id="garantiaOS">' + (g.restam >= 0 ? tag('🛡 Garantia ' + g.dias + ' dias · até ' + Dif.dataBR(g.ate) + ' · faltam ' + g.restam + (g.restam === 1 ? ' dia' : ' dias'), 'ok') : tag('Garantia vencida em ' + Dif.dataBR(g.ate), 'vencido')) + '</div>';
+  }
+  function botoesDifOS(o) {
+    return '<div class="grandes" id="acoesDifOS">' + (api.pode('salvarChecklistOS') ? botao('✅ Checklist', 'os-chk', o._row, '').replace(' peq', '') : '') +
+      (api.pode('textoStatusOS') ? botao('📲 Avisar status', 'os-msg', o._row, 'sec').replace(' peq', '') : '') +
+      (api.pode('linkClienteOS') ? botao('🔗 Link de acompanhamento', 'os-link', o._row, 'sec').replace(' peq', '') : '') +
+      (api.pode('laudoTecnicoOS') ? botao('📄 Laudo técnico', 'os-laudo', o._row, 'sec').replace(' peq', '') : '') + '</div>';
+  }
+  ACOES['os-chk'] = function (row) {
+    var o = achar('os', row), m = $('modal'), mom0 = ['Pronto', 'Entregue'].indexOf(Dif.statusCanon(o.status)) >= 0 ? 'Saída' : 'Entrada';
+    var grupo = function (nome, rot, ops, v) { return '<fieldset class="opcoes"><legend>' + e(rot) + '</legend>' + ops.map(function (x) { return '<label><input type="radio" name="' + nome + '" value="' + e(x) + '"' + (x === v ? ' checked' : '') + '><span>' + e(x) + '</span></label>'; }).join('') + '</fieldset>'; };
+    m.innerHTML = '<form method="dialog" id="fChk" class="detalhe"><h2 style="margin:0">✅ Checklist · ' + e(o.num) + '</h2><p class="muted" id="chkExtras">' + e(o.cliente) + ' · ' + e(o.equipamento || '') + '</p>' +
+      grupo('momento', 'Momento', ['Entrada', 'Saída'], mom0) + Dif.CHK_ITENS.map(function (k, i) { return grupo('it' + i, k, Dif.CHK_RESULT, 'OK'); }).join('') +
+      grupo('senhaInformada', 'Cliente informou a senha?', ['Sim', 'Não'], '') + grupo('bitlocker', 'BitLocker ativo?', ['Sim', 'Não'], '') +
+      '<div><label for="chkObs">Observações</label><textarea id="chkObs" rows="2"></textarea></div><p class="muted">A senha em si nunca é gravada no checklist (só “informada: Sim/Não”).</p><p class="erro" id="fErro"></p>' +
+      '<div class="grandes"><button class="btn" value="ok" id="chkSalvar">Salvar checklist</button><button class="btn sec" value="cancelar" formnovalidate>Cancelar</button></div></form>';
+    var val = function (n) { var r = m.querySelector('input[name="' + n + '"]:checked'); return r ? r.value : ''; };
+    $('chkSalvar').onclick = function (ev) {
+      var x = { num: o.num, _row: o._row, momento: val('momento'), itens: {}, senhaInformada: val('senhaInformada'), bitlocker: val('bitlocker'), obs: $('chkObs').value.trim() };
+      Dif.CHK_ITENS.forEach(function (k, i) { x.itens[k] = val('it' + i); });
+      try { Dif.validarChecklist(x); } catch (er) { ev.preventDefault(); $('fErro').textContent = er.message; return; }
+      m.onclose = function () { m.onclose = null; FICHA.nome = ''; escrever('salvarChecklistOS', [x]); };
+    };
+    m.onclose = null; m.returnValue = ''; m.showModal();
+    if (api.pode('extrasOS')) api.ler('extrasOS', [{ num: o.num, _row: o._row }]).then(function (r) {
+      var el = $('chkExtras'); if (!el || !r) return; var feitos = (r.checklists || []).map(function (c) { return c.momento; });
+      el.textContent = o.cliente + ' · já feito: ' + (feitos.join(', ') || 'nenhum') + ((r.pendenciasEntrega || []).length ? ' · falta para entregar: ' + r.pendenciasEntrega.join(', ') : '');
+    }, function () {});
+  };
+  ACOES['os-laudo'] = function (row) {
+    var o = achar('os', row);
+    lerOuAviso('laudoTecnicoOS', [{ num: o.num, _row: o._row }]).then(function (r) {
+      var m = $('modal');
+      m.innerHTML = '<form method="dialog" class="detalhe laudo"><h2 style="margin:0">📄 Laudo técnico · ' + e(o.num) + '</h2><iframe id="laudoFrame" title="Laudo técnico" sandbox="allow-same-origin allow-modals"></iframe>' +
+        '<div class="grandes"><button type="button" class="btn" id="bImprLaudo">🖨️ Imprimir / PDF</button><button class="btn sec" value="fechar">Fechar</button></div></form>';
+      $('laudoFrame').srcdoc = r.html || ''; m.onclose = null; m.showModal();
+      $('bImprLaudo').onclick = function () { try { $('laudoFrame').contentWindow.print(); } catch (x) { aviso('Não deu para imprimir neste aparelho.'); } };
+    }, function () {});
+  };
+  ACOES['os-link'] = function (row) {
+    var o = achar('os', row), c = V.clienteDaOS(D, o);
+    escreverResp('linkClienteOS', [{ num: o.num, _row: o._row }]).then(function (r) {
+      if (!Dif.linkAcompanhamentoOk(r.url)) aviso('Atenção: o link veio num formato inesperado.');
+      abrirMsg({ titulo: '🔗 Acompanhamento da ' + o.num, link: r.url, texto: '', waUrl: '', semWa: 'Para mandar o link pelo WhatsApp, use “📲 Avisar status” (o texto já leva o link).', cliente: c, os: o.num });
+    }, function () {});
+  };
+  ACOES['os-msg'] = function (row) {
+    var o = achar('os', row), c = V.clienteDaOS(D, o);
+    escreverResp('textoStatusOS', [{ num: o.num, _row: o._row }]).then(function (r) {
+      // Regra do app vale por cima da resposta: "Não contatar" bloqueia; sem consentimento = serviço com aviso.
+      var b = V.botaoWaCliente(c, 'os', r.texto), pode = !!(r.podeAbrir && r.waUrl && b);
+      abrirMsg({ titulo: '📲 Status da ' + o.num + ' · ' + (r.status || o.status), texto: r.texto, aviso: r.aviso || (b && b.aviso ? Dif.regraContato(c, 'os').aviso : ''), waUrl: pode ? r.waUrl : '', link: r.link,
+        semWa: Dif.naoContatar(c) ? 'Cliente marcado como “Não contatar”.' : (r.aviso || 'WhatsApp inválido.'), cliente: c, os: o.num, tipo: 'status' });
+    }, function () {});
+  };
+  PRECISA['os-chk'] = 'salvarChecklistOS'; PRECISA['cli-maq'] = 'salvarMaquina';
+
+  // ---- Contratos e visitas técnicas (Mais > Visitas) ----
+  function carregarCT() {
+    if (carregarCT.indo) return; if (!api.pode('listaContratos')) { CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [] }; return; }
+    carregarCT.indo = true;
+    api.ler('listaContratos', []).then(function (r) { carregarCT.indo = false; CT = r || { contratos: [], visitas: [] }; if (rota().tela === 'mais') render(); },
+      function () { carregarCT.indo = false; CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [], erro: true }; if (rota().tela === 'mais') render(); });
+  }
+  function telaVisitas() {
+    if (!CT) { carregarCT(); return '<div class="vazio">Carregando contratos e visitas…</div>'; }
+    var vs = CT.visitas || [], abertas = vs.filter(function (v) { return v.status !== 'Concluída'; });
+    return '<div class="row">' + (api.pode('salvarVisita') ? botao('+ Visita', 'vis-nova', '', '') : '') + (api.pode('salvarContrato') ? botao('+ Contrato', 'ct-novo', '') : '') + '</div>' + (CT.erro ? '<p class="muted">Sem internet: mostrando a última cópia.</p>' : '') +
+      '<h2>🚗 Visitas (' + abertas.length + ' abertas)</h2>' + lista(vs, function (v) {
+        var c = (D.clientes || []).filter(function (k) { return k.nome === v.cliente; })[0], end = c && c.endereco;
+        return card(e(v.id) + ' · ' + e(v.cliente), V.dataBR(v.data) + (v.contrato ? ' · ' + e(v.contrato) : '') + (v.inicio ? '<br>Início ' + e(String(v.inicio).slice(11, 16) || v.inicio) : '') + (v.status === 'Concluída' ? ' · ' + String(v.horas).replace('.', ',') + ' h · ' + e(v.km) + ' km' : ''),
+          tag(v.prioridade, V.norm(v.prioridade) === 'urgente' ? 'vencido' : V.norm(v.prioridade)) + tag(v.status, v.status === 'Concluída' ? 'ok' : v.status === 'Em andamento' ? 'azul' : 'cinza'),
+          (v.status === 'Agendada' && api.pode('iniciarVisita') ? botao('▶️ Iniciar visita', 'vis-ini', v.id, '') : '') + (v.status === 'Em andamento' && api.pode('encerrarVisita') ? botao('⏹ Encerrar visita', 'vis-fim', v.id, '') : '') +
+          (end ? mapsBtn(end) : '') + (c && telLink(c) ? '<a class="btn sec peq" href="' + e(telLink(c)) + '">📞 Ligar</a>' : '') + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-visita="' + e(v.id) + '"');
+      }, 'Nenhuma visita.') +
+      '<h2>📄 Contratos mensais</h2>' + lista(CT.contratos || [], function (k) { return card(e(k.id) + ' · ' + e(k.cliente), e(k.plano || '') + ' · ' + V.brl(k.valor) + '/mês · ' + e(k.visitas) + ' visita(s)/mês', tag(k.status, k.status === 'Ativo' ? 'ok' : 'cinza'), ''); }, 'Nenhum contrato.');
+  }
+  function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
+  ACOES['vis-nova'] = function () {
+    var nomes = (D.clientes || []).map(function (c) { return c.nome; }), cts = ((CT && CT.contratos) || []).map(function (k) { return k.id; });
+    formulario('+ Visita técnica', [{ k: 'cliente', r: 'Cliente', t: 'select', o: nomes, req: true }, { k: 'data', r: 'Data', t: 'date', req: true }, { k: 'prioridade', r: 'Prioridade', t: 'select', o: (CT && CT.prioridades) || ['Urgente', 'Alta', 'Normal', 'Baixa'] },
+      { k: 'contrato', r: 'Contrato (opcional)', t: 'select', o: cts }, { k: 'os', r: 'OS (opcional)' }, { k: 'obs', r: 'Observações', t: 'textarea' }], { data: D.hoje, prioridade: 'Normal' })
+      .then(function (v) { if (!v) return; depoisCT('salvarVisita', [Object.assign({ idOperacao: Dif.idOperacao('vis') }, v)]); });
+  };
+  ACOES['ct-novo'] = function () {
+    formulario('+ Contrato mensal', [{ k: 'cliente', r: 'Cliente', t: 'select', o: (D.clientes || []).map(function (c) { return c.nome; }), req: true }, { k: 'plano', r: 'Plano' }, { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
+      { k: 'visitas', r: 'Visitas por mês', t: 'number' }, { k: 'inicio', r: 'Início', t: 'date' }, { k: 'obs', r: 'Observações', t: 'textarea' }], { plano: 'Plano empresarial', visitas: '1', inicio: D.hoje })
+      .then(function (v) { if (!v) return; depoisCT('salvarContrato', [v]); });
+  };
+  ACOES['vis-ini'] = function (id) { depoisCT('iniciarVisita', [{ id: id }]); };
+  ACOES['vis-fim'] = function (id) {
+    formulario('⏹ Encerrar ' + e(id), [{ k: 'km', r: 'Km rodados (ida e volta)', t: 'number', req: true }], { km: '' }, '<p class="muted">As horas são calculadas pelo início e fim (arredondadas a 15 min).</p>')
+      .then(function (v) { if (!v) return; depoisCT('encerrarVisita', [{ id: id, km: v.km, fim: Dif.agoraTxt() }]); });
+  };
+
+  // ---- Painel do mês (resumoMes) ----
+  function telaMes() {
+    var mes = RM.mesSel || D.hoje.slice(0, 7);
+    if (RM.mes !== mes) { RM.mes = mes; RM.dados = null; if (api.pode('resumoMes')) api.ler('resumoMes', [{ mes: mes }]).then(function (r) { if (RM.mes !== mes) return; RM.dados = r; if (rota().tela === 'mais') render(); }, function () { if (RM.mes === mes) { RM.dados = Dif.resumoMesLocal(D, mes); if (rota().tela === 'mais') render(); } }); else RM.dados = Dif.resumoMesLocal(D, mes); }
+    var r = RM.dados; if (!r) return '<div class="filtros"><input type="month" id="fMes" value="' + e(mes) + '" aria-label="Mês"></div><div class="vazio">Carregando o painel do mês…</div>';
+    var o = r.orcamentos || {}, obj = function (x) { return Object.keys(x || {}).map(function (k) { return e(k) + ': <b>' + e(x[k]) + '</b>'; }).join(' · ') || '—'; };
+    return '<div class="filtros"><input type="month" id="fMes" value="' + e(mes) + '" aria-label="Mês"></div>' + (r.local ? '<p class="muted">Prévia do aparelho (sem resposta do servidor).</p>' : '') +
+      '<div class="tiles" id="painelMes">' + tile('Faturamento', V.brl(r.faturamento || 0)) + tile('Lucro', V.brl(r.lucro || 0)) + tile('Custo de peças', V.brl(r.custoPecas || 0)) + tile('Ticket médio', V.brl(r.ticketMedio || 0)) +
+      tile('OS abertas', r.osAbertas || 0) + tile('OS entregues', r.osEntregues || 0) + tile('Orçamentos aprovados', (o.aprovados || 0) + ' de ' + (o.total || 0) + ' (' + (o.taxaAprovacao || 0) + '%)') + tile('Clientes novos', r.clientesNovos || 0) +
+      tile('Receita de contratos', V.brl(r.receitaContratos || 0)) + tile('Avaliação', r.avaliacao && r.avaliacao.quantidade ? String(r.avaliacao.media).replace('.', ',') + ' ★ (' + r.avaliacao.quantidade + ')' : '—') + '</div>' +
+      '<div class="card"><div class="m">OS em andamento: ' + obj(r.osPorStatus) + '<br>Como conheceu: ' + obj(r.comoConheceu) + '<br>Motivos de recusa: ' + obj(r.motivosRecusa) + '</div></div>';
+  }
+
   function ligarAcoes(raiz, dentroModal) {
     raiz.querySelectorAll('[data-a]').forEach(function (b) {
       b.onclick = function (ev) {
@@ -698,6 +935,9 @@
       F.op.cidade = b.dataset.cidade; try { localStorage.setItem(CID, F.op.cidade); } catch (x) { /* sem armazenamento */ }
       render(); var n = document.querySelector('[data-cidade="' + (window.CSS && CSS.escape ? CSS.escape(F.op.cidade) : F.op.cidade) + '"]'); if (n) n.focus(); }; });
     filtro('fOsSt', F.os, 'status'); filtro('fOsQ', F.os, 'q'); filtro('fCliQ', F.cli, 'q');
+    c.querySelectorAll('[data-chip-cli]').forEach(function (b) { b.onclick = function () { F.cli.chip = b.dataset.chipCli; render(); var n = document.querySelector('[data-chip-cli="' + F.cli.chip + '"]'); if (n) n.focus(); }; });
+    c.querySelectorAll('a[data-reg-nome]').forEach(function (a) { a.addEventListener('click', function () { registrarAberta(a); }); });
+    if ($('fMes')) $('fMes').onchange = function () { RM.mesSel = this.value || ''; render(); };
     ligarAcoes(c);
     ligarOSM(c);
     c.querySelectorAll('[data-wa-mod]').forEach(function (sel) { sel.onchange = function () {

@@ -14,13 +14,17 @@
   // Ações permitidas -> função do crm-v3/Code.gs. "escrita" = entra na fila offline.
   // Lista FECHADA de ações = funções que já existem no crm-v3/Code.gs (mesma lista que o doPost deve aceitar).
   var LEITURA = ['getDados', 'listarAgenda', 'leadsLink', 'resumoOrigens',
-    'lerOSMulti', 'catalogoOS', 'gerarOrcamentoOS', 'orcamentoOS', 'simularCondicaoOS']; // v0.6.0: OS com vários equipamentos (crm-v3 API v32)
+    'lerOSMulti', 'catalogoOS', 'gerarOrcamentoOS', 'orcamentoOS', 'simularCondicaoOS',
+    'fichaCliente', 'resumoMes', 'listaContratos', 'laudoTecnicoOS', 'extrasOS', 'textoMarketing']; // v0.7.0: diferenciais (crm-v3 API @41). v0.6.0: OS com vários equipamentos (crm-v3 API v32)
   var ESCRITA = ['salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento',
     'lancarRecebimento', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
     'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'registrarFollowup',
     'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente',
-    'salvarOSMulti', 'salvarCatalogoOS', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS']; // crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
-  var SO_ONLINE = ['criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS']; // nunca vão para a fila offline (e-mail não sai "depois" sem o Pedro ver; aprovação e condição especial são feitas na frente do cliente, com o servidor)
+    'salvarOSMulti', 'salvarCatalogoOS', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS',
+    'registrarMensagemAberta', 'agendarRetorno', 'salvarMaquina', 'vincularMaquinaOS', 'salvarChecklistOS', 'linkClienteOS', 'textoStatusOS',
+    'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita']; // v0.7.0 diferenciais; crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
+  var SO_ONLINE = ['linkClienteOS', 'textoStatusOS', 'iniciarVisita', // v0.7.0: precisam da resposta na hora (link/texto); início da visita usa a hora do servidor
+    'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS']; // nunca vão para a fila offline (e-mail não sai "depois" sem o Pedro ver; aprovação e condição especial são feitas na frente do cliente, com o servidor)
   var ACOES = {};
   LEITURA.forEach(function (a) { ACOES[a] = { escrita: false }; });
   ESCRITA.forEach(function (a) { ACOES[a] = { escrita: true }; });

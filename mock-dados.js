@@ -21,10 +21,11 @@
       categoriasFin: ['Serviço', 'Venda de peça', 'Revenda de usado', 'Compra de peça', 'Deslocamento', 'Ferramentas', 'DAS-MEI', 'Marketing', 'Outros'],
       config: { linkAgenda: 'https://exemplo.invalid/agenda', whatsappProfix: '(15) 90000-0000', linkAvaliacao: '' },
       clientes: [
-        { _row: 2, id: 'C0001', nome: 'Ana Exemplo Silva', whatsapp: '(15) 90000-0001', consent: 'Sim', origem: 'Instagram', etapa: 'Entregue', primeiro: d(-40), ultimo: d(-5), proximo: d(-1), acao: 'Perguntar se o notebook está ok', bairro: 'Centro', email: 'ana.exemplo@example.com', endereco: 'Rua Exemplo, 100 - Centro, Sorocaba - SP', indicadoPor: '', motivoPerda: '', valorEst: '' },
+        { _row: 2, id: 'C0001', nome: 'Ana Exemplo Silva', whatsapp: '(15) 90000-0001', consent: 'Sim', dataConsent: d(-40), aniversario: hoje.slice(8, 10) + '/' + hoje.slice(5, 7), codIndic: 'ANA-EX10', origem: 'Instagram', etapa: 'Entregue', primeiro: d(-40), ultimo: d(-5), proximo: d(-1), acao: 'Perguntar se o notebook está ok', bairro: 'Centro', email: 'ana.exemplo@example.com', endereco: 'Rua Exemplo, 100 - Centro, Sorocaba - SP', indicadoPor: '', motivoPerda: '', valorEst: '' },
         { _row: 3, id: 'C0002', nome: 'Bruno Exemplo Lima', whatsapp: '(15) 90000-0002', consent: 'Não', origem: 'Google', etapa: 'Em serviço', primeiro: d(-6), ultimo: d(-2), proximo: hoje, acao: 'Ligar sobre a peça', bairro: 'Campolim', email: 'bruno.exemplo@example.com', endereco: 'Av. Fictícia, 200 - Campolim, Sorocaba - SP', indicadoPor: '', motivoPerda: '', valorEst: '' },
         { _row: 4, id: 'C0003', nome: 'Carla Exemplo Souza', whatsapp: '(15) 90000-0003', consent: 'Sim', origem: 'Indicação', etapa: 'Orçamento enviado', primeiro: d(-8), ultimo: d(-4), proximo: d(3), acao: 'Cobrar resposta do orçamento', bairro: 'Éden', indicadoPor: 'Ana Exemplo Silva', motivoPerda: '', valorEst: 380 },
-        { _row: 5, id: 'C0004', nome: 'Diego Exemplo Rocha', whatsapp: '(15) 90000-0004', consent: 'Sim', origem: 'Panfleto', etapa: 'Lead', primeiro: d(-1), ultimo: d(-1), proximo: '', acao: '', bairro: 'Vila Hortência', indicadoPor: '', motivoPerda: '', valorEst: 150 }
+        { _row: 5, id: 'C0004', nome: 'Diego Exemplo Rocha', whatsapp: '(15) 90000-0004', consent: 'Sim', origem: 'Panfleto', etapa: 'Lead', primeiro: d(-1), ultimo: d(-1), proximo: '', acao: '', bairro: 'Vila Hortência', indicadoPor: '', motivoPerda: '', valorEst: 150 },
+        { _row: 6, id: 'C0005', nome: 'Elisa Exemplo Prado', whatsapp: '(15) 90000-0005', consent: 'Sim', naoContatar: 'Sim', origem: 'Google', etapa: 'Pós-venda', primeiro: d(-130), ultimo: d(-120), proximo: '', acao: '', bairro: 'Jardim Exemplo', indicadoPor: '', motivoPerda: '', valorEst: '' }
       ],
       interacoes: [
         { _row: 2, data: d(-4), cliente: 'Carla Exemplo Souza', canal: 'WhatsApp', resumo: 'Enviei o orçamento da fonte', proximoPasso: 'Cobrar resposta', dataProx: d(3), por: 'Pedro' }
@@ -33,11 +34,13 @@
         { _row: 2, num: 'OS-0012', entrada: d(-5), cliente: 'Bruno Exemplo Lima', equipamento: 'Notebook Dell (fictício)', defeito: 'Lento e esquentando', servico: 'Formatação Windows', status: 'Em reparo', valor: 99.9, custo: 0, previsao: d(1), statusEm: d(-2), senha: '1234', acessorios: 'Carregador', diagnostico: '', orcamento: '', aprovacao: '' },
         { _row: 3, num: 'OS-0013', entrada: d(-4), cliente: 'Carla Exemplo Souza', equipamento: 'Desktop gamer (fictício)', defeito: 'Não dá vídeo', status: 'Aguardando aprovação', valor: '', orcamento: 380, diagnostico: 'Fonte com defeito', itensOrc: 'Mão de obra + fonte 600W', validade: d(6), aprovacao: 'Pendente', statusEm: d(-3) },
         { _row: 4, num: 'OS-0015', entrada: d(-9), cliente: 'Ana Exemplo Silva', equipamento: 'PC montado', servico: 'Montagem de PC', status: 'Pronto', valor: 150, statusEm: d(-8) },
-        { _row: 5, num: 'OS-0010', entrada: d(-12), cliente: 'Ana Exemplo Silva', equipamento: 'Notebook Acer', servico: 'Formatação Windows', status: 'Entregue', valor: 120, entrega: d(-4), forma: 'Pix' }
+        { _row: 5, num: 'OS-0010', entrada: d(-12), cliente: 'Ana Exemplo Silva', equipamento: 'Notebook Acer', servico: 'Formatação Windows', status: 'Entregue', valor: 120, entrega: d(-4), forma: 'Pix' },
+        { _row: 6, num: 'OS-0009', entrada: d(-125), cliente: 'Elisa Exemplo Prado', equipamento: 'Notebook Lenovo (fictício)', servico: 'Limpeza interna', status: 'Entregue', valor: 90, entrega: d(-120), forma: 'Dinheiro' }
       ],
       pecas: [{ _row: 2, data: d(-3), os: 'OS-0012', peca: 'SSD 480 GB (exemplo)', qtd: 1, custoUnit: 180, precoUnit: 250, fornecedor: 'Loja exemplo', origem: 'Comprada para esta OS', link: '' }],
       financeiro: [
         { _row: 2, data: d(-4), tipo: 'Entrada', categoria: 'Serviço', os: 'OS-0010', descricao: 'Recebimento OS OS-0010', forma: 'Pix', receita: 120, custo: 0 },
+        { _row: 4, data: d(-120), tipo: 'Entrada', categoria: 'Serviço', os: 'OS-0009', descricao: 'Recebimento OS OS-0009', forma: 'Dinheiro', receita: 90, custo: 0 },
         { _row: 3, data: ym + '-02', tipo: 'Saída', categoria: 'Compra de peça', os: '', descricao: 'Pasta térmica (exemplo)', forma: 'Pix', receita: '', custo: 35 }
       ],
       tarefas: [
@@ -45,6 +48,10 @@
         { _row: 3, data: hoje, cliente: 'Ana Exemplo Silva', tarefa: 'Lembrete de retirada (OS-0015)', tipo: 'Lembrete de retirada', status: 'Pendente', os: 'OS-0015' },
         { _row: 4, data: d(5), cliente: '', tarefa: 'Pagar DAS-MEI', tipo: 'Outro', status: 'Pendente', os: '' }
       ],
+      maquinas: [{ id: 'MAQ-0001', cliente: 'Ana Exemplo Silva', tipo: 'Notebook', modelo: 'Acer Aspire (fictício)', serie: 'SN-EXEMPLO-001' }, { id: 'MAQ-0002', cliente: 'Ana Exemplo Silva', tipo: 'Desktop', modelo: 'PC montado (fictício)', serie: '' }],
+      timelineCli: [{ quando: d(-4) + ' 17:00', cliente: 'Ana Exemplo Silva', os: 'OS-0010', evento: 'Avaliação pedida', detalhe: 'Link de avaliação aberto no WhatsApp' }],
+      contratos: [{ id: 'CT-0001', cliente: 'Carla Exemplo Souza', plano: 'Plano empresarial (fictício)', valor: 250, visitas: 2, status: 'Ativo', inicio: d(-30), obs: '' }],
+      visitas: [{ id: 'VT-0001', contrato: 'CT-0001', cliente: 'Carla Exemplo Souza', data: hoje, prioridade: 'Alta', status: 'Agendada', inicio: '', fim: '', km: '', horas: '', os: '', obs: 'Rede do escritório (fictício)' }],
       cotaEmail: 95, // e-mails que ainda podem sair hoje (fictício)
       leadsLink: [
         { _row: 2, dataHora: hoje + ' 09:12', nome: 'Exemplo Lead Link Ana', telefone: '(15) 90000-1101', cidade: 'Sorocaba', servico: 'Notebook não liga', consentimento: true, dataConsentimento: hoje + ' 09:12', origem: 'pagina-cadastro', status: 'Novo', obs: '' },
@@ -144,7 +151,7 @@
       salvarCliente: function (c) {
         if (!String(c.nome || '').trim()) throw new Error('Informe o nome do cliente.');
         if (c.consent && ['Sim', 'Não'].indexOf(c.consent) < 0) throw new Error('Consentimento deve ser Sim ou Não.');
-        var campos = ['nome', 'whatsapp', 'bairro', 'origem', 'primeiro', 'consent', 'dataConsent', 'obs', 'etapa', 'ultimo', 'proximo', 'acao', 'preventiva', 'indicadoPor', 'motivoPerda', 'valorEst'];
+        var campos = ['nome', 'whatsapp', 'bairro', 'origem', 'primeiro', 'consent', 'dataConsent', 'obs', 'etapa', 'ultimo', 'proximo', 'acao', 'preventiva', 'indicadoPor', 'motivoPerda', 'valorEst', 'aniversario', 'naoContatar', 'tipoCli', 'doc'];
         if (c._row) { copiar(achar('clientes', 'nome', c._nomeOriginal || c.nome, c._row), c, campos); return { ok: true, msg: 'Cliente atualizado.' }; }
         var n = { id: proxId('clientes', 'id', 'C'), primeiro: h(), etapa: 'Lead' }; copiar(n, c, campos); anexar('clientes', n); return { ok: true, msg: 'Cliente cadastrado (' + n.id + ').' };
       },
@@ -326,6 +333,108 @@
       if (!OSM.condicaoDe(m)) return { ok: true, num: x.num, totais: m.totais, msg: 'Não havia condição especial.' };
       var d = OSM.semNegociacao(paraSalvar(m)); d._row = x._row || m._row;
       var r = S.salvarOSMulti(d); r.msg = 'Condição especial removida. Total ' + OSM.brl(r.totais.total) + '.'; return r;
+    };
+    // ---- v0.7.0: diferenciais (mesmas ações e respostas do crm-v3 API @41, CONTRATO_DIFERENCIAIS.md; dados fictícios) ----
+    var Dif = typeof ProFixDif !== 'undefined' ? ProFixDif : require('./diferenciais.js');
+    ['maquinas', 'timelineCli', 'checklists', 'contratos', 'visitas'].forEach(function (k) { D[k] = D[k] || []; });
+    D.tokensOS = D.tokensOS || {};
+    var cliNome = function (nome) { var c = (D.clientes || []).filter(function (k) { return k.nome === nome; })[0]; if (!c) throw new Error('Cliente não encontrado.'); return c; };
+    var osNum = function (num) { var o = osDe(num); if (!o) throw new Error('OS não encontrada.'); return o; };
+    var agora = function () { return D.agoraFixo || (h() + ' ' + new Date().toTimeString().slice(0, 5)); };
+    var evento = function (nome, os, ev, det) { D.timelineCli.push({ quando: agora(), cliente: nome, os: os || '', evento: ev, detalhe: det || '' }); };
+    var telWa = function (c) { var n = String(c.whatsapp || '').replace(/\D/g, ''); if (n.length === 10 || n.length === 11) n = '55' + n; return n.length === 13 ? n : ''; };
+    var waUrl = function (tel, t) { return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(t); };
+    var tokenOS = function (o) { if (!D.tokensOS[o.num]) { var a = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_', t = ''; for (var i = 0; i < 43; i++) t += a.charAt((i * 7 + o.num.length * 13 + Number(String(o.num).replace(/\D/g, ''))) % a.length); D.tokensOS[o.num] = t; } return D.tokensOS[o.num]; };
+    var urlOS = function (o) { return 'https://script.google.com/macros/s/EXEMPLO-FICTICIO/exec?os=' + tokenOS(o); };
+    var garDias = function () { return (D.config && D.config.garantiaDiasProfix) || Dif.GARANTIA_PADRAO; };
+    S.fichaCliente = function (x) {
+      var c = cliNome(x && x.nome), f = Dif.fichaLocal(D, c.nome); delete f.local;
+      f.maquinas = D.maquinas.filter(function (m) { return m.cliente === c.nome; }).map(function (m) { return { id: m.id, tipo: m.tipo, modelo: m.modelo, serie: m.serie }; });
+      f.timeline = D.timelineCli.filter(function (t) { return t.cliente === c.nome; }).map(function (t) { return { quando: t.quando, os: t.os, evento: t.evento, detalhe: t.detalhe }; }).reverse();
+      f.indicou = (D.clientes || []).filter(function (k) { return k.indicadoPor === c.nome; }).map(function (k) { return k.nome; });
+      f.contrato = D.contratos.filter(function (k) { return k.cliente === c.nome && k.status === 'Ativo'; })[0] || null;
+      f.avaliacoes = []; return f;
+    };
+    S.registrarMensagemAberta = function (x) {
+      x = x || {}; var c = cliNome(x.nome), resumo = 'WhatsApp aberto (' + String(x.tipo || 'mensagem').slice(0, 40) + '): ' + String(x.texto || '').replace(/\s+/g, ' ').slice(0, 180);
+      anexar('interacoes', { data: h(), cliente: c.nome, canal: 'WhatsApp', resumo: resumo, proximoPasso: '', dataProx: '', por: 'Pedro' }); c.ultimo = h();
+      evento(c.nome, x.os, 'Mensagem aberta no WhatsApp', resumo); return { ok: true, msg: 'Registrado no histórico de contato.' };
+    };
+    S.agendarRetorno = function (x) {
+      x = x || {}; var c = cliNome(x.nome); if (!/^\d{4}-\d{2}-\d{2}$/.test(String(x.data || ''))) throw new Error('Escolha a data do retorno.');
+      c.proximo = x.data; c.acao = String(x.acao || 'Retorno').slice(0, 120); evento(c.nome, '', 'Retorno agendado', Dif.dataBR(x.data) + ' – ' + c.acao);
+      return { ok: true, msg: 'Retorno agendado para ' + Dif.dataBR(x.data) + '.' };
+    };
+    S.salvarMaquina = function (x) {
+      x = x || {}; var c = cliNome(String(x.cliente || '').trim()), serie = String(x.serie || '').trim();
+      var ja = serie && D.maquinas.filter(function (m) { return String(m.serie).replace(/\W/g, '').toUpperCase() === serie.replace(/\W/g, '').toUpperCase(); })[0];
+      if (ja) return { ok: true, id: ja.id, existente: true, msg: 'Essa série já está cadastrada (' + ja.id + ', ' + ja.cliente + ').' };
+      var id = proxId('maquinas', 'id', 'MAQ-'); D.maquinas.push({ id: id, cliente: c.nome, tipo: x.tipo || '', modelo: x.modelo || '', serie: serie, obs: x.obs || '' });
+      if (x.num) osNum(x.num).maquinaId = id; evento(c.nome, x.num, 'Máquina cadastrada', id + ' ' + [x.tipo, x.modelo, serie].filter(String).join(' · '));
+      return { ok: true, id: id, msg: 'Máquina ' + id + ' cadastrada.' };
+    };
+    S.vincularMaquinaOS = function (x) { osNum(x.num).maquinaId = String(x.id || ''); return { ok: true, msg: 'Máquina vinculada à OS.' }; };
+    S.salvarChecklistOS = function (x) {
+      x = x || {}; var o = osNum(x.num); Dif.validarChecklist(x);
+      D.checklists.push({ quando: agora(), os: o.num, momento: x.momento, itens: Object.assign({}, x.itens), senha: x.senhaInformada, bitlocker: x.bitlocker, obs: String(x.obs || '').slice(0, 500) });
+      evento(o.cliente, o.num, 'Checklist de ' + x.momento.toLowerCase(), 'BitLocker: ' + x.bitlocker);
+      return { ok: true, msg: 'Checklist de ' + x.momento.toLowerCase() + ' salvo na OS ' + o.num + '.' };
+    };
+    S.extrasOS = function (x) {
+      var o = osNum(x && x.num), ck = D.checklists.filter(function (c) { return c.os === o.num; }), tem = function (m) { return ck.some(function (c) { return c.momento === m; }); };
+      var pend = []; if (!tem('Entrada')) pend.push('Checklist de entrada'); if (!tem('Saída')) pend.push('Checklist de saída');
+      return { ok: true, maquinaId: o.maquinaId || '', maquinas: D.maquinas.filter(function (m) { return m.cliente === o.cliente; }).map(function (m) { return { id: m.id, desc: [m.tipo, m.modelo, m.serie].filter(String).join(' · ') }; }),
+        checklists: ck.map(function (c) { return { momento: c.momento, quando: c.quando, bitlocker: c.bitlocker, senha: c.senha }; }), pendenciasEntrega: pend, testes: [], testesPadrao: [], fotos: [], termo: null, textoTermo: '',
+        garantias: Dif.garantiasDaOS(o, h(), garDias()), reincidencia: [] };
+    };
+    S.laudoTecnicoOS = function (x) {
+      var o = osNum(x && x.num), esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (k) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[k]; }); };
+      var ck = D.checklists.filter(function (c) { return c.os === o.num; }), g = Dif.garantiasDaOS(o, h(), garDias());
+      return { ok: true, html: '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Laudo técnico ' + esc(o.num) + '</title><button onclick="print()">🖨️ Imprimir / salvar PDF</button><h1>Laudo técnico – ' + esc(o.num) + '</h1>' +
+        '<p><b>ProFix Computadores</b> (demonstração, dados fictícios)</p><h2>Atendimento</h2><p>' + esc(o.cliente) + ' · ' + esc(o.equipamento) + '</p><h2>Defeito relatado</h2><p>' + esc(o.defeito || '—') + '</p><h2>Diagnóstico</h2><p>' + esc(o.diagnostico || '—') + '</p>' +
+        '<h2>Checklist</h2><p>' + (ck.length ? ck.map(function (c) { return esc(c.momento) + ': ' + Object.keys(c.itens).map(function (k) { return esc(k + ' ' + c.itens[k]); }).join(', '); }).join('<br>') : 'Sem checklist registrado.') + '</p>' +
+        '<h2>Garantia</h2><p>' + (g.length ? g[0].dias + ' dias, até ' + Dif.dataBR(g[0].ate) : 'Garantia de 30 dias a partir da entrega.') + '</p></html>' };
+    };
+    S.linkClienteOS = function (x) { var o = osNum(x && x.num); return { ok: true, num: o.num, url: urlOS(o), msg: 'Link do cliente pronto.' }; };
+    S.textoStatusOS = function (x) {
+      var o = osNum(x && x.num), c = (D.clientes || []).filter(function (k) { return k.nome === o.cliente; })[0] || {}, link = urlOS(o), st = Dif.statusCanon(o.status), pn = String(o.cliente).split(' ')[0];
+      var texto = 'Olá, ' + pn + '! Aqui é da ProFix Computadores. Sua ' + o.num + ' está: ' + st + '.' + (o.previsao && st !== 'Entregue' ? ' Previsão: ' + Dif.dataBR(o.previsao) + '.' : '') + ' Acompanhe por aqui: ' + link;
+      var r = Dif.regraContato(c, 'servico'), tel = telWa(c), pode = r.pode && !!tel;
+      return { ok: true, num: o.num, status: st, texto: texto, link: link, podeAbrir: pode, waUrl: pode ? waUrl(tel, texto) : '', aviso: r.aviso || (!tel ? 'Cliente sem WhatsApp válido.' : '') };
+    };
+    S.textoMarketing = function (x) {
+      x = x || {}; var c = cliNome(x.nome), r = Dif.regraContato(c, 'marketing'); if (!r.pode) return { ok: true, podeAbrir: false, aviso: r.aviso, texto: '' };
+      var pn = c.nome.split(' ')[0], t = { reativacao: 'Olá, ' + pn + '! Aqui é da ProFix Computadores. Faz um tempo que não cuidamos do seu equipamento. Quer agendar uma revisão/limpeza? É só responder por aqui. 🙂',
+        aniversario: 'Feliz aniversário, ' + pn + '! 🎉 A equipe da ProFix Computadores deseja um ótimo dia!', preventiva: 'Olá, ' + pn + '! Já está na hora da limpeza preventiva do seu equipamento (evita superaquecimento e travamentos). Quer agendar?',
+        indicacao: 'Olá, ' + pn + '! Seu código de indicação da ProFix é ' + (c.codIndic || '(gere no painel)') + '. Quem você indicar ganha 10% de desconto no serviço. 🙌' }[x.tipo];
+      if (!t) throw new Error('Tipo de mensagem inválido.'); var tel = telWa(c);
+      return { ok: true, texto: t, podeAbrir: !!tel, waUrl: tel ? waUrl(tel, t) : '', aviso: tel ? '' : 'Cliente sem WhatsApp válido.' };
+    };
+    S.resumoMes = function (x) { var r = Dif.resumoMesLocal(D, (x && x.mes) || h().slice(0, 7)); delete r.local; r.receitaContratos = D.contratos.filter(function (k) { return k.status === 'Ativo'; }).reduce(function (s, k) { return s + Number(k.valor || 0); }, 0); return r; };
+    S.listaContratos = function () {
+      var P = ['Urgente', 'Alta', 'Normal', 'Baixa'], ord = function (p) { return P.indexOf(p); };
+      return { ok: true, contratos: copia(D.contratos), visitas: copia(D.visitas).sort(function (a, b) { return (a.status === 'Concluída') - (b.status === 'Concluída') || ord(a.prioridade) - ord(b.prioridade) || (a.data < b.data ? -1 : 1); }), prioridades: P };
+    };
+    S.salvarContrato = function (x) {
+      x = x || {}; var c = cliNome(x.cliente), v = Number(String(x.valor || '').replace(',', '.')); if (!(v > 0)) throw new Error('Informe o valor mensal.');
+      var id = 'CT-' + ('000' + (D.contratos.length + 1)).slice(-4);
+      D.contratos.push({ id: id, cliente: c.nome, plano: String(x.plano || 'Plano empresarial'), valor: Math.round(v * 100) / 100, visitas: Math.max(0, Math.round(Number(x.visitas) || 0)), status: 'Ativo', inicio: x.inicio || h(), obs: x.obs || '' });
+      evento(c.nome, '', 'Contrato mensal', id + ' – R$ ' + v.toFixed(2)); return { ok: true, id: id, msg: 'Contrato ' + id + ' criado.' };
+    };
+    S.salvarVisita = function (x) {
+      x = x || {}; if (!x.cliente) throw new Error('Escolha o cliente.'); if (!/^\d{4}-\d{2}-\d{2}/.test(String(x.data || ''))) throw new Error('Informe a data da visita.');
+      if (x.idOperacao && D.visitas.some(function (v) { return v.idOperacao === x.idOperacao; })) return { ok: true, repetida: true, msg: 'Visita já registrada.' };
+      var pr = ['Urgente', 'Alta', 'Normal', 'Baixa'].indexOf(x.prioridade) >= 0 ? x.prioridade : 'Normal', id = 'VT-' + ('000' + (D.visitas.length + 1)).slice(-4);
+      D.visitas.push({ id: id, contrato: x.contrato || '', cliente: x.cliente, data: x.data, prioridade: pr, status: 'Agendada', inicio: '', fim: '', km: '', horas: '', os: x.os || '', obs: x.obs || '', idOperacao: x.idOperacao || '' });
+      return { ok: true, id: id, msg: 'Visita ' + id + ' agendada (' + pr + ').' };
+    };
+    var visita = function (id) { var v = D.visitas.filter(function (k) { return k.id === id; })[0]; if (!v) throw new Error('Visita não encontrada.'); return v; };
+    S.iniciarVisita = function (x) { var v = visita(x && x.id); if (v.inicio) return { ok: true, msg: 'Visita já iniciada em ' + v.inicio + '.' }; v.inicio = agora(); v.status = 'Em andamento'; evento(v.cliente, v.os, 'Visita técnica iniciada', v.id); return { ok: true, msg: 'Visita iniciada.' }; };
+    S.encerrarVisita = function (x) {
+      var v = visita(x && x.id); if (!v.inicio) throw new Error('Inicie a visita primeiro.');
+      var fim = x.fim || agora(), km = Math.max(0, Number(String(x.km || 0).replace(',', '.')) || 0), horas = Dif.horasEntre(v.inicio, fim);
+      v.fim = fim; v.km = km; v.horas = horas; v.status = 'Concluída'; evento(v.cliente, v.os, 'Visita técnica concluída', horas + ' h, ' + km + ' km');
+      return { ok: true, horas: horas, km: km, msg: 'Visita encerrada: ' + String(horas).replace('.', ',') + ' h de mão de obra e ' + km + ' km de deslocamento (use no orçamento da OS).' };
     };
     return S;
   }

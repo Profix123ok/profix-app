@@ -14,7 +14,7 @@
   V.bloqueadaOp = function (o) { if (!o) return true; if (o.status === 'Não contatar') return true; var c = V.norm(o.consentOp).trim(); return ['nao contatar', 'recusou', 'revogado', 'revogou'].indexOf(c) >= 0; };
   V.podeWaOp = function (o) { return !V.bloqueadaOp(o) && !!V.numeroWa(o.whatsapp); }; // só o WhatsApp comercial publicado pela empresa
   // Cliente: consentimento "Sim" e número de celular (13 dígitos com 9).
-  V.podeWaCliente = function (c) { var n = c && c.consent === 'Sim' && V.numeroWa(c.whatsapp); return !!n && n.length === 13 && n.charAt(4) === '9'; };
+  V.podeWaCliente = function (c) { var n = c && c.consent === 'Sim' && !/^s/i.test(String(c.naoContatar || '').trim()) && V.numeroWa(c.whatsapp); return !!n && n.length === 13 && n.charAt(4) === '9'; };
   V.MODELO_OP = { 'Nova': 'Empresa – Primeiro contato', 'Contatada': 'Empresa – Lembrete único (3 dias)', 'Sem resposta': 'Empresa – Lembrete único (3 dias)',
     'Virou lead': 'Empresa – Respondeu com interesse', 'Descartada': 'Empresa – Agora não' };
   V.preencher = function (texto, o) {
@@ -53,6 +53,7 @@
   /** {href, aviso} ou null. Só monta link wa.me: nunca envia. */
   V.botaoWaCliente = function (c, tipo, texto) {
     var n = c && V.numeroWa(c.whatsapp); if (!n || n.length !== 13 || n.charAt(4) !== '9') return null;
+    if (/^s/i.test(String(c.naoContatar || '').trim())) return null; // v0.7.0: "Não contatar" = Sim bloqueia tudo (contrato crm-v3)
     var href = 'https://wa.me/' + n + (texto ? '?text=' + encodeURIComponent(texto) : '');
     if (c.consent === 'Sim') return { href: href, aviso: false };
     return tipo === 'os' ? { href: href, aviso: true } : null;

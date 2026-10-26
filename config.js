@@ -11,10 +11,14 @@ window.PROFIX_CONFIG = {
     'removerEventoAgenda', 'enviarEmailCliente',
     // crm-v3 API v32 (mesmo ID de implantação): OS com vários equipamentos.
     'lerOSMulti', 'catalogoOS', 'gerarOrcamentoOS', 'orcamentoOS', 'simularCondicaoOS',
-    'salvarOSMulti', 'salvarCatalogoOS', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS'],
+    'salvarOSMulti', 'salvarCatalogoOS', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS',
+    // crm-v3 API @41: diferenciais (ficha do cliente, checklist, laudo, garantia, contratos, visitas, painel do mês, link da OS).
+    'fichaCliente', 'resumoMes', 'listaContratos', 'laudoTecnicoOS', 'extrasOS', 'textoMarketing',
+    'registrarMensagemAberta', 'agendarRetorno', 'salvarMaquina', 'vincularMaquinaOS', 'salvarChecklistOS', 'linkClienteOS', 'textoStatusOS',
+    'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita'],
   // PENDENTE de confirmação do Pedro: deixe null até ele confirmar (o e-mail sai com um aviso [CONFIRMAR …] e não envia).
   VALIDADE_ORCAMENTO_DIAS: null, // rascunho sugere 10
   GARANTIA_DIAS: null,           // rascunho sugere 90
   WHATSAPP_LOJA: '(15) 98112-8309',
-  VERSAO_APP: '0.6.1'
+  VERSAO_APP: '0.7.0'
 };
