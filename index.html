@@ -18,14 +18,24 @@
 <section id="tela-chave" class="chave" hidden>
   <img src="icons/icon-192.png" alt="" width="72" height="72">
   <h1>Bem-vindo ao app da ProFix</h1>
-  <p>Para proteger os dados dos clientes, este aparelho precisa da <b>chave de acesso</b> (você cria ela uma vez no Apps Script).</p>
-  <form id="form-chave">
+  <p>Para proteger os dados dos clientes, entre com a <b>senha</b> do app. A senha não fica guardada no aparelho.</p>
+  <form id="form-senha">
+    <label for="senha">Senha</label>
+    <div class="senha-linha"><input id="senha" type="password" autocomplete="current-password" required placeholder="digite a senha">
+    <button class="btn sec" type="button" id="bVerSenha" aria-pressed="false" aria-controls="senha">Mostrar</button></div>
+    <button class="btn" type="submit">Entrar</button>
+    <p id="erro-senha" class="erro" role="alert"></p>
+    <a href="#" id="lUsarChave">Usar chave de acesso</a>
+  </form>
+  <form id="form-chave" hidden>
+    <p class="muted">Chave de acesso (APP_TOKEN, criada uma vez no Apps Script).</p>
     <label for="chave">Chave de acesso</label>
-    <input id="chave" type="password" autocomplete="current-password" required minlength="16" placeholder="cole a chave aqui">
+    <input id="chave" type="password" autocomplete="off" required minlength="16" placeholder="cole a chave aqui">
     <button class="btn" type="submit">Entrar</button>
     <p id="erro-chave" class="erro" role="alert"></p>
+    <a href="#" id="lUsarSenha">Entrar com senha</a>
   </form>
-  <p id="dica-demo" class="muted" hidden>Modo demonstração (dados fictícios). Chave de teste: <code>demo-profix-chave-ficticia</code></p>
+  <p id="dica-demo" class="muted" hidden>Modo demonstração (dados fictícios). Senha de teste: <code>demo-senha-123</code> · Chave de teste: <code>demo-profix-chave-ficticia</code></p>
 </section>
 <div id="app" class="app" hidden>
   <nav id="menu" class="menu" aria-label="Menu principal">

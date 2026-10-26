@@ -44,3 +44,4 @@ dialog form{padding:16px;display:grid;gap:10px}dialog .lin{display:grid;grid-tem
 @media (min-width:900px){.funil{grid-template-columns:repeat(4,1fr)}}
 .tag.ok{background:#e3f5e8;color:#1b7a3a}
 dialog{max-height:calc(100dvh - 24px);overflow:auto}
+.senha-linha{display:flex;gap:8px}.senha-linha .btn{flex:none}

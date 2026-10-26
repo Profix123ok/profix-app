@@ -20,10 +20,28 @@
     f.textContent = p.join(' · '); f.hidden = !p.length;
   }
 
-  // ---------- Chave de acesso ----------
-  function telaChave(msg) {
+  // ---------- Entrada: senha (padrão) ou chave de acesso ----------
+  function modoEntrada(chave) {
+    $('form-senha').hidden = !!chave; $('form-chave').hidden = !chave;
+    $('erro-senha').textContent = ''; $('erro-chave').textContent = '';
+    (chave ? $('chave') : $('senha')).focus();
+  }
+  function telaChave(msg, usarChave) {
     $('app').hidden = true; $('tela-chave').hidden = false; $('dica-demo').hidden = api.tipo !== 'mock';
-    $('erro-chave').textContent = msg || '';
+    modoEntrada(usarChave);
+    $(usarChave ? 'erro-chave' : 'erro-senha').textContent = msg || '';
+    $('lUsarChave').onclick = function (ev) { ev.preventDefault(); modoEntrada(true); };
+    $('lUsarSenha').onclick = function (ev) { ev.preventDefault(); modoEntrada(false); };
+    $('bVerSenha').onclick = function () {
+      var ver = $('senha').type === 'password'; $('senha').type = ver ? 'text' : 'password';
+      this.textContent = ver ? 'Ocultar' : 'Mostrar'; this.setAttribute('aria-pressed', String(ver));
+    };
+    $('form-senha').onsubmit = function (ev) {
+      ev.preventDefault(); $('erro-senha').textContent = '';
+      var s = $('senha').value;
+      api.loginSenha(s).then(function () { $('senha').value = ''; $('senha').type = 'password'; $('bVerSenha').textContent = 'Mostrar'; iniciar(); },
+        function (er) { $('erro-senha').textContent = er.message; });
+    };
     $('form-chave').onsubmit = function (ev) {
       ev.preventDefault(); $('erro-chave').textContent = '';
       try { api.salvarToken($('chave').value); } catch (er) { $('erro-chave').textContent = er.message; return; }
@@ -33,6 +51,9 @@
       }, function () { api.esquecerToken(); $('erro-chave').textContent = 'Sem conexão com o servidor. A primeira entrada precisa de internet.'; });
     };
   }
+  // Qualquer chamada com TOKEN_INVALIDO: o api.js já limpou o acesso (fila offline fica); volta para a senha.
+  var MSG_EXPIROU = 'Sua sessão expirou. Digite a senha de novo (as alterações pendentes continuam salvas no aparelho).';
+  api.aoExpirar = function () { if ($('tela-chave').hidden) telaChave(MSG_EXPIROU); };
 
   // ---------- Carregar e navegar ----------
   function iniciar() {
@@ -42,7 +63,7 @@
     if (!D) { var c0 = api.cacheLocal(); if (c0) D = c0; } // mostra a última cópia enquanto atualiza
     render();
     return api.carregar().then(function (r) { carregando = false; if (r.dados) D = r.dados; offline = r.offline; faixa(); render(); },
-      function (er) { carregando = false; render(); if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave('A chave mudou. Digite a nova chave.'); } else aviso(er.message); });
+      function (er) { carregando = false; render(); if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave(MSG_EXPIROU); } else aviso(er.message); });
   }
   function rota() { var h = (location.hash || '#hoje').slice(1).split('/'); return { tela: h[0] || 'hoje', sub: h[1] || '' }; }
   var carregando = false;
@@ -148,7 +169,7 @@
       if (sub === 'modelos') return cab + '<div class="row">' + botao('+ Novo modelo', 'mod-novo', '', '') + '</div>' + lista(D.modelos || [], function (m) { return card(e(m.modelo), e(m.quando || '') + '<br><span class="pre">' + e(String(m.texto || '').slice(0, 160)) + (String(m.texto || '').length > 160 ? '…' : '') + '</span>', '', botao('Editar', 'mod-editar', m._row)); }, 'Nenhum modelo.') +
         '<p class="muted">Backup: continua pela planilha (menu ProFix CRM > Fazer backup agora / backup semanal).</p>';
       if (sub === 'ajustes') return cab + '<div class="card"><label class="chk"><input type="checkbox" id="ajSenha"' + (ajustes.mostrarSenha ? ' checked' : '') + '> Mostrar senha do aparelho</label><div class="m">Desligado: a senha das OS fica oculta. Mesmo ligado, ela só aparece se o servidor enviar (no crm-v3 isso também vem desligado).</div></div>' +
-        '<div class="acoes"><button class="btn" id="bInstalar" hidden>📲 Instalar o app</button><button class="btn sec" id="bSync">🔄 Atualizar agora</button><button class="btn sec" id="bSair">Remover chave deste aparelho</button></div>' +
+        '<div class="acoes"><button class="btn" id="bInstalar" hidden>📲 Instalar o app</button><button class="btn sec" id="bSync">🔄 Atualizar agora</button><button class="btn sec" id="bSair">Sair deste aparelho</button></div>' +
         '<p class="muted" id="dicaIos"></p><p class="muted">Versão ' + e(CFG.VERSAO_APP || '') + ' · ' + (api.tipo === 'mock' ? 'modo demonstração' : 'conectado à planilha') + (api.ultimaAtualizacao() ? ' · dados de ' + new Date(api.ultimaAtualizacao()).toLocaleString('pt-BR') : '') + '</p>';
       var ym = D.hoje.slice(0, 7), R = V.resumoMes(D, ym), l = (D.financeiro || []).slice().sort(function (a, b) { return String(b.data) < String(a.data) ? -1 : 1; });
       return cab + '<div class="resumo"><div><b>' + V.brl(R.entradas) + '</b>entradas no mês</div><div><b>' + V.brl(R.saidas) + '</b>saídas no mês</div><div><b>' + V.brl(R.saldo) + '</b>saldo do mês</div><div><b>' + l.length + '</b>lançamentos</div></div>' +
@@ -359,7 +380,7 @@
     }); });
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };
-    if ($('bSair')) $('bSair').onclick = function () { if (confirm('Remover a chave deste aparelho? Vai precisar digitar de novo.')) { api.esquecerToken(); telaChave(); } };
+    if ($('bSair')) $('bSair').onclick = function () { if (confirm('Sair deste aparelho? Vai precisar digitar a senha (ou a chave) de novo.')) { api.esquecerToken(); telaChave(); } };
     if ($('bInstalar')) { $('bInstalar').hidden = !instalar; $('bInstalar').onclick = function () { instalar.prompt(); instalar = null; }; }
     if ($('dicaIos') && /iphone|ipad/i.test(navigator.userAgent)) $('dicaIos').textContent = 'No iPhone: toque em Compartilhar ⬆️ e depois em “Adicionar à Tela de Início”.';
   }
@@ -368,7 +389,7 @@
   var instalar = null;
   window.addEventListener('beforeinstallprompt', function (ev) { ev.preventDefault(); instalar = ev; if ($('bInstalar')) $('bInstalar').hidden = false; });
   window.addEventListener('hashchange', render);
-  window.addEventListener('online', function () { api.sincronizar().then(function (s) { if (s.enviados) aviso(s.enviados + ' alteração(ões) enviada(s).'); if (s.erros.length) aviso('Algumas alterações foram recusadas: ' + s.erros.join('; ')); iniciar(); }); });
+  window.addEventListener('online', function () { api.sincronizar().then(function (s) { if (s.enviados) aviso(s.enviados + ' alteração(ões) enviada(s).'); if (s.erros.length) aviso('Algumas alterações foram recusadas: ' + s.erros.join('; ')); iniciar(); }, function (er) { if (er.codigo !== 'TOKEN_INVALIDO') aviso(er.message); }); });
   window.addEventListener('offline', function () { offline = true; faixa(); });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
   window.ProFixApp = { api: api, iniciar: iniciar, ajustes: ajustes };
