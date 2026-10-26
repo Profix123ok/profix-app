@@ -13,7 +13,7 @@
 
   // Ações permitidas -> função do crm-v3/Code.gs. "escrita" = entra na fila offline.
   // Lista FECHADA de ações = funções que já existem no crm-v3/Code.gs (mesma lista que o doPost deve aceitar).
-  var LEITURA = ['getDados', 'listarAgenda', 'leadsLink'];
+  var LEITURA = ['getDados', 'listarAgenda', 'leadsLink', 'resumoOrigens'];
   var ESCRITA = ['salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento',
     'lancarRecebimento', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
     'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'registrarFollowup',

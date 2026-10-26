@@ -124,6 +124,12 @@
       return { chave: x.chave, nome: x.nome, n: x.n };
     }).sort(function (a, b) { return (b.n - a.n) || ((a.chave === V.SEM_CIDADE) - (b.chave === V.SEM_CIDADE)) || a.nome.localeCompare(b.nome, 'pt-BR'); });
   };
+  /** Filtro "WhatsApp" (v0.5.6): empresa que dá para chamar no WhatsApp pelo app agora (WhatsApp comercial válido e não bloqueada). */
+  V.temWaOp = function (o) { return V.podeWaOp(o); };
+  /** 1º contato? Só status inicial (Nova/vazio). Status posteriores nunca mudam por toque em contato. */
+  V.primeiroContatoOp = function (o) { return !!o && !V.bloqueadaOp(o) && ['', 'Nova', 'Novo', 'Aberta', 'Aberto'].indexOf(String(o.status || '').trim()) >= 0; };
+  V.linkTelOp = function (o) { if (V.bloqueadaOp(o)) return null; var d = String(o.telefone || o.whatsapp || '').replace(/[^\d+]/g, ''); return d.replace(/\D/g, '').length >= 8 ? 'tel:' + d : null; };
+  V.linkEmailOp = function (o) { if (V.bloqueadaOp(o)) return null; var m = String(o.email || '').trim(); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) ? 'mailto:' + m : null; };
   V.filtrarOps = function (lista, f) {
     var q = V.norm(f.q);
     return (lista || []).filter(function (o) {
@@ -131,6 +137,7 @@
       if (f.prioridade && (o.prioridade || '') !== f.prioridade) return false;
       if (f.segmento && o.segmento !== f.segmento) return false;
       if (f.cidade && V.chaveCidade(o.cidade) !== f.cidade) return false;
+      if (f.wa && !V.temWaOp(o)) return false;
       if (q && V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' ')).indexOf(q) < 0) return false;
       return true;
     }).sort(function (a, b) {

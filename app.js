@@ -9,6 +9,7 @@
   var F = { op: { status: '', prioridade: '', segmento: '', q: '' }, os: { status: '', q: '' }, cli: { q: '' } };
   var $ = function (id) { return document.getElementById(id); }, e = V.esc;
   var AJ = 'profix.ajustes', ajustes = (function () { try { return JSON.parse(localStorage.getItem(AJ)) || {}; } catch (x) { return {}; } })();
+  var WAF = 'profix.waOp'; try { F.op.wa = localStorage.getItem(WAF) === '1'; } catch (x) { F.op.wa = false; }
   var CID = 'profix.cidadeOp'; try { F.op.cidade = localStorage.getItem(CID) || ''; } catch (x) { F.op.cidade = ''; }
   function salvarAjustes() { localStorage.setItem(AJ, JSON.stringify(ajustes)); }
 
@@ -93,7 +94,13 @@
     var atual = V.nomeModeloOp(D.modelos, o), nomes = (D.modelos || []).map(function (m) { return m.modelo; }).filter(Boolean);
     var sel = nomes.length ? '<select class="peq" aria-label="Modelo da mensagem" data-wa-mod="' + o._row + '">' + (atual ? '' : '<option value="">(sem modelo)</option>') +
       nomes.map(function (n) { return '<option' + (n === atual ? ' selected' : '') + '>' + e(n) + '</option>'; }).join('') + '</select>' : '';
-    return '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '" data-wa-op="' + o._row + '">📲 WhatsApp</a>' + sel;
+    return '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '" data-wa-op="' + o._row + '" data-contato-op="' + o._row + '" data-canal="WhatsApp">📲 WhatsApp</a>' + sel;
+  }
+  // v0.5.6: outros contatos (tel/mailto). Tocar = 1º contato registrado (se ainda Nova).
+  function contatoOp(o) {
+    var t = V.linkTelOp(o), m = V.linkEmailOp(o);
+    return (t ? '<a class="btn sec peq" href="' + e(t) + '" data-contato-op="' + o._row + '" data-canal="Ligação">📞 Ligar</a>' : '') +
+      (m ? '<a class="btn sec peq" href="' + e(m) + '" data-contato-op="' + o._row + '" data-canal="E-mail">✉️ E-mail</a>' : '');
   }
   function waCli(c, texto) { var l = V.linkWaCliente(c, texto); return l ? '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '">📲 WhatsApp</a>' : '<span class="muted">Sem consentimento para WhatsApp: ligue.</span>'; }
   function abas(base, itens, sub) { return '<div class="abas">' + itens.map(function (x, i) { var on = (sub || itens[0][0]) === x[0]; return '<a href="#' + base + (i ? '/' + x[0] : '') + '" class="' + (on ? 'ativo' : '') + '">' + x[1] + '</a>'; }).join('') + '</div>'; }
@@ -177,13 +184,15 @@
       var chip = function (k, rot) { return '<button type="button" class="chip" data-cidade="' + e(k) + '" aria-pressed="' + (fOp.cidade === k) + '">' + e(rot) + '</button>'; };
       var barraCid = temCid ? '<div class="chips" id="fCidade" role="group" aria-label="Filtrar por cidade">' + chip('', 'Todas (' + (D.oportunidades || []).length + ')') +
         cids.map(function (c) { return chip(c.chave, c.nome + ' (' + c.n + ')'); }).join('') + '</div>' : '';
+      var nWa = (D.oportunidades || []).filter(V.temWaOp).length;
+      var barraWa = '<div class="chips" role="group" aria-label="Filtrar por WhatsApp"><button type="button" class="chip" id="fWa" aria-pressed="' + !!F.op.wa + '">📲 WhatsApp (' + nWa + ')</button></div>';
       var ops = V.filtrarOps(D.oportunidades, fOp);
-      return cab + barraCid + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
+      return cab + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
         '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
         (ops.length > LIMITE ? '<p class="muted">Mostrando as ' + LIMITE + ' primeiras. Use os filtros ou a busca para achar as outras.</p>' : '') +
         lista(ops.slice(0, LIMITE), function (o) {
           return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + (o.ultimoContato ? '<br>Último contato ' + V.dataBR(o.ultimoContato) : ''),
-            tagPri(o.prioridade) + tag(o.status), waOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
+            tagPri(o.prioridade) + tag(o.status), waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
         }, 'Nenhuma empresa com esse filtro.');
     },
     mais: function (sub) {
@@ -403,9 +412,12 @@
     c.querySelectorAll('[data-wa-mod]').forEach(function (sel) { sel.onchange = function () {
       var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
       if (a && l) a.href = l; }; }); // só troca o texto; consentimento continua valendo (link some se bloqueada)
-    c.querySelectorAll('[data-wa-op]').forEach(function (a) { a.addEventListener('click', function () {
-      var o = achar('oportunidades', a.dataset.waOp);
-      escrever('registrarContatoOp', [o.empresa, o._row, 'WhatsApp'], function (cache) { var x = cache.oportunidades.filter(function (y) { return y._row === o._row; })[0]; if (x) V.aplicarContatoOp(x, D.hoje, 'WhatsApp'); });
+    if ($('fWa')) $('fWa').onclick = function () { F.op.wa = !F.op.wa; try { localStorage.setItem(WAF, F.op.wa ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fWa')) $('fWa').focus(); };
+    // v0.5.6: 1º contato (WhatsApp, ligação, e-mail) -> Contatada automaticamente via registrarContatoOp (UI otimista + fila offline). Só se ainda Nova.
+    c.querySelectorAll('[data-contato-op]').forEach(function (a) { a.addEventListener('click', function () {
+      var o = achar('oportunidades', a.dataset.contatoOp), canal = a.dataset.canal || 'WhatsApp';
+      if (!V.primeiroContatoOp(o) || !api.pode('registrarContatoOp')) return;
+      escrever('registrarContatoOp', [o.empresa, o._row, canal], function (cache) { var x = cache.oportunidades.filter(function (y) { return y._row === o._row; })[0]; if (x) V.aplicarContatoOp(x, D.hoje, canal); });
     }); });
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };
