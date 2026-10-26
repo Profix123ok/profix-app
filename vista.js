@@ -21,13 +21,26 @@
     var nome = String(o.contato || o.responsavel || o.nome || o.empresa || '').trim();
     return String(texto || '').replace(/\{empresa\}/g, o.empresa || nome).replace(/\{contato\}/g, o.responsavel || 'tudo bem').replace(/\{primeiro_nome\}/g, nome.split(' ')[0]).replace(/\{equipamento\}/g, o.equipamento || 'equipamento').replace(/\{os\}/g, o.num || '');
   };
-  V.modeloOp = function (modelos, o) {
+  // Nome de modelo normalizado: travessões/hífens iguais, espaços colapsados, sem caixa e sem acento.
+  V.normModelo = function (s) { return V.norm(String(s || '').replace(/[\u2010-\u2015\u2212-]/g, '-')).replace(/\s*-\s*/g, ' - ').replace(/\s+/g, ' ').trim(); };
+  V.acharModelo = function (modelos, nome) { var n = V.normModelo(nome); if (!n) return null; return (modelos || []).filter(function (x) { return x && x.texto && V.normModelo(x.modelo) === n; })[0] || null; };
+  /** Nome do modelo da oportunidade: modeloSugerido do servidor (API v19) se existir na lista; senão a regra por etapa. */
+  V.nomeModeloOp = function (modelos, o) {
     if (V.bloqueadaOp(o)) return '';
+    var sug = o && o.modeloSugerido ? V.acharModelo(modelos, o.modeloSugerido) : null;
+    if (sug) return sug.modelo;
     var nome = V.MODELO_OP[o.status || 'Nova'] || V.MODELO_OP.Nova;
+    var m = (modelos || []).filter(function (x) { return x.modelo === nome; })[0];
+    return m ? m.modelo : '';
+  };
+  /** Texto de um modelo (nome escolhido pelo usuário ou o padrão) preenchido para a oportunidade. Bloqueada → ''. */
+  V.modeloOp = function (modelos, o, nomeEscolhido) {
+    if (V.bloqueadaOp(o)) return '';
+    var nome = nomeEscolhido != null ? nomeEscolhido : V.nomeModeloOp(modelos, o);
     var m = (modelos || []).filter(function (x) { return x.modelo === nome; })[0];
     return m ? V.preencher(m.texto, o) : '';
   };
-  V.linkWaOp = function (modelos, o) { if (!V.podeWaOp(o)) return null; var t = V.modeloOp(modelos, o); return 'https://wa.me/' + V.numeroWa(o.whatsapp) + (t ? '?text=' + encodeURIComponent(t) : ''); };
+  V.linkWaOp = function (modelos, o, nomeEscolhido) { if (!V.podeWaOp(o)) return null; var t = V.modeloOp(modelos, o, nomeEscolhido); return 'https://wa.me/' + V.numeroWa(o.whatsapp) + (t ? '?text=' + encodeURIComponent(t) : ''); };
   V.linkWaCliente = function (c, texto) { if (!V.podeWaCliente(c)) return null; return 'https://wa.me/' + V.numeroWa(c.whatsapp) + (texto ? '?text=' + encodeURIComponent(texto) : ''); };
   /** Espelho local de registrarContatoOp (crm-v3) para a tela mudar na hora, inclusive sem internet. O servidor é quem decide. */
   V.aplicarContatoOp = function (o, hoje, canal) {

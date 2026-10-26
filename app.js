@@ -88,7 +88,13 @@
     'rv-editar': 'salvarRevenda', 'rv-novo': 'salvarRevenda', 'rv-vender': 'venderRevenda', 'fin-novo': 'salvarLancamento', 'cat-editar': 'salvarServicoCatalogo', 'cat-novo': 'salvarServicoCatalogo',
     'mod-editar': 'salvarModelo', 'mod-novo': 'salvarModelo', 'tar-feita': 'mudarStatusTarefa', 'os-nova': 'salvarOS' };
   function bloq(a) { return PRECISA[a] && !api.pode(PRECISA[a]); }
-  function waOp(o) { var l = V.linkWaOp(D.modelos, o); return l ? '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '" data-wa-op="' + o._row + '">📲 WhatsApp</a>' : ''; }
+  function waOp(o) {
+    var l = V.linkWaOp(D.modelos, o); if (!l) return '';
+    var atual = V.nomeModeloOp(D.modelos, o), nomes = (D.modelos || []).map(function (m) { return m.modelo; }).filter(Boolean);
+    var sel = nomes.length ? '<select class="peq" aria-label="Modelo da mensagem" data-wa-mod="' + o._row + '">' + (atual ? '' : '<option value="">(sem modelo)</option>') +
+      nomes.map(function (n) { return '<option' + (n === atual ? ' selected' : '') + '>' + e(n) + '</option>'; }).join('') + '</select>' : '';
+    return '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '" data-wa-op="' + o._row + '">📲 WhatsApp</a>' + sel;
+  }
   function waCli(c, texto) { var l = V.linkWaCliente(c, texto); return l ? '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '">📲 WhatsApp</a>' : '<span class="muted">Sem consentimento para WhatsApp: ligue.</span>'; }
   function abas(base, itens, sub) { return '<div class="abas">' + itens.map(function (x, i) { var on = (sub || itens[0][0]) === x[0]; return '<a href="#' + base + (i ? '/' + x[0] : '') + '" class="' + (on ? 'ativo' : '') + '">' + x[1] + '</a>'; }).join('') + '</div>'; }
   function sel(id, lst, v, todos) { return '<select id="' + id + '" aria-label="' + todos + '"><option value="">' + todos + '</option>' + (lst || []).map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + e(x) + '</option>'; }).join('') + '</select>'; }
@@ -385,6 +391,9 @@
       render(); var n = document.querySelector('[data-cidade="' + (window.CSS && CSS.escape ? CSS.escape(F.op.cidade) : F.op.cidade) + '"]'); if (n) n.focus(); }; });
     filtro('fOsSt', F.os, 'status'); filtro('fOsQ', F.os, 'q'); filtro('fCliQ', F.cli, 'q');
     ligarAcoes(c);
+    c.querySelectorAll('[data-wa-mod]').forEach(function (sel) { sel.onchange = function () {
+      var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
+      if (a && l) a.href = l; }; }); // só troca o texto; consentimento continua valendo (link some se bloqueada)
     c.querySelectorAll('[data-wa-op]').forEach(function (a) { a.addEventListener('click', function () {
       var o = achar('oportunidades', a.dataset.waOp);
       escrever('registrarContatoOp', [o.empresa, o._row, 'WhatsApp'], function (cache) { var x = cache.oportunidades.filter(function (y) { return y._row === o._row; })[0]; if (x) V.aplicarContatoOp(x, D.hoje, 'WhatsApp'); });
