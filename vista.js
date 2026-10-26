@@ -41,6 +41,22 @@
     return m ? V.preencher(m.texto, o) : '';
   };
   V.linkWaOp = function (modelos, o, nomeEscolhido) { if (!V.podeWaOp(o)) return null; var t = V.modeloOp(modelos, o, nomeEscolhido); return 'https://wa.me/' + V.numeroWa(o.whatsapp) + (t ? '?text=' + encodeURIComponent(t) : ''); };
+  // v0.6.1: regra LGPD do WhatsApp. Mensagem da própria OS (status, orçamento, pronto para retirar, pós-entrega) pode sair sem
+  // consentimento (com aviso). Marketing (reativação, aniversário, promoção, preventiva oferecida) só com consentimento "Sim".
+  V.RE_MARKETING = /reativ|anivers|promo|preventiv|oferta|cupom|black ?friday|novidade|campanha|sumid|saudade/i;
+  V.ehMarketing = function (texto) { return V.RE_MARKETING.test(V.norm(texto || '').replace(/[^a-z0-9 ]/g, ' ') + ' ' + String(texto || '')); };
+  /** 'os' ou 'marketing'. Sem palavra de marketing e com OS do cliente = 'os'; cliente sem OS = 'marketing' (na dúvida, esconde). */
+  V.tipoMsgCliente = function (D, c, texto) {
+    if (V.ehMarketing(texto)) return 'marketing';
+    return c && (D && D.os || []).some(function (o) { return o.cliente === c.nome; }) ? 'os' : 'marketing';
+  };
+  /** {href, aviso} ou null. Só monta link wa.me: nunca envia. */
+  V.botaoWaCliente = function (c, tipo, texto) {
+    var n = c && V.numeroWa(c.whatsapp); if (!n || n.length !== 13 || n.charAt(4) !== '9') return null;
+    var href = 'https://wa.me/' + n + (texto ? '?text=' + encodeURIComponent(texto) : '');
+    if (c.consent === 'Sim') return { href: href, aviso: false };
+    return tipo === 'os' ? { href: href, aviso: true } : null;
+  };
   V.linkWaCliente = function (c, texto) { if (!V.podeWaCliente(c)) return null; return 'https://wa.me/' + V.numeroWa(c.whatsapp) + (texto ? '?text=' + encodeURIComponent(texto) : ''); };
   /** Espelho local de registrarContatoOp (crm-v3) para a tela mudar na hora, inclusive sem internet. O servidor é quem decide. */
   V.aplicarContatoOp = function (o, hoje, canal) {

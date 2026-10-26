@@ -103,7 +103,14 @@
     return (t ? '<a class="btn sec peq" href="' + e(t) + '" data-contato-op="' + o._row + '" data-canal="Ligação">📞 Ligar</a>' : '') +
       (m ? '<a class="btn sec peq" href="' + e(m) + '" data-contato-op="' + o._row + '" data-canal="E-mail">✉️ E-mail</a>' : '');
   }
-  function waCli(c, texto) { var l = V.linkWaCliente(c, texto); return l ? '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '">📲 WhatsApp</a>' : '<span class="muted">Sem consentimento para WhatsApp: ligue.</span>'; }
+  // v0.6.1: tipo 'os' (status, orçamento, pronto, pós-entrega) aparece com aviso sem consentimento; 'marketing' some.
+  function waCli(c, texto, tipo, motivo) {
+    tipo = tipo || V.tipoMsgCliente(D, c, [motivo, texto].filter(Boolean).join(' '));
+    var b = V.botaoWaCliente(c, tipo, texto);
+    if (!b) return '<span class="muted" data-wa-tipo="' + tipo + '">' + (c && c.consent !== 'Sim' ? (tipo === 'marketing' ? 'Sem consentimento LGPD: mensagem de marketing não pode. Ligue.' : 'Sem consentimento para WhatsApp: ligue.') : 'WhatsApp inválido: ligue.') + '</span>';
+    return '<a class="btn wa peq" target="_blank" rel="noopener" data-wa-tipo="' + tipo + '" href="' + e(b.href) + '">📲 WhatsApp</a>' +
+      (b.aviso ? '<span class="muted aviso-lgpd">⚠️ Sem consentimento LGPD: só mensagem sobre a OS.</span>' : '');
+  }
   function abas(base, itens, sub) { return '<div class="abas">' + itens.map(function (x, i) { var on = (sub || itens[0][0]) === x[0]; return '<a href="#' + base + (i ? '/' + x[0] : '') + '" class="' + (on ? 'ativo' : '') + '">' + x[1] + '</a>'; }).join('') + '</div>'; }
   function sel(id, lst, v, todos) { return '<select id="' + id + '" aria-label="' + todos + '"><option value="">' + todos + '</option>' + (lst || []).map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + e(x) + '</option>'; }).join('') + '</select>'; }
   function busca(id, v, ph) { return '<input class="q" id="' + id + '" type="search" placeholder="' + ph + '" value="' + e(v) + '">'; }
@@ -133,7 +140,7 @@
       var H = V.hoje(D);
       var itemContato = function (x) {
         if (x.tipo === 'op') { var o = x.ref; return card(e(o.empresa), 'Empresa · ' + e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), tagPri(o.prioridade), waOp(o) + botao('Editar', 'op-editar', o._row)); }
-        var c = x.ref; return card(e(c.nome), e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), x.data < D.hoje ? tag('atrasado', 'vencido') : '', waCli(c) + botao('Registrar conversa', 'cli-inter', c._row));
+        var c = x.ref; return card(e(c.nome), e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), x.data < D.hoje ? tag('atrasado', 'vencido') : '', waCli(c, '', '', x.acao) + botao('Registrar conversa', 'cli-inter', c._row));
       };
       return '<h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
         '<div class="resumo"><div><b>' + H.chamar.length + '</b>para chamar</div><div><b>' + H.semResposta.length + '</b>sem resposta</div><div><b>' + H.cobrar.length + '</b>OS para cobrar</div><div><b>' + (H.agenda || []).length + '</b>na agenda (7 dias)</div></div>' +
@@ -168,7 +175,7 @@
         lista(l, function (c) {
           var inter = (D.interacoes || []).filter(function (i) { return i.cliente === c.nome; }).slice(-1)[0];
           return card(e(c.nome), e(c.bairro || '') + ' · ' + e(c.origem || 'origem?') + (c.indicadoPor ? ' · indicado por ' + e(c.indicadoPor) : '') + (c.proximo ? '<br>⏰ ' + V.dataBR(c.proximo) + ' ' + e(c.acao || '') : '') + (inter ? '<br>Última conversa: ' + V.dataBR(inter.data) + ' – ' + e(inter.resumo) : ''),
-            tag(c.etapa) + (c.consent === 'Sim' ? '' : tag('sem consentimento')), waCli(c) + emailBtn(c, 'em-cli', c._row) + mapsBtn(c.endereco) + botao('Editar', 'cli-editar', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Mover etapa', 'cli-etapa', c._row));
+            tag(c.etapa) + (c.consent === 'Sim' ? '' : tag('sem consentimento')), waCli(c, '', '', c.acao) + emailBtn(c, 'em-cli', c._row) + mapsBtn(c.endereco) + botao('Editar', 'cli-editar', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Mover etapa', 'cli-etapa', c._row));
         }, 'Nenhum cliente.');
     },
     vendas: function (sub) {

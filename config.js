@@ -16,5 +16,5 @@ window.PROFIX_CONFIG = {
   VALIDADE_ORCAMENTO_DIAS: null, // rascunho sugere 10
   GARANTIA_DIAS: null,           // rascunho sugere 90
   WHATSAPP_LOJA: '(15) 98112-8309',
-  VERSAO_APP: '0.6.0'
+  VERSAO_APP: '0.6.1'
 };
