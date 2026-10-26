@@ -35,7 +35,7 @@ button{font:inherit;font-weight:700;border:0;border-radius:12px;background:var(-
     <label>Telefone (WhatsApp)<input id="telefone" name="telefone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="(15) 99999-9999" required maxlength="15"></label>
     <label>Cidade <span class="opc">(opcional)</span><input id="cidade" name="cidade" autocomplete="address-level2" maxlength="60"></label>
     <label>O que você precisa? <span class="opc">(opcional)</span><textarea id="servico" name="servico" maxlength="300"></textarea></label>
-    <div class="hp" aria-hidden="true"><label>Site<input id="site" name="site" tabindex="-1" autocomplete="off"></label></div>
+    <div class="hp" aria-hidden="true"><label>Não preencha<input id="pf_ref_z" name="pf_ref_z" type="text" tabindex="-1" autocomplete="new-password"></label></div>
     <label class="lgpd"><input id="consentimento" type="checkbox" required><span>A ProFix Computadores usa seu nome e telefone só para entrar em contato sobre o atendimento. Seus dados são apagados quando você pedir pelo WhatsApp (15) 98112-8309.</span></label>
     <p id="erro" class="erro" role="alert" aria-live="assertive"></p>
     <button id="enviar" type="submit">Enviar cadastro</button>
@@ -63,7 +63,7 @@ button{font:inherit;font-weight:700;border:0;border-radius:12px;background:var(-
     var b = $('enviar'); if (b.disabled) return;
     ['nome', 'telefone', 'consentimento'].forEach(function (i) { $(i).removeAttribute('aria-invalid'); });
     var c = { nome: $('nome').value.trim(), telefone: $('telefone').value.trim(), cidade: $('cidade').value.trim(), servico: $('servico').value.trim(),
-      consentimento: $('consentimento').checked === true, site: $('site').value, origemPagina: 'pagina-cadastro' };
+      consentimento: $('consentimento').checked === true, site: $('pf_ref_z').value, origemPagina: 'pagina-cadastro' };
     var x = validar(c); if (x) { $('erro').textContent = x[1]; $(x[0]).setAttribute('aria-invalid', 'true'); $(x[0]).focus(); return; }
     if (!URL_API) { $('erro').textContent = 'Cadastro indisponível no momento. Chame no WhatsApp (15) 98112-8309.'; return; }
     $('erro').textContent = ''; b.disabled = true; b.textContent = 'Enviando…';
