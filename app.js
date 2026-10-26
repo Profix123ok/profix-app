@@ -71,7 +71,8 @@
   var carregando = false;
   function render() {
     var r = rota();
-    document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === r.tela; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela;
+    document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === telaMenu; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var c = $('conteudo');
     if (!D) { c.innerHTML = carregando ? '<div class="vazio">Carregando dados da planilha… (pode levar uns 20 segundos)</div>' : '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; return; }
     c.innerHTML = (TELAS[r.tela] || TELAS.hoje)(r.sub);
@@ -147,7 +148,7 @@
     servicos: function () {
       var q = V.norm(F.os.q), l = (D.os || []).filter(function (o) { return (!F.os.status || o.status === F.os.status) && (!q || V.norm([o.num, o.cliente, o.equipamento, o.defeito].join(' ')).indexOf(q) >= 0); })
         .sort(function (a, b) { return String(b.num) < String(a.num) ? -1 : 1; });
-      return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', '') + '</div>' +
+      return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', '') + (api.pode('salvarOSMulti') ? botao('+ OS com vários equipamentos', 'osm-nova', '', 'sec') : '') + '</div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
         lista(l, function (o) { var s = V.saldoOS(D, o); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status), botao('Abrir', 'os-abrir', o._row, '')); }, 'Nenhuma OS com esse filtro.');
@@ -196,7 +197,8 @@
         }, 'Nenhuma empresa com esse filtro.');
     },
     mais: function (sub) {
-      var cab = '<h1>Mais</h1>' + abas('mais', [['financeiro', 'Financeiro'], ['catalogo', 'Catálogo'], ['modelos', 'Modelos'], ['ajustes', 'Ajustes']], sub);
+      var cab = '<h1>Mais</h1>' + abas('mais', [['financeiro', 'Financeiro'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['ajustes', 'Ajustes']], sub);
+      if (sub === 'precos') return cab + telaPrecos();
       if (sub === 'catalogo') return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' + lista(D.catalogo || [], function (s) { return card(e(s.servico), e(s.tipo || '') + ' · ' + V.brl(s.preco) + (s.sugerido ? '<br>Sugerido: ' + e(s.sugerido) : '') + (s.descricao ? '<br>' + e(s.descricao) : ''), tag(s.status || (s.ativo === 'Sim' ? 'Ativo' : 'Inativo')), botao('Editar', 'cat-editar', s._row)); }, 'Catálogo vazio.');
       if (sub === 'modelos') return cab + '<div class="row">' + botao('+ Novo modelo', 'mod-novo', '', '') + '</div>' + lista(D.modelos || [], function (m) { return card(e(m.modelo), e(m.quando || '') + '<br><span class="pre">' + e(String(m.texto || '').slice(0, 160)) + (String(m.texto || '').length > 160 ? '…' : '') + '</span>', '', botao('Editar', 'mod-editar', m._row)); }, 'Nenhum modelo.') +
         '<p class="muted">Backup: continua pela planilha (menu ProFix CRM > Fazer backup agora / backup semanal).</p>';
@@ -289,7 +291,7 @@
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<div class="acoes">' + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + '</div>' +
+        '<div class="acoes">' + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
       m.onclose = null; m.showModal(); ligarAcoes(m, true);
@@ -390,6 +392,287 @@
     'tar-feita': function (row) { var t = achar('tarefas', row); escrever('mudarStatusTarefa', [t.tarefa, t._row, 'Feita'], aplicar('tarefas', row, { status: 'Feita' })); }
   };
 
+
+  // ---------- v0.6.0: OS com vários equipamentos (igual ao painel do CRM: crm-v3 API v32) ----------
+  // Rascunho em memória; os totais aparecem enquanto digita (os_multi.js = mesma conta do servidor). Quem grava é o servidor.
+  var O = window.ProFixOSM, OSM = null, CAT = null, CATK = 'profix.catalogoOS';
+  var TIPOS_EQ = ['Notebook', 'Desktop', 'All-in-one', 'Impressora', 'Monitor', 'Outro'];
+  function eqVazio(n) { return { equipId: 'EQ' + n, identificacao: '', tipo: '', modelo: '', serie: '', defeito: '', servico: '', obs: '', itens: [] }; }
+  function itemDe(i) { return { tipo: i.tipo, descricao: i.descricao || '', qtd: i.qtd == null ? '' : String(i.qtd), valorUnit: i.valorUnit == null ? '' : String(i.valorUnit), modo: i.modo || '', origem: i.origem || '' }; }
+  function rascunhoDe(m) {
+    return { cliente: m.cliente || '', previsao: m.previsao || '', acessorios: m.acessorios || '', obsInt: m.obsInt || '',
+      equipamentos: (m.equipamentos || []).map(function (q) { return Object.assign(eqVazio(1), q, { totais: undefined, itens: (q.itens || []).map(itemDe) }); }),
+      itensOS: (m.itensOS || []).map(itemDe) };
+  }
+  function carregarCatalogo() {
+    if (!CAT) { try { CAT = JSON.parse(localStorage.getItem(CATK)) || null; } catch (x) { CAT = null; } }
+    if (!api.pode('catalogoOS') || carregarCatalogo.indo) return;
+    carregarCatalogo.indo = true;
+    api.ler('catalogoOS', []).then(function (r) { carregarCatalogo.indo = false; CAT = (r && r.itens) || []; try { localStorage.setItem(CATK, JSON.stringify(CAT)); } catch (x) { /* cota */ }
+      var res = document.querySelectorAll('[data-osm-q]'); res.forEach(function (el) { mostrarBusca(el); }); if (rota().tela === 'mais' && rota().sub === 'precos') render(); },
+      function () { carregarCatalogo.indo = false; });
+  }
+  function abrirOSM(chave) {
+    var row = chave, o = row ? achar('os', row) : null;
+    OSM = { chave: chave, row: o ? o._row : '', num: o ? o.num : '', aprovacao: o ? o.aprovacao || '' : '', sujo: false, carregando: !!o,
+      d: { cliente: o ? o.cliente : '', previsao: o ? o.previsao || '' : '', acessorios: o ? o.acessorios || '' : '', obsInt: o ? o.obsInt || '' : '', equipamentos: [eqVazio(1)], itensOS: [] } };
+    if (o) { OSM.d.equipamentos[0].identificacao = o.equipamento || ''; OSM.d.equipamentos[0].defeito = o.defeito || ''; OSM.d.equipamentos[0].servico = o.servico || ''; }
+    carregarCatalogo();
+    if (!o) return;
+    var alvo = OSM;
+    (api.pode('lerOSMulti') ? api.ler('lerOSMulti', [o.num]) : Promise.resolve(null)).then(function (m) {
+      if (OSM !== alvo) return; OSM.carregando = false;
+      if (m) { OSM.d = rascunhoDe(m); if (!OSM.d.equipamentos.length) OSM.d.equipamentos = [eqVazio(1)]; }
+      render();
+    }, function (er) { if (OSM !== alvo) return; OSM.carregando = false; aviso('Não deu para ler os equipamentos desta OS: ' + er.message); render(); });
+  }
+  function aprovada() { return /^aprovado$/i.test(OSM.aprovacao || ''); }
+  function linhaItem(pref, it, j) {
+    var aj = it.tipo === 'adicional' || it.tipo === 'desconto', neg = it.origem === 'negociacao', f = function (k) { return 'data-f="' + pref + '.' + j + '.' + k + '"'; };
+    if (neg) return '<div class="osm-it neg" data-linha="' + pref + '.' + j + '"><span class="tag">🏷 Condição especial</span> <span>' + e(it.descricao) + '</span><b class="osm-lt">' + O.brl(-Number(it.valorUnit || 0)) + '</b></div>';
+    return '<div class="osm-it" data-linha="' + pref + '.' + j + '">' +
+      '<select ' + f('tipo') + ' aria-label="Tipo do item">' + O.TIPOS.map(function (t) { return '<option' + (t === it.tipo ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select>' +
+      '<input ' + f('descricao') + ' aria-label="Descrição" placeholder="Descrição" value="' + e(it.descricao) + '">' +
+      (aj ? '<select ' + f('modo') + ' aria-label="R$ ou %"><option' + (it.modo !== '%' ? ' selected' : '') + '>R$</option><option' + (it.modo === '%' ? ' selected' : '') + '>%</option></select>'
+        : '<input ' + f('qtd') + ' inputmode="decimal" aria-label="Quantidade" placeholder="Qtd" value="' + e(it.qtd || '1') + '">') +
+      '<input ' + f('valorUnit') + ' inputmode="decimal" aria-label="' + (aj ? 'Valor' : 'Valor unitário (R$)') + '" placeholder="' + (aj ? 'Valor' : 'R$ unit.') + '" value="' + e(it.valorUnit) + '">' +
+      '<b class="osm-lt" data-lt="' + pref + '.' + j + '"></b>' +
+      '<button type="button" class="btn sec peq" data-osm="rem-item" data-p="' + pref + '.' + j + '" aria-label="Remover item">✕</button></div>';
+  }
+  function atalhos(alvo) { return '<div class="chips">' + O.ATALHOS.map(function (a, k) { return '<button type="button" class="chip" data-osm="atalho" data-p="' + alvo + '.' + k + '">' + e(a.rot) + '</button>'; }).join('') + '</div>'; }
+  function telaOSM(sub) {
+    if (!OSM || OSM.chave !== sub) abrirOSM(sub);
+    var d = OSM.d, nomes = (D.clientes || []).map(function (c) { return c.nome; }), ap = aprovada(), cond = O.condicaoDe(d);
+    var h = '<div class="row"><a href="#servicos" class="btn sec peq">← Serviços</a>' + (OSM.num ? tag(OSM.num, 'azul') + (OSM.aprovacao ? tag('Orçamento ' + OSM.aprovacao, ap ? 'ok' : 'media') : '') : '') + '</div>' +
+      '<h1>' + (OSM.num ? 'OS ' + e(OSM.num) + ' · equipamentos' : 'Nova OS com vários equipamentos') + '</h1>';
+    if (OSM.carregando) return h + '<div class="vazio">Carregando os equipamentos desta OS…</div>';
+    h += '<div id="osm" class="osm">' + (ap ? '<p class="alerta">Orçamento aprovado. Ainda dá para salvar mudanças, mas a condição especial não pode mais ser mudada.</p>' : '') +
+      '<div class="card"><label for="osmCli">Cliente</label><select id="osmCli" data-f="d.cliente" required><option value="">Escolha o cliente</option>' +
+      (d.cliente && nomes.indexOf(d.cliente) < 0 ? '<option selected>' + e(d.cliente) + '</option>' : '') +
+      nomes.map(function (n) { return '<option' + (n === d.cliente ? ' selected' : '') + '>' + e(n) + '</option>'; }).join('') + '</select>' +
+      '<div class="lin2"><div><label for="osmPrev">Previsão de entrega</label><input id="osmPrev" type="date" data-f="d.previsao" value="' + e(d.previsao) + '"></div>' +
+      '<div><label for="osmAce">Acessórios deixados</label><input id="osmAce" data-f="d.acessorios" value="' + e(d.acessorios) + '"></div></div>' +
+      '<label for="osmObs">Observações internas</label><textarea id="osmObs" data-f="d.obsInt" rows="2">' + e(d.obsInt) + '</textarea></div>';
+    d.equipamentos.forEach(function (q, i) {
+      var f = function (k) { return 'data-f="eq.' + i + '.' + k + '"'; };
+      h += '<section class="card osm-eq" data-eq="' + i + '"><div class="row"><h2 style="margin:0">💻 Máquina ' + (i + 1) + '</h2>' +
+        (d.equipamentos.length > 1 ? '<button type="button" class="btn sec peq" data-osm="rem-eq" data-p="' + i + '">Remover máquina</button>' : '') + '</div>' +
+        '<div class="lin2"><div><label>Identificação</label><input ' + f('identificacao') + ' placeholder="ex.: Notebook da recepção" value="' + e(q.identificacao) + '"></div>' +
+        '<div><label>Tipo</label><input ' + f('tipo') + ' list="osmTipos" value="' + e(q.tipo) + '"></div>' +
+        '<div><label>Marca / modelo</label><input ' + f('modelo') + ' value="' + e(q.modelo) + '"></div>' +
+        '<div><label>Nº de série</label><input ' + f('serie') + ' value="' + e(q.serie) + '"></div></div>' +
+        '<label>Defeito relatado</label><input ' + f('defeito') + ' value="' + e(q.defeito) + '">' +
+        '<label>Serviço</label><input ' + f('servico') + ' value="' + e(q.servico) + '">' +
+        '<h3>Itens</h3><div class="osm-its">' + (q.itens.map(function (it, j) { return linhaItem('it.' + i, it, j); }).join('') || '<p class="muted">Nenhum item ainda. Busque no catálogo abaixo.</p>') + '</div>' +
+        '<label for="osmQ' + i + '">⚡ Registro rápido (catálogo)</label><input id="osmQ' + i + '" type="search" data-osm-q="' + i + '" placeholder="Digite: formatação, SSD, hora técnica…" autocomplete="off">' +
+        '<div class="osm-res" id="osmRes' + i + '"></div>' +
+        '<div class="acoes"><button type="button" class="btn sec peq" data-osm="add-item" data-p="' + i + '.peça">+ Peça</button><button type="button" class="btn sec peq" data-osm="add-item" data-p="' + i + '.serviço">+ Serviço</button>' +
+        '<button type="button" class="btn sec peq" data-osm="add-item" data-p="' + i + '.mão de obra">+ Mão de obra</button><button type="button" class="btn sec peq" data-osm="add-item" data-p="' + i + '.adicional">+ Adicional</button>' +
+        '<button type="button" class="btn sec peq" data-osm="add-item" data-p="' + i + '.desconto">+ Desconto</button></div>' + atalhos('eq' + i) +
+        '<div class="osm-tot" id="osmTot' + i + '"></div></section>';
+    });
+    h += '<button type="button" class="btn sec" data-osm="add-eq">+ Adicionar máquina</button>' +
+      '<section class="card"><h2 style="margin-top:0">Descontos e adicionais da OS inteira</h2><div class="osm-its">' +
+      (d.itensOS.map(function (it, j) { return linhaItem('os', it, j); }).join('') || '<p class="muted">Nenhum.</p>') + '</div>' +
+      '<div class="acoes"><button type="button" class="btn sec peq" data-osm="add-item" data-p="os.adicional">+ Adicional</button><button type="button" class="btn sec peq" data-osm="add-item" data-p="os.desconto">+ Desconto</button>' +
+      (cond && !ap ? '<button type="button" class="btn sec peq" data-osm="rem-cond">Remover condição especial</button>' : '') + '</div>' + atalhos('os') + '</section>' +
+      '<datalist id="osmTipos">' + TIPOS_EQ.map(function (t) { return '<option value="' + t + '">'; }).join('') + '</datalist>' +
+      '<div class="osm-bar"><div id="osmGeral"></div><div class="acoes">' +
+      '<button type="button" class="btn" data-osm="salvar"' + (api.pode('salvarOSMulti') ? '' : ' disabled title="Ainda não liberado no servidor"') + '>💾 Salvar OS</button>' +
+      '<button type="button" class="btn sec" data-osm="ver">👁 Ver orçamento</button>' +
+      (!ap && api.pode('aplicarCondicaoEspecialOS') ? '<button type="button" class="btn sec" data-osm="cond">🏷 Condição especial</button>' : '') + '</div>' +
+      '<p class="muted" id="osmSujo"' + (OSM.sujo ? '' : ' hidden') + '>Alterações ainda não salvas.</p></div></div>';
+    return h;
+  }
+  function pegar(p) { var a = p.split('.'); if (a[0] === 'd') return { o: OSM.d, k: a[1] }; if (a[0] === 'eq') return { o: OSM.d.equipamentos[+a[1]], k: a[2] }; if (a[0] === 'it') return { o: OSM.d.equipamentos[+a[1]].itens[+a[2]], k: a[3] }; return { o: OSM.d.itensOS[+a[1]], k: a[2] }; }
+  function atualizarTotais() {
+    var t = O.totaisTolerante(OSM.d), el;
+    t.equipamentos.forEach(function (q, i) {
+      if ((el = $('osmTot' + i))) el.innerHTML = '<span>Subtotal ' + O.brl(q.totais.subtotal) + (q.totais.adicionais ? ' · adicionais ' + O.brl(q.totais.adicionais) : '') + (q.totais.descontos ? ' · descontos ' + O.brl(-q.totais.descontos) : '') + '</span><b>Total da máquina: ' + O.brl(q.totais.total) + '</b>';
+    });
+    // total de cada linha (mesma conta do bloco)
+    var linha = function (pref, its, base) {
+      var ok = its.map(function (it, j) { try { return { j: j, v: O.validarItem(it) }; } catch (x) { return null; } }).filter(Boolean);
+      var c = O.calcularBloco(ok.map(function (x) { return x.v; }), base), ordem = ok.filter(function (x) { return !O.ehAjuste(x.v); }).concat(ok.filter(function (x) { return x.v.tipo === 'adicional'; }), ok.filter(function (x) { return x.v.tipo === 'desconto'; }));
+      document.querySelectorAll('[data-lt^="' + pref + '."]').forEach(function (b) { b.textContent = '—'; });
+      ordem.forEach(function (x, k) { var b = document.querySelector('[data-lt="' + pref + '.' + x.j + '"]'); if (b) b.textContent = O.brl(c.itens[k].total); });
+    };
+    OSM.d.equipamentos.forEach(function (q, i) { linha('it.' + i, q.itens, 0); });
+    linha('os', OSM.d.itensOS, t.totais.equipamentos);
+    if ((el = $('osmGeral'))) el.innerHTML = '<span class="muted">' + OSM.d.equipamentos.length + ' máquina(s) · ' + O.brl(t.totais.equipamentos) + (t.totais.adicionais ? ' · adic. ' + O.brl(t.totais.adicionais) : '') + (t.totais.descontos ? ' · desc. ' + O.brl(-t.totais.descontos) : '') + '</span><b class="osm-total">Total geral: <span id="osmTotal">' + O.brl(t.totais.total) + '</span></b>';
+    if ((el = $('osmSujo'))) el.hidden = !OSM.sujo;
+  }
+  function mostrarBusca(inp) {
+    var i = inp.dataset.osmQ, box = $('osmRes' + i); if (!box) return;
+    var q = inp.value.trim(); if (!q) { box.innerHTML = ''; return; }
+    var r = O.buscarCatalogo(CAT || [], q, 8);
+    box.innerHTML = r.map(function (c) { var k = (CAT || []).indexOf(c); return '<button type="button" class="osm-cat" data-osm="cat" data-p="' + i + '.' + k + '"><span>' + e(c.descricao) + ' <span class="muted">' + e(c.categoria || '') + '</span></span><b>' + (c.valor === '' || c.valor == null ? 'sem preço' : O.brl(c.valor)) + '</b></button>'; }).join('') +
+      '<button type="button" class="osm-cat" data-osm="livre" data-p="' + i + '"><span>+ Lançar “' + e(q) + '” sem catálogo</span></button>' + (CAT ? '' : '<p class="muted">Catálogo ainda não carregado (precisa de internet na 1ª vez).</p>');
+  }
+  function mudou() { OSM.sujo = true; atualizarTotais(); }
+  function redesenhar() { var y = window.scrollY; render(); window.scrollTo(0, y); }
+  function ligarOSM(c) {
+    var raiz = c.querySelector('#osm'); if (!raiz) return;
+    atualizarTotais();
+    raiz.addEventListener('input', function (ev) { var t = ev.target;
+      if (t.dataset.osmQ !== undefined) return mostrarBusca(t);
+      if (!t.dataset.f) return; var p = pegar(t.dataset.f); p.o[p.k] = t.value;
+      if (/\.(tipo|modo)$/.test(t.dataset.f) && /^(it|os)\./.test(t.dataset.f)) { if (p.k === 'tipo') { p.o.modo = O.ehAjuste({ tipo: t.value }) ? (p.o.modo || 'R$') : ''; } OSM.sujo = true; return redesenhar(); }
+      mudou(); });
+    raiz.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-osm]'); if (!b) return; ev.preventDefault();
+      var a = b.dataset.osm, p = (b.dataset.p || '').split('.'), d = OSM.d;
+      if (a === 'add-eq') { if (d.equipamentos.length >= 20) return aviso('No máximo 20 máquinas por OS.'); d.equipamentos.push(eqVazio(d.equipamentos.length + 1)); OSM.sujo = true; redesenhar(); var n = document.querySelectorAll('.osm-eq'); n[n.length - 1].querySelector('input').focus(); return; }
+      if (a === 'rem-eq') { if (confirm('Remover a máquina ' + (+p[0] + 1) + ' e os itens dela?')) { d.equipamentos.splice(+p[0], 1); OSM.sujo = true; redesenhar(); } return; }
+      if (a === 'add-item') { var tp = p.slice(1).join('.'), lst = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[0]].itens; lst.push({ tipo: tp, descricao: '', qtd: '1', valorUnit: '', modo: O.ehAjuste({ tipo: tp }) ? 'R$' : '', origem: '' }); OSM.sujo = true; redesenhar(); return; }
+      if (a === 'rem-item') { var l2 = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[1]].itens; l2.splice(+p[p.length - 1], 1); OSM.sujo = true; redesenhar(); return; }
+      if (a === 'atalho') { var at = O.ATALHOS[+p[1]], dest = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[0].slice(2)].itens; dest.push({ tipo: at.tipo, descricao: at.descricao, qtd: '1', valorUnit: String(at.valorUnit), modo: at.modo, origem: 'atalho' }); OSM.sujo = true; redesenhar(); return; }
+      if (a === 'cat' || a === 'livre') {
+        var i = +p[0], q = $('osmQ' + i).value.trim(), ci = a === 'cat' ? CAT[+p[1]] : null;
+        d.equipamentos[i].itens.push(ci ? { tipo: O.tipoDaCategoria(ci.categoria), descricao: ci.descricao, qtd: '1', valorUnit: ci.valor === '' || ci.valor == null ? '' : String(ci.valor), modo: '', origem: ci.origem || 'Catálogo OS' }
+          : { tipo: 'serviço', descricao: q, qtd: '1', valorUnit: '', modo: '', origem: '' });
+        OSM.sujo = true; redesenhar(); var nq = $('osmQ' + i); if (nq) nq.focus(); return;
+      }
+      if (a === 'salvar') return salvarOSM();
+      if (a === 'ver') return verOrcamento();
+      if (a === 'cond') return condicaoEspecial();
+      if (a === 'rem-cond') return removerCondicao();
+    });
+  }
+  /** Rascunho -> formato do salvarOSMulti (linhas totalmente vazias são ignoradas). */
+  function dadosOSM() {
+    var vazio = function (i) { return !String(i.descricao || '').trim() && !String(i.valorUnit || '').trim(); };
+    var d = OSM.d;
+    return { num: OSM.num, _row: OSM.row, cliente: d.cliente, _rowCliente: ((D.clientes || []).filter(function (c) { return c.nome === d.cliente; })[0] || {})._row,
+      previsao: d.previsao, acessorios: d.acessorios, obsInt: d.obsInt,
+      equipamentos: d.equipamentos.map(function (q) { return Object.assign({}, q, { itens: q.itens.filter(function (i) { return !vazio(i); }) }); }),
+      itensOS: d.itensOS.filter(function (i) { return !vazio(i); }) };
+  }
+  function validarOSM() { var x = dadosOSM(); if (!x.cliente) throw new Error('Escolha o cliente.'); O.montar(x); return x; }
+  function salvarOSM() {
+    var x; try { x = validarOSM(); } catch (er) { return aviso(er.message); }
+    return api.escrever('salvarOSMulti', [x]).then(function (r) {
+      aviso(r.msg);
+      if (r.enfileirado) { OSM.sujo = false; return; }
+      var num = (r.dados && r.dados.num) || OSM.num;
+      return iniciar().then(function () {
+        var o = (D.os || []).filter(function (y) { return String(y.num) === String(num); })[0];
+        OSM.num = num; OSM.sujo = false; if (o) { OSM.row = o._row; OSM.aprovacao = o.aprovacao || ''; OSM.chave = String(o._row); if (location.hash !== '#osm/' + o._row) history.replaceState(null, '', '#osm/' + o._row); }
+        render();
+      });
+    }, function (er) { aviso('Não salvou: ' + er.message); });
+  }
+  function recarregarOSM() {
+    if (!OSM.num) return Promise.resolve();
+    return iniciar().then(function () { return api.ler('lerOSMulti', [OSM.num]); }).then(function (m) {
+      var o = (D.os || []).filter(function (y) { return String(y.num) === String(OSM.num); })[0];
+      if (o) OSM.aprovacao = o.aprovacao || ''; if (m) OSM.d = rascunhoDe(m); OSM.sujo = false; render();
+    }, function (er) { aviso(er.message); });
+  }
+  function clienteOSM() { return (D.clientes || []).filter(function (c) { return c.nome === OSM.d.cliente; })[0] || { nome: OSM.d.cliente }; }
+  /** orcamentoOS do servidor ({num} se salvo, senão {dados}); sem internet ou sem a ação, prévia local com a mesma conta. */
+  function pedirOrcamento() {
+    var x; try { x = validarOSM(); } catch (er) { return Promise.reject(er); }
+    var arg = OSM.num && !OSM.sujo ? { num: OSM.num } : { dados: x };
+    var local = function () { var c = clienteOSM(); return O.orcamentoLocal(x, { nome: c.nome, whatsapp: c.whatsapp }); };
+    if (!api.pode('orcamentoOS') || navigator.onLine === false) return Promise.resolve(local());
+    return api.ler('orcamentoOS', [arg]).catch(function (er) { if (er.doServidor) throw er; return local(); });
+  }
+  function tabItens(its) {
+    return its.length ? '<table class="orc-t">' + its.map(function (i) { var aj = O.ehAjuste(i); return '<tr class="' + (i.tipo === 'desconto' ? 'desc' : aj ? 'adic' : '') + '"><td>' + (aj ? e(O.rotulo(i)) + ': ' : '') + e(i.descricao) + (!aj && i.qtd !== 1 ? ' <span class="muted">x' + e(String(i.qtd).replace('.', ',')) + '</span>' : '') + '</td><td class="n">' + O.brl(i.total) + '</td></tr>'; }).join('') + '</table>' : '<p class="muted">Sem itens.</p>';
+  }
+  function verOrcamento() {
+    pedirOrcamento().then(function (o) {
+      var t = $('tela-orc'), ap = /^aprovado$/i.test(o.aprovacao || OSM.aprovacao || ''), podeAprovar = OSM.num && !OSM.sujo && !ap && api.pode('aprovarOrcamentoOS');
+      var c = clienteOSM(), semConsent = c.consent && c.consent !== 'Sim';
+      t.innerHTML = '<div class="orc"><div class="orc-topo"><div class="marca-orc">Pro<span>Fix</span> Computadores</div><button type="button" class="btn sec peq" id="orcFechar">✕ Fechar</button></div>' +
+        '<h1>Orçamento ' + e(o.num || '(OS ainda não salva)') + '</h1><p>Cliente: <b>' + e((o.cliente && o.cliente.nome) || OSM.d.cliente) + '</b></p>' +
+        (o.local ? '<p class="alerta">Prévia feita no aparelho (sem o servidor). Os valores usam a mesma conta do CRM.</p>' : '') +
+        (o.equipamentos || []).map(function (q, n) { var tm = [q.tipo, q.modelo].filter(String).join(' ');
+          return '<section class="orc-eq"><h2>' + (n + 1) + '. ' + e(q.identificacao) + (tm ? ' <span class="muted">(' + e(tm) + ')</span>' : '') + '</h2>' + (q.serie ? '<div class="muted">Nº de série ' + e(q.serie) + '</div>' : '') +
+            (q.defeito ? '<div>Defeito: ' + e(q.defeito) + '</div>' : '') + tabItens(q.itens) + '<div class="orc-sub">Total da máquina <b>' + O.brl(q.totais.total) + '</b></div></section>'; }).join('') +
+        ((o.itensOS || []).length ? '<section class="orc-eq"><h2>Ajustes da OS</h2>' + tabItens(o.itensOS) + '</section>' : '') +
+        (o.economia > 0 ? '<p class="orc-econ">Você economiza ' + O.brl(o.economia) + '</p>' : '') +
+        '<div class="orc-total">Total geral <b id="orcTotal">' + O.brl(o.totais.total) + '</b></div>' +
+        '<p>📅 Previsão de entrega: ' + (o.previsao ? O.dataBR(o.previsao) : 'a combinar') + '</p>' +
+        (o.termos && o.termos.validade ? '<p class="muted">Validade: ' + e(o.termos.validade) + '</p>' : '') + (o.termos && o.termos.garantia ? '<p class="muted">Garantia: ' + e(o.termos.garantia) + '</p>' : '') +
+        (ap ? '<p class="tag ok" id="orcAprovado">✅ Orçamento aprovado' + (o.comoAprov ? ' – ' + e(o.comoAprov) : '') + '</p>' : '') +
+        '<div class="orc-acoes">' +
+        (podeAprovar ? '<button type="button" class="btn" id="orcAprovar">✅ Aprovar orçamento</button>' : (!ap && (!OSM.num || OSM.sujo) ? '<p class="muted">Salve a OS para poder aprovar.</p>' : '')) +
+        '<a class="btn wa" id="orcWa" target="_blank" rel="noopener" href="' + e(o.whatsappUrl || O.linkWhatsApp(c.whatsapp, o.whatsappTexto)) + '">💬 Enviar pelo WhatsApp</a>' +
+        '<button type="button" class="btn sec" id="orcCopiar">📋 Copiar texto</button>' +
+        (o.html ? '<button type="button" class="btn sec" id="orcPdf">🖨 Imprimir / PDF</button>' : '<button type="button" class="btn sec" id="orcPdf">🖨 Imprimir</button>') + '</div>' +
+        '<p class="muted">O WhatsApp só abre com o texto pronto: quem envia é você.' + (semConsent ? ' Atenção: este cliente está sem consentimento LGPD para mensagens.' : '') + '</p>' +
+        '<details><summary>Ver texto do WhatsApp</summary><pre class="pre" id="orcTexto">' + e(o.whatsappTexto) + '</pre></details></div>';
+      if (!t.open) t.showModal();
+      $('orcFechar').onclick = function () { t.close(); };
+      $('orcCopiar').onclick = function () { (navigator.clipboard ? navigator.clipboard.writeText(o.whatsappTexto) : Promise.reject()).then(function () { aviso('Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto em “Ver texto do WhatsApp”.'); }); };
+      $('orcPdf').onclick = function () {
+        if (!o.html) return window.print();
+        var w = window.open(URL.createObjectURL(new Blob([o.html], { type: 'text/html' })), '_blank'); if (!w) aviso('Libere as janelas pop-up para imprimir.');
+      };
+      if ($('orcAprovar')) $('orcAprovar').onclick = function () {
+        if (!confirm('Registrar que o cliente APROVOU o orçamento de ' + O.brl(o.totais.total) + ' agora?')) return;
+        api.escrever('aprovarOrcamentoOS', [{ num: OSM.num, _row: OSM.row }], aplicar('os', OSM.row, { aprovacao: 'Aprovado' })).then(function (r) {
+          aviso(r.msg); OSM.aprovacao = 'Aprovado'; return iniciar().then(verOrcamento);
+        }, function (er) { aviso('Não aprovou: ' + er.message); });
+      };
+    }, function (er) { aviso(er.message); });
+  }
+  function condicaoEspecial() {
+    var x; try { x = validarOSM(); } catch (er) { return aviso(er.message); }
+    var m = $('modal'), salva = OSM.num && !OSM.sujo, base = O.montar(O.semNegociacao(x)).totais.total, atual = O.condicaoDe(x);
+    m.innerHTML = '<form method="dialog" id="fCond"><h2 style="margin:0">🏷 Condição especial</h2><p class="muted">Total sem condição: <b>' + O.brl(base) + '</b>. Vira um desconto da OS (gravado em R$), entra no orçamento e no WhatsApp.</p>' +
+      '<div class="chips" role="group" aria-label="Desconto">' + [5, 10, 15].map(function (p) { return '<button type="button" class="chip" data-pct="' + p + '" aria-pressed="false">' + p + '%</button>'; }).join('') + '<button type="button" class="chip" data-pct="livre" aria-pressed="false">Outro valor</button></div>' +
+      '<div class="lin" id="condLivre" hidden><input id="condValor" inputmode="decimal" aria-label="Valor da condição" placeholder="Valor"><select id="condModo" aria-label="R$ ou %"><option>%</option><option>R$</option></select></div>' +
+      '<label for="condMotivo">Motivo</label><input id="condMotivo" placeholder="Condição especial para fechamento hoje">' +
+      '<label class="chk"><input type="checkbox" id="condHoje" checked> Selo “válido só hoje”</label>' +
+      '<div id="condPrev" class="card" aria-live="polite"><span class="muted">Escolha 5, 10, 15% ou um valor.</span></div>' +
+      (salva ? '' : '<p class="alerta">Salve a OS antes de aplicar a condição especial.</p>') +
+      '<div class="acoes"><button type="button" class="btn" id="condAplicar" disabled>Aplicar</button>' + (atual ? '<button type="button" class="btn sec" id="condRemover">Remover condição</button>' : '') + '<button class="btn sec" value="">Cancelar</button></div></form>';
+    m.onclose = null; m.showModal();
+    var esc = { modo: '%', valor: '' }, seq = 0;
+    var prev = function () {
+      var el = $('condPrev'), av; try { av = O.avaliarCondicao(base, esc.modo, esc.valor); } catch (er) { el.innerHTML = '<span class="muted">' + e(er.message) + '</span>'; $('condAplicar').disabled = true; return; }
+      var mostrar = function (a) { el.innerHTML = 'Desconto <b>' + O.brl(a.desconto) + '</b> (' + String(a.pct).replace('.', ',') + '%) · novo total <b id="condNovo">' + O.brl(a.novoTotal) + '</b>' + (a.aviso ? '<p class="alerta" id="condAviso">⚠️ ' + e(a.aviso) + '</p>' : ''); };
+      mostrar(av); $('condAplicar').disabled = !salva;
+      if (api.pode('simularCondicaoOS') && navigator.onLine !== false) { var n = ++seq; api.ler('simularCondicaoOS', [Object.assign(salva ? { num: OSM.num } : { dados: x }, { modo: esc.modo, valor: esc.valor })]).then(function (a) { if (n === seq && a) mostrar(a); }, function () { /* fica a prévia local */ }); }
+    };
+    m.querySelectorAll('[data-pct]').forEach(function (b) { b.onclick = function () {
+      m.querySelectorAll('[data-pct]').forEach(function (y) { y.setAttribute('aria-pressed', String(y === b)); });
+      var livre = b.dataset.pct === 'livre'; $('condLivre').hidden = !livre;
+      if (livre) { esc.modo = $('condModo').value; esc.valor = $('condValor').value; $('condValor').focus(); } else { esc.modo = '%'; esc.valor = b.dataset.pct; }
+      prev(); }; });
+    $('condValor').oninput = $('condModo').onchange = function () { esc.modo = $('condModo').value; esc.valor = $('condValor').value; prev(); };
+    $('condAplicar').onclick = function () {
+      var args = { num: OSM.num, _row: OSM.row, modo: esc.modo, valor: esc.valor, motivo: $('condMotivo').value.trim(), validoHoje: $('condHoje').checked };
+      api.escrever('aplicarCondicaoEspecialOS', [args]).then(function (r) { m.close(''); aviso(r.msg); return recarregarOSM(); }, function (er) { aviso('Não aplicou: ' + er.message); });
+    };
+    if ($('condRemover')) $('condRemover').onclick = function () { m.close(''); removerCondicao(); };
+  }
+  function removerCondicao() {
+    if (!OSM.num || OSM.sujo) return aviso('Salve a OS antes de remover a condição especial.');
+    if (!confirm('Remover a condição especial desta OS?')) return;
+    api.escrever('removerCondicaoEspecialOS', [{ num: OSM.num, _row: OSM.row }]).then(function (r) { aviso(r.msg); return recarregarOSM(); }, function (er) { aviso('Não removeu: ' + er.message); });
+  }
+  TELAS.osm = telaOSM;
+  ACOES['osm-nova'] = function () { OSM = null; location.hash = '#osm'; };
+  ACOES['osm-abrir'] = function (row) { OSM = null; location.hash = '#osm/' + row; };
+  ACOES['cos-editar'] = function (k) {
+    var c = k !== '' && CAT ? CAT[+k] : {};
+    formulario(k !== '' ? e(c.descricao) : 'Novo preço no catálogo', [{ k: 'categoria', r: 'Categoria', t: 'select', o: ['Serviço', 'Mão de obra', 'Peça'], req: true }, { k: 'descricao', r: 'Descrição', req: true },
+      { k: 'valor', r: 'Valor base (R$)', t: 'number' }, { k: 'tipoPreco', r: 'Tipo de preço', t: 'select', o: ['Fixo', 'A partir de', 'Por hora', 'Sob orçamento'] }, { k: 'ativo', r: 'Ativo', t: 'select', o: ['Sim', 'Não'] }, { k: 'fonte', r: 'Fonte / obs' }],
+      Object.assign({ ativo: 'Sim' }, c)).then(function (v) { if (!v) return; var d = Object.assign({}, v); if (c.id) d.id = c.id;
+        api.escrever('salvarCatalogoOS', [d]).then(function (r) { aviso(r.msg); try { localStorage.removeItem(CATK); } catch (x) { /* ok */ } CAT = null; carregarCatalogo(); }, function (er) { aviso('Não salvou: ' + er.message); }); });
+  };
+  PRECISA['osm-nova'] = 'salvarOSMulti'; PRECISA['cos-editar'] = 'salvarCatalogoOS';
+  function telaPrecos() {
+    carregarCatalogo();
+    var l = (CAT || []).map(function (c, k) { return { c: c, k: k }; }).filter(function (x) { return x.c.origem === 'Catálogo OS' || !x.c.origem; });
+    return '<div class="row"><p class="muted">Preços usados no registro rápido da OS (aba “Catálogo OS”).</p>' + botao('+ Novo preço', 'cos-editar', '', '') + '</div>' +
+      (CAT ? lista(l, function (x) { return card(e(x.c.descricao), e(x.c.categoria || '') + ' · ' + (x.c.valor === '' || x.c.valor == null ? 'sem preço' : O.brl(x.c.valor)) + (x.c.fonte ? '<br>' + e(x.c.fonte) : ''), '', botao('Editar', 'cos-editar', String(x.k))); }, 'Catálogo OS vazio.') : '<div class="vazio">Carregando o catálogo…</div>');
+  }
+
   function ligarAcoes(raiz, dentroModal) {
     raiz.querySelectorAll('[data-a]').forEach(function (b) {
       b.onclick = function (ev) {
@@ -409,6 +692,7 @@
       render(); var n = document.querySelector('[data-cidade="' + (window.CSS && CSS.escape ? CSS.escape(F.op.cidade) : F.op.cidade) + '"]'); if (n) n.focus(); }; });
     filtro('fOsSt', F.os, 'status'); filtro('fOsQ', F.os, 'q'); filtro('fCliQ', F.cli, 'q');
     ligarAcoes(c);
+    ligarOSM(c);
     c.querySelectorAll('[data-wa-mod]').forEach(function (sel) { sel.onchange = function () {
       var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
       if (a && l) a.href = l; }; }); // só troca o texto; consentimento continua valendo (link some se bloqueada)

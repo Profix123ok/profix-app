@@ -249,6 +249,84 @@
       },
       registrarFollowup: function (f) { if (!f.tipo) throw new Error('Tipo de follow-up não informado.'); anexar('tarefas', { data: h(), cliente: f.cliente || '', tarefa: f.tipo, tipo: f.tipo, status: 'Feita', os: f.os || '' }); return { ok: true, msg: 'Follow-up registrado.' }; }
     };
+    // ---- v0.6.0: OS com vários equipamentos (mesmas ações e respostas do crm-v3 v3.1; conta em os_multi.js) ----
+    var OSM = typeof ProFixOSM !== 'undefined' ? ProFixOSM : require('./os_multi.js');
+    D.osMulti = D.osMulti || {}; // num -> { revisao, dados }
+    D.catalogoOS = D.catalogoOS || OSM.CATALOGO_DEMO.map(function (c) { return Object.assign({ tipoPreco: '', ativo: 'Sim', fonte: 'Sugestão (mediana +12,5%)' }, c); });
+    var copia = function (o) { return JSON.parse(JSON.stringify(o)); };
+    var cliDe = function (nome) { var c = (D.clientes || []).filter(function (k) { return k.nome === nome; })[0] || {}; return { nome: c.nome || nome, whatsapp: c.whatsapp || '', bairro: c.bairro || '' }; };
+    var osDe = function (num) { return (D.os || []).filter(function (o) { return String(o.num) === String(num); })[0] || null; };
+    var aprovada = function (num) { var o = osDe(num); return !!o && /^aprovado$/i.test(String(o.aprovacao || '')); };
+    var montarDe = function (x) { if (x && x.dados) return OSM.montar(x.dados); var m = S.lerOSMulti(x && x.num); if (!m) throw new Error('Esta OS ainda não tem equipamentos cadastrados.'); return m; };
+    var limparItem = function (i) { return { tipo: i.tipo, descricao: i.descricao, qtd: i.qtd, valorUnit: i.valorUnit, modo: i.modo, origem: i.origem }; };
+    var paraSalvar = function (m) { return { num: m.num, _row: m._row, cliente: m.cliente, previsao: m.previsao, acessorios: m.acessorios, obsInt: m.obsInt,
+      equipamentos: m.equipamentos.map(function (e) { return Object.assign({}, e, { totais: undefined, itens: e.itens.map(limparItem) }); }), itensOS: m.itensOS.map(limparItem) }; };
+    S.lerOSMulti = function (num) {
+      num = String(num || '').trim(); if (!num) throw new Error('Informe o número da OS.');
+      var r = D.osMulti[num]; if (!r) return null;
+      var o = osDe(num) || {}, x = OSM.montar(Object.assign({}, copia(r.dados), { cliente: o.cliente || r.dados.cliente, previsao: o.previsao || r.dados.previsao || '' }));
+      x.revisao = r.revisao; x._row = o._row || ''; x.status = o.status || ''; return x;
+    };
+    S.salvarOSMulti = function (x) {
+      var m = OSM.montar(x); if (!m.cliente) throw new Error('Escolha o cliente.');
+      if (m.previsao && !/^\d{4}-\d{2}-\d{2}$/.test(m.previsao)) throw new Error('Previsão de entrega inválida.');
+      var resumo = m.equipamentos.map(function (e) { return e.identificacao + (e.modelo ? ' – ' + e.modelo : ''); }).join('; ');
+      var p = { cliente: m.cliente, equipamento: (m.equipamentos.length > 1 ? m.equipamentos.length + ' equipamentos: ' : '') + resumo,
+        defeito: m.equipamentos.map(function (e) { return e.defeito ? (m.equipamentos.length > 1 ? e.identificacao + ': ' : '') + e.defeito : ''; }).filter(String).join(' | '),
+        servico: m.equipamentos[0].servico || '', valor: m.totais.total };
+      if (m.previsao) p.previsao = m.previsao; if (m.acessorios) p.acessorios = m.acessorios; if (m.obsInt) p.obsInt = m.obsInt;
+      if (m.num) { p.num = m.num; p._row = x._row; }
+      var r = S.salvarOS(p), num = m.num || (D.os[D.os.length - 1] || {}).num;
+      var rev = ((D.osMulti[num] || {}).revisao || 0) + 1;
+      D.osMulti[num] = { revisao: rev, dados: Object.assign(paraSalvar(m), { num: num }) };
+      return { ok: true, num: num, revisao: rev, totais: m.totais, msg: r.msg + ' ' + m.equipamentos.length + ' equipamento(s), total ' + OSM.brl(m.totais.total) + '.' };
+    };
+    S.catalogoOS = function () {
+      var out = [], visto = {}, add = function (o) { var k = String(o.descricao || '').toLowerCase(); if (!o.descricao || visto[k]) return; visto[k] = true; out.push(o); };
+      D.catalogoOS.forEach(function (c) { if (c.ativo !== 'Não') add({ id: c.id, categoria: c.categoria, descricao: c.descricao, valor: c.valor, tipoPreco: c.tipoPreco || '', fonte: c.fonte || '', origem: 'Catálogo OS' }); });
+      (D.catalogo || []).forEach(function (s) { if (s.ativo === 'Sim' && !/proposto/i.test(s.status || '')) add({ id: '', categoria: 'Serviço', descricao: s.servico, valor: s.preco, tipoPreco: s.tipo || '', fonte: 'Catálogo de serviços', origem: 'Catálogo de serviços' }); });
+      (D.pecas || []).slice().reverse().forEach(function (p) { add({ id: '', categoria: 'Peça', descricao: p.peca, valor: p.precoUnit, tipoPreco: '', fonte: 'Usada antes', origem: 'Histórico' }); });
+      return { itens: out };
+    };
+    S.salvarCatalogoOS = function (c) {
+      if (!c || ['Serviço', 'Mão de obra', 'Peça'].indexOf(c.categoria) < 0) throw new Error('Categoria inválida: use Serviço, Mão de obra ou Peça.');
+      var desc = String(c.descricao || '').trim(); if (!desc) throw new Error('Informe a descrição.');
+      var valor = c.valor === '' || c.valor == null ? '' : OSM.centavos(num(c.valor));
+      if (valor !== '' && (isNaN(valor) || valor < 0)) throw new Error('Valor base inválido.');
+      var at = D.catalogoOS.filter(function (l) { return c.id ? l.id === c.id : (l.categoria === c.categoria && l.descricao.toLowerCase() === desc.toLowerCase()); })[0];
+      var dados = { categoria: c.categoria, descricao: desc, valor: valor, tipoPreco: c.tipoPreco || '', ativo: c.ativo === false || c.ativo === 'Não' ? 'Não' : 'Sim', fonte: c.fonte || '' };
+      if (at) { Object.assign(at, dados); return { ok: true, id: at.id, msg: 'Catálogo atualizado: ' + desc + '.' }; }
+      var id = proxId('catalogoOS', 'id', 'CAT'); D.catalogoOS.push(Object.assign({ id: id }, dados)); return { ok: true, id: id, msg: 'Incluído no catálogo: ' + desc + '.' };
+    };
+    S.gerarOrcamentoOS = function (x) { var m = montarDe(x), o = OSM.orcamentoLocal(m, cliDe(m.cliente)); return { ok: true, num: m.num, totais: m.totais, html: '', whatsapp: o.whatsappTexto, whatsappCliente: o.cliente.whatsapp }; };
+    S.orcamentoOS = function (x) {
+      var m = montarDe(x), o = OSM.orcamentoLocal(m, cliDe(m.cliente)), os = osDe(m.num) || {};
+      delete o.local; return Object.assign(o, { _row: os._row || '', status: os.status || '', aprovacao: os.aprovacao || '', dataAprov: os.dataAprov || '', comoAprov: os.comoAprov || '', html: '' });
+    };
+    S.aprovarOrcamentoOS = function (x) {
+      if (!x || !String(x.num || '').trim()) throw new Error('Salve a OS antes de aprovar o orçamento.');
+      var quando = h().split('-').reverse().join('/') + ' 10:00';
+      var r = S.decidirOrcamento({ num: x.num, _row: x._row, decisao: 'Aprovado', como: 'Presencial (Ver orçamento) em ' + quando + (x.obs ? ' – ' + x.obs : '') });
+      r.aprovadoEm = quando; return r;
+    };
+    S.simularCondicaoOS = function (x) { x = x || {}; var m = montarDe(x); return OSM.avaliarCondicao(OSM.montar(OSM.semNegociacao(paraSalvar(m))).totais.total, String(x.modo || '%'), x.valor); };
+    S.aplicarCondicaoEspecialOS = function (x) {
+      x = x || {}; if (!String(x.num || '').trim()) throw new Error('Salve a OS antes de aplicar a condição especial.');
+      if (aprovada(x.num)) throw new Error('O orçamento já foi aprovado: a condição especial não pode mais ser mudada.');
+      var m = S.lerOSMulti(x.num); if (!m) throw new Error('Esta OS ainda não tem equipamentos cadastrados.');
+      var d = OSM.semNegociacao(paraSalvar(m)), av = OSM.avaliarCondicao(OSM.montar(d).totais.total, String(x.modo || '%'), x.valor);
+      d.itensOS.push(OSM.itemCondicao(av, x.motivo, x.validoHoje)); d._row = x._row || m._row;
+      var r = S.salvarOSMulti(d); r.condicao = av;
+      r.msg = 'Condição especial aplicada: ' + OSM.brl(av.desconto) + ' de desconto. Novo total ' + OSM.brl(r.totais.total) + '.' + (av.aviso ? ' ' + av.aviso : ''); return r;
+    };
+    S.removerCondicaoEspecialOS = function (x) {
+      x = x || {}; if (!String(x.num || '').trim()) throw new Error('Informe a OS.');
+      if (aprovada(x.num)) throw new Error('O orçamento já foi aprovado: a condição especial não pode mais ser removida.');
+      var m = S.lerOSMulti(x.num); if (!m) throw new Error('Esta OS ainda não tem equipamentos cadastrados.');
+      if (!OSM.condicaoDe(m)) return { ok: true, num: x.num, totais: m.totais, msg: 'Não havia condição especial.' };
+      var d = OSM.semNegociacao(paraSalvar(m)); d._row = x._row || m._row;
+      var r = S.salvarOSMulti(d); r.msg = 'Condição especial removida. Total ' + OSM.brl(r.totais.total) + '.'; return r;
+    };
     return S;
   }
   return { dadosFicticios: dadosFicticios, criarServidor: criarServidor, somaDias: somaDias };
