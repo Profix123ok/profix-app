@@ -80,3 +80,7 @@ dialog.cheia{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:
 /* v0.7.1: Lixeira, impacto da exclusão, leads */
 .btn.perigo{background:#3b1414;color:#fecaca;border:1px solid #7f1d1d}.btn.perigo:disabled{opacity:.5;cursor:not-allowed}
 #fImpacto ul{margin:4px 0 8px 18px;padding:0}#cApagar{text-transform:uppercase;letter-spacing:2px}
+/* v0.7.2: perguntas na própria página (substituem confirm/alert/prompt) */
+#pergunta{width:min(440px,94vw);z-index:1000}#pergunta form{gap:12px}#pergunta h2{margin:0;font-size:1.15rem}#pgTexto{margin:0;white-space:pre-line;line-height:1.45}
+#pergunta .grandes{display:grid;gap:10px}#pergunta .btn{min-height:52px;font-size:1.05rem;width:100%}#pgCampo{min-height:48px;font-size:1.1rem;letter-spacing:.05em}
+#pgSim:disabled{opacity:.45;cursor:not-allowed}

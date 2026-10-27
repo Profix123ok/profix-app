@@ -19,5 +19,5 @@ window.PROFIX_CONFIG = {
     'listarClientesResumo', 'listarLixeira', 'registrarConsentimento', 'definirStatusLead', 'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo'], // v0.7.1: API @43
   // v0.7.1: validade do orçamento, garantia e desconto de indicação NÃO ficam aqui: vêm do servidor (getDados().config: validadePadraoDias, garantiaDiasProfix, descontoIndicacaoPct).
   WHATSAPP_LOJA: '(15) 98112-8309',
-  VERSAO_APP: '0.7.1'
+  VERSAO_APP: '0.7.2'
 };

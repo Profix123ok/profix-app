@@ -8,6 +8,8 @@
   var D = null, offline = false;
   var F = { op: { status: '', prioridade: '', segmento: '', q: '' }, os: { status: '', q: '' }, cli: { q: '' }, lead: { sit: 'Novo' } };
   var $ = function (id) { return document.getElementById(id); }, e = V.esc;
+  // v0.7.2: confirm/alert/prompt nativos podem ser bloqueados no celular -> modal na própria página (pergunta.js), sempre com Promise.
+  var P = window.ProFixPergunta, perguntar = function (t, op) { return P.confirmar(t, op); };
   var AJ = 'profix.ajustes', ajustes = (function () { try { return JSON.parse(localStorage.getItem(AJ)) || {}; } catch (x) { return {}; } })();
   var WAF = 'profix.waOp'; try { F.op.wa = localStorage.getItem(WAF) === '1'; } catch (x) { F.op.wa = false; }
   var CID = 'profix.cidadeOp'; try { F.op.cidade = localStorage.getItem(CID) || ''; } catch (x) { F.op.cidade = ''; }
@@ -296,7 +298,7 @@
       ].concat(temCol('oportunidades', 'origem') ? [{ k: 'origem', r: 'Origem', t: 'select', o: D.origens }] : [])
        .concat(temCol('oportunidades', 'indicadoPor') ? [{ k: 'indicadoPor', r: 'Indicado por' }] : []), o).then(function (v) { if (!v) return; var mud = Object.assign({ _row: o._row, _empresaOriginal: o.empresa, empresa: o.empresa }, v); escrever('salvarOportunidade', [mud], aplicar('oportunidades', o._row, mud)); });
     },
-    'op-lead': function (row) { var o = achar('oportunidades', row); if (confirm('Copiar "' + o.empresa + '" para Clientes como Lead (consentimento “Não” até a empresa autorizar)?')) escrever('virarLead', [o.empresa, o._row], aplicar('oportunidades', row, { status: 'Virou lead' })); },
+    'op-lead': function (row) { var o = achar('oportunidades', row); perguntar('Copiar "' + o.empresa + '" para Clientes como Lead (consentimento “Não” até a empresa autorizar)?', { titulo: 'Virar lead', sim: 'Copiar para Clientes' }).then(function (ok) { if (ok) escrever('virarLead', [o.empresa, o._row], aplicar('oportunidades', row, { status: 'Virou lead' })); }); },
     'os-abrir': function (row) {
       var o = achar('os', row), pecas = V.pecasOS(D, o.num), m = $('modal');
       var lin = function (r, v) { return v === '' || v == null ? '' : '<div><span class="muted">' + r + ':</span> ' + v + '</div>'; };
@@ -346,7 +348,7 @@
       var o = achar('os', row);
       formulario('Peça na ' + e(o.num), [{ k: 'peca', r: 'Peça', req: true }, { k: 'qtd', r: 'Quantidade', t: 'number' }, { k: 'custoUnit', r: 'Custo unitário (R$)', t: 'number' }, { k: 'precoUnit', r: 'Preço cobrado (R$)', t: 'number' },
         { k: 'fornecedor', r: 'Fornecedor' }, { k: 'origem', r: 'Origem', t: 'select', o: ['Comprada para esta OS', 'Estoque', 'Cliente forneceu'] }, { k: 'link', r: 'Link do fornecedor', t: 'url' }], { qtd: '1' }, o.aprovacao === 'Pendente' ? '<div class="alerta">Atenção: o orçamento desta OS ainda não foi aprovado.</div>' : '')
-        .then(function (v) { if (!v) return; if (v.origem === 'Comprada para esta OS' && o.aprovacao === 'Pendente' && !confirm('O orçamento ainda não foi aprovado. Registrar a compra mesmo assim?')) return; escrever('salvarPeca', [Object.assign({ os: o.num, _rowOS: o._row }, v)]); });
+        .then(function (v) { if (!v) return; (v.origem === 'Comprada para esta OS' && o.aprovacao === 'Pendente' ? perguntar('O orçamento ainda não foi aprovado. Registrar a compra mesmo assim?', { titulo: 'Orçamento pendente', sim: 'Registrar a compra' }) : Promise.resolve(true)).then(function (ok) { if (ok) escrever('salvarPeca', [Object.assign({ os: o.num, _rowOS: o._row }, v)]); }); });
     },
     'cli-editar': function (row) {
       var c = row ? achar('clientes', row) : {};
@@ -401,8 +403,8 @@
     'mod-novo': function () { ACOES['mod-editar'](''); },
     'ag-os': function (row) { var o = achar('os', row); agendar({ titulo: (o.status === 'Pronto' ? 'Retirada ' : 'Atendimento ') + o.num + ' – ' + o.cliente, data: o.previsao || D.hoje, local: V.enderecoOS(D, o), descricao: o.equipamento + (o.defeito ? ' – ' + o.defeito : ''), refTipo: 'os', refId: o.num, linha: o._row }); },
     'ag-ev': function (id) { var a = (D.agenda || []).find(function (x) { return x.eventoId === id; }); agendar({ titulo: a.titulo, data: a.data, hora: a.inicio, local: a.local, descricao: a.descricao || '', refTipo: 'agenda', refId: id }); },
-    'ag-rem': function (id) { if (confirm('Tirar este evento da Agenda do Google?')) escrever('removerEventoAgenda', [{ eventoId: id }], function (c) { c.agenda = (c.agenda || []).filter(function (x) { return x.eventoId !== id; }); }); },
-    'ag-rem-os': function (row) { var o = achar('os', row), id = eventoDaOS(o); if (confirm('Tirar ' + o.num + ' da Agenda do Google?')) escrever('removerEventoAgenda', [{ eventoId: id }], function (c) { (c.os || []).forEach(function (x) { if (x.num === o.num) x.eventoId = ''; }); c.agenda = (c.agenda || []).filter(function (x) { return x.eventoId !== id; }); }); },
+    'ag-rem': function (id) { perguntar('Tirar este evento da Agenda do Google?', { titulo: 'Agenda', sim: 'Tirar da agenda', perigo: true }).then(function (ok) { if (ok) escrever('removerEventoAgenda', [{ eventoId: id }], function (c) { c.agenda = (c.agenda || []).filter(function (x) { return x.eventoId !== id; }); }); }); },
+    'ag-rem-os': function (row) { var o = achar('os', row), id = eventoDaOS(o); perguntar('Tirar ' + o.num + ' da Agenda do Google?', { titulo: 'Agenda', sim: 'Tirar da agenda', perigo: true }).then(function (ok) { if (ok) escrever('removerEventoAgenda', [{ eventoId: id }], function (c) { (c.os || []).forEach(function (x) { if (x.num === o.num) x.eventoId = ''; }); c.agenda = (c.agenda || []).filter(function (x) { return x.eventoId !== id; }); }); }); },
     'em-os': function (row) { var o = achar('os', row); emailTela(V.clienteDaOS(D, o), o); },
     'em-cli': function (row) { var c = achar('clientes', row), ult = (D.os || []).filter(function (o) { return o.cliente === c.nome; }).slice(-1)[0]; emailTela(c, ult || null); },
     'tar-feita': function (row) { var t = achar('tarefas', row); escrever('mudarStatusTarefa', [t.tarefa, t._row, 'Feita'], aplicar('tarefas', row, { status: 'Feita' })); }
@@ -541,7 +543,7 @@
       var b = ev.target.closest('[data-osm]'); if (!b) return; ev.preventDefault();
       var a = b.dataset.osm, p = (b.dataset.p || '').split('.'), d = OSM.d;
       if (a === 'add-eq') { if (d.equipamentos.length >= 20) return aviso('No máximo 20 máquinas por OS.'); d.equipamentos.push(eqVazio(d.equipamentos.length + 1)); OSM.sujo = true; redesenhar(); var n = document.querySelectorAll('.osm-eq'); n[n.length - 1].querySelector('input').focus(); return; }
-      if (a === 'rem-eq') { if (confirm('Remover a máquina ' + (+p[0] + 1) + ' e os itens dela?')) { d.equipamentos.splice(+p[0], 1); OSM.sujo = true; redesenhar(); } return; }
+      if (a === 'rem-eq') { perguntar('Remover a máquina ' + (+p[0] + 1) + ' e os itens dela?', { titulo: 'Remover máquina', sim: 'Remover', perigo: true }).then(function (ok) { if (ok) { d.equipamentos.splice(+p[0], 1); OSM.sujo = true; redesenhar(); } }); return; }
       if (a === 'add-item') { var tp = p.slice(1).join('.'), lst = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[0]].itens; lst.push({ tipo: tp, descricao: '', qtd: '1', valorUnit: '', modo: O.ehAjuste({ tipo: tp }) ? 'R$' : '', origem: '' }); OSM.sujo = true; redesenhar(); return; }
       if (a === 'rem-item') { var l2 = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[1]].itens; l2.splice(+p[p.length - 1], 1); OSM.sujo = true; redesenhar(); return; }
       if (a === 'atalho') { var at = atalhosLista()[+p[1]], dest = p[0] === 'os' ? d.itensOS : d.equipamentos[+p[0].slice(2)].itens; dest.push({ tipo: at.tipo, descricao: at.descricao, qtd: '1', valorUnit: String(at.valorUnit), modo: at.modo, origem: 'atalho' }); OSM.sujo = true; redesenhar(); return; }
@@ -630,10 +632,10 @@
         var w = window.open(URL.createObjectURL(new Blob([o.html], { type: 'text/html' })), '_blank'); if (!w) aviso('Libere as janelas pop-up para imprimir.');
       };
       if ($('orcAprovar')) $('orcAprovar').onclick = function () {
-        if (!confirm('Registrar que o cliente APROVOU o orçamento de ' + O.brl(o.totais.total) + ' agora?')) return;
+        perguntar('Registrar que o cliente APROVOU o orçamento de ' + O.brl(o.totais.total) + ' agora?', { titulo: 'Aprovar orçamento', sim: 'Sim, aprovou' }).then(function (ok) { if (!ok) return;
         api.escrever('aprovarOrcamentoOS', [{ num: OSM.num, _row: OSM.row }], aplicar('os', OSM.row, { aprovacao: 'Aprovado' })).then(function (r) {
           aviso(r.msg); OSM.aprovacao = 'Aprovado'; return iniciar().then(verOrcamento);
-        }, function (er) { aviso('Não aprovou: ' + er.message); });
+        }, function (er) { aviso('Não aprovou: ' + er.message); }); });
       };
     }, function (er) { aviso(er.message); });
   }
@@ -670,8 +672,8 @@
   }
   function removerCondicao() {
     if (!OSM.num || OSM.sujo) return aviso('Salve a OS antes de remover a condição especial.');
-    if (!confirm('Remover a condição especial desta OS?')) return;
-    api.escrever('removerCondicaoEspecialOS', [{ num: OSM.num, _row: OSM.row }]).then(function (r) { aviso(r.msg); return recarregarOSM(); }, function (er) { aviso('Não removeu: ' + er.message); });
+    perguntar('Remover a condição especial desta OS?', { titulo: 'Condição especial', sim: 'Remover', perigo: true }).then(function (ok) { if (!ok) return;
+    api.escrever('removerCondicaoEspecialOS', [{ num: OSM.num, _row: OSM.row }]).then(function (r) { aviso(r.msg); return recarregarOSM(); }, function (er) { aviso('Não removeu: ' + er.message); }); });
   }
   TELAS.osm = telaOSM;
   ACOES['osm-nova'] = function () { OSM = null; location.hash = '#osm'; };
@@ -716,7 +718,7 @@
       '<button class="btn sec" value="fechar">Fechar</button></div><p class="muted">O app só abre o WhatsApp com o texto pronto: quem envia é você.</p></form>';
     m.onclose = null; m.showModal();
     if ($('msgWa')) $('msgWa').addEventListener('click', function () { registrarAberta(this); setTimeout(function () { m.close(''); }, 0); });
-    if ($('bCopiar')) $('bCopiar').onclick = function () { var t = p.link; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Link copiado.'); }, function () { prompt('Copie o link:', t); }); };
+    if ($('bCopiar')) $('bCopiar').onclick = function () { var t = p.link; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Link copiado.'); }, function () { P.pedirTexto('Não deu para copiar sozinho. Toque e segure no link abaixo para copiar.', { titulo: 'Copiar link', valor: t, somenteLeitura: true, sim: 'Fechar', nao: false }); }); };
   }
   function lerOuAviso(acao, args) { if (!api.pode(acao)) { aviso('Esta função ainda não foi liberada no servidor (crm-v3).'); return Promise.reject(new Error('bloq')); } return api.ler(acao, args).catch(function (er) { aviso('Não deu: ' + er.message + (offline ? ' (sem internet)' : '')); throw er; }); }
   function escreverResp(acao, args) { if (!api.pode(acao)) { aviso('Esta função ainda não foi liberada no servidor (crm-v3).'); return Promise.reject(new Error('bloq')); } return api.escrever(acao, args).then(function (r) { return r.dados || r; }).catch(function (er) { aviso('Não deu: ' + er.message); throw er; }); }
@@ -800,7 +802,7 @@
   // Sem internet: vai para a fila e o aparelho já mostra o novo selo. Servidor antigo (sem a ação): salvarCliente + registrarInteracao.
   ACOES['cli-lgpd'] = function (row) {
     var c = achar('clientes', row), dar = c.consent !== 'Sim';
-    if (!confirm(dar ? 'Registrar que ' + c.nome + ' AUTORIZOU receber mensagens da ProFix (LGPD)?' : 'Revogar o consentimento de ' + c.nome + '? Mensagens de marketing deixam de aparecer; as da OS continuam com aviso.')) return;
+    perguntar(dar ? 'Registrar que ' + c.nome + ' AUTORIZOU receber mensagens da ProFix (LGPD)?' : 'Revogar o consentimento de ' + c.nome + '? Mensagens de marketing deixam de aparecer; as da OS continuam com aviso.', { titulo: 'Consentimento LGPD', sim: dar ? 'Sim, autorizou' : 'Revogar', perigo: !dar }).then(function (ok) { if (!ok) return;
     var mud = { consent: dar ? 'Sim' : 'Não', dataConsent: D.hoje }, fim = function (r) { aviso((dar ? 'Consentimento registrado.' : 'Consentimento revogado.') + (r && r.enfileirado ? ' (vai para a planilha quando voltar a internet)' : '')); return iniciar(); };
     FICHA.nome = '';
     if (api.pode('registrarConsentimento')) return api.escrever('registrarConsentimento', [{ cliente: c.nome, aceita: dar }], aplicar('clientes', row, mud)).then(fim, function (er) { aviso('Não salvou: ' + er.message); });
@@ -808,6 +810,7 @@
     api.escrever('salvarCliente', [d], aplicar('clientes', row, mud)).then(function () {
       return api.escrever('registrarInteracao', [{ cliente: c.nome, _rowCliente: c._row, canal: 'Presencial', resumo: dar ? 'Consentimento LGPD registrado (cliente autorizou contato)' : 'Consentimento LGPD revogado a pedido do cliente' }]);
     }).then(fim, function (er) { aviso('Não salvou: ' + er.message); });
+    });
   };
   ACOES['cli-maq'] = function (row) {
     var c = achar('clientes', row);
@@ -941,12 +944,13 @@
   function excluir(ref, desc) {
     if (!api.pode('excluirRegistro')) return aviso('Esta função ainda não foi liberada no servidor (crm-v3).');
     if (semNet()) return;
-    if (!confirm('Mandar ' + desc + ' para a Lixeira?\nDá para restaurar depois em Mais › Lixeira.')) return;
+    perguntar('Mandar ' + desc + ' para a Lixeira?\nDá para restaurar depois em Mais › Lixeira.', { titulo: '🗑 Excluir', sim: 'Mandar para a Lixeira', perigo: true }).then(function (sim) { if (!sim) return aviso('Cancelado: nada foi excluído.');
     var ok = function (r) { aviso(r.msg || 'Foi para a Lixeira.'); LX = null; FICHA.nome = ''; if (ref.tipo === 'cliente' && rota().tela === 'cliente') location.hash = '#clientes'; return iniciar(); };
     escreverResp('excluirRegistro', [ref]).then(function (r) {
       if (!r || !r.precisaConfirmar) return ok(r || {});
       mostrarImpacto(r, function () { escreverResp('excluirRegistro', [Object.assign({}, ref, { cascata: true })]).then(function (r2) { if (r2 && r2.precisaConfirmar) return aviso('O servidor não confirmou a exclusão. Nada foi alterado.'); ok(r2 || {}); }, function () {}); });
     }, function () {});
+    });
   }
   function mostrarImpacto(r, sim) {
     var imp = r.impacto || {}, m = $('modal'), grupo = function (rot, l) { return (l || []).length ? '<div><b>' + rot + ' (' + l.length + ')</b><ul>' + l.map(function (x) { return '<li>' + e(x.descricao || x.id) + '</li>'; }).join('') + '</ul></div>' : ''; };
@@ -983,23 +987,18 @@
   };
   ACOES['lx-apagar'] = function (id) {
     if (semNet()) return;
-    var x = ((LX && LX.itens) || []).filter(function (k) { return k.id === id; })[0] || { id: id }, m = $('modal');
-    m.innerHTML = '<form method="dialog" class="detalhe" id="fApagar"><h2 style="margin:0">Apagar ' + e(id) + ' definitivamente?</h2><p class="alerta">Não dá para desfazer. Os dados de “' + e(x.descricao || id) + '” somem (fica só o ID)' + (x.grupo ? ' – vale para o grupo ' + e(x.grupo) + ' inteiro' : '') + '.</p>' +
-      '<label for="cApagar">Digite <b>APAGAR</b> para confirmar</label><input id="cApagar" autocomplete="off" autocapitalize="characters" spellcheck="false">' +
-      '<div class="grandes"><button class="btn perigo" value="ok" id="bApagar" disabled>Apagar definitivamente</button><button class="btn sec" value="cancelar" formnovalidate>Cancelar</button></div></form>';
-    $('cApagar').oninput = function () { $('bApagar').disabled = this.value.trim() !== 'APAGAR'; };
-    m.onclose = function () { m.onclose = null; var t = $('cApagar') ? $('cApagar').value.trim() : '';
-      if (m.returnValue !== 'ok' || t !== 'APAGAR') return aviso('Nada foi apagado.');
-      escreverResp('apagarDefinitivo', [{ id: id, confirmar: 'APAGAR' }]).then(function (r) { aviso(r.msg || 'Apagado.'); LX = null; render(); }, function () {}); };
-    m.returnValue = ''; m.showModal(); $('cApagar').focus();
+    var x = ((LX && LX.itens) || []).filter(function (k) { return k.id === id; })[0] || { id: id };
+    P.pedirTexto('Não dá para desfazer. Os dados de “' + (x.descricao || id) + '” somem (fica só o ID)' + (x.grupo ? ' – vale para o grupo ' + x.grupo + ' inteiro' : '') + '.', { titulo: 'Apagar ' + id + ' definitivamente?', rotulo: 'Digite APAGAR para confirmar', exigir: 'APAGAR', sim: 'Apagar definitivamente', perigo: true })
+      .then(function (t) { if (t === null || t.trim() !== 'APAGAR') return aviso('Nada foi apagado.');
+        escreverResp('apagarDefinitivo', [{ id: id, confirmar: 'APAGAR' }]).then(function (r) { aviso(r.msg || 'Apagado.'); LX = null; render(); }, function () {}); });
   };
   PRECISA['lx-rest'] = 'restaurarRegistro'; PRECISA['lx-apagar'] = 'apagarDefinitivo';
 
   // Leads: definirStatusLead (Convertido = converterLeadLink no servidor). Sem internet: fila + tela já atualizada.
   ACOES['lead-st'] = function (k) {
     var p = String(k).split('|'), row = Number(p[0]), st = p[1], l = (D.leadsLink || []).filter(function (x) { return x._row === row; })[0];
-    if (st === 'Convertido' && !confirm('Converter “' + (l ? l.nome : row) + '” em cliente? O lead fica marcado como convertido (não é apagado).')) return;
-    escrever('definirStatusLead', [{ _row: row, status: st }], function (cache) { (cache.leadsLink || []).forEach(function (x) { if (x._row === row) { x.status = st; x.situacao = st; x.statusEm = Dif.agoraTxt(); } }); });
+    (st === 'Convertido' ? perguntar('Converter “' + (l ? l.nome : row) + '” em cliente? O lead fica marcado como convertido (não é apagado).', { titulo: 'Converter lead', sim: '✅ Converter em cliente' }) : Promise.resolve(true)).then(function (ok) { if (!ok) return;
+    escrever('definirStatusLead', [{ _row: row, status: st }], function (cache) { (cache.leadsLink || []).forEach(function (x) { if (x._row === row) { x.status = st; x.situacao = st; x.statusEm = Dif.agoraTxt(); } }); }); });
   };
   PRECISA['lead-st'] = 'definirStatusLead';
   function registrarLeadAberto(row, canal) {
@@ -1062,7 +1061,7 @@
     }); });
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };
-    if ($('bSair')) $('bSair').onclick = function () { if (confirm('Sair deste aparelho? Vai precisar digitar a senha (ou a chave) de novo.')) { api.esquecerToken(); telaChave(); } };
+    if ($('bSair')) $('bSair').onclick = function () { perguntar('Sair deste aparelho? Vai precisar digitar a senha (ou a chave) de novo.', { titulo: 'Sair', sim: 'Sair', perigo: true }).then(function (ok) { if (ok) { api.esquecerToken(); telaChave(); } }); };
     if ($('bInstalar')) { $('bInstalar').hidden = !instalar; $('bInstalar').onclick = function () { instalar.prompt(); instalar = null; }; }
     if ($('dicaIos') && /iphone|ipad/i.test(navigator.userAgent)) $('dicaIos').textContent = 'No iPhone: toque em Compartilhar ⬆️ e depois em “Adicionar à Tela de Início”.';
   }
