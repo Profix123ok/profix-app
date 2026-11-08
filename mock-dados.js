@@ -32,16 +32,16 @@
         { _row: 2, data: d(-4), cliente: 'Carla Exemplo Souza', canal: 'WhatsApp', resumo: 'Enviei o orçamento da fonte', proximoPasso: 'Cobrar resposta', dataProx: d(3), por: 'Pedro' }
       ],
       os: [
-        { _row: 2, num: 'OS-0012', entrada: d(-5), cliente: 'Bruno Exemplo Lima', equipamento: 'Notebook Dell (fictício)', defeito: 'Lento e esquentando', servico: 'Formatação Windows', status: 'Em reparo', valor: 99.9, custo: 0, previsao: d(1), statusEm: d(-2), senha: '1234', acessorios: 'Carregador', diagnostico: '', orcamento: '', aprovacao: '' },
+        { _row: 2, num: 'OS-0012', entrada: d(-5), cliente: 'Bruno Exemplo Lima', equipamento: 'Notebook Dell (fictício)', defeito: 'Lento e esquentando', servico: 'Formatação sem backup', status: 'Em reparo', valor: 66.9, custo: 0, previsao: d(1), statusEm: d(-2), senha: '1234', acessorios: 'Carregador', diagnostico: '', orcamento: '', aprovacao: '' },
         { _row: 3, num: 'OS-0013', entrada: d(-4), cliente: 'Carla Exemplo Souza', equipamento: 'Desktop gamer (fictício)', defeito: 'Não dá vídeo', status: 'Aguardando aprovação', valor: '', orcamento: 380, diagnostico: 'Fonte com defeito', itensOrc: 'Mão de obra + fonte 600W', validade: d(6), aprovacao: 'Pendente', statusEm: d(-3) },
-        { _row: 4, num: 'OS-0015', entrada: d(-9), cliente: 'Ana Exemplo Silva', equipamento: 'PC montado', servico: 'Montagem de PC', status: 'Pronto', valor: 150, statusEm: d(-8) },
-        { _row: 5, num: 'OS-0010', entrada: d(-12), cliente: 'Ana Exemplo Silva', equipamento: 'Notebook Acer', servico: 'Formatação Windows', status: 'Entregue', valor: 120, entrega: d(-4), forma: 'Pix' },
-        { _row: 6, num: 'OS-0009', entrada: d(-125), cliente: 'Elisa Exemplo Prado', equipamento: 'Notebook Lenovo (fictício)', servico: 'Limpeza interna', status: 'Entregue', valor: 90, entrega: d(-120), forma: 'Dinheiro' }
+        { _row: 4, num: 'OS-0015', entrada: d(-9), cliente: 'Ana Exemplo Silva', equipamento: 'PC montado', servico: 'Montagem de PC (peças do cliente)', status: 'Pronto', valor: 350.9, statusEm: d(-8) },
+        { _row: 5, num: 'OS-0010', entrada: d(-12), cliente: 'Ana Exemplo Silva', equipamento: 'Notebook Acer', servico: 'Formatação sem backup', status: 'Entregue', valor: 66.9, entrega: d(-4), forma: 'Pix' },
+        { _row: 6, num: 'OS-0009', entrada: d(-125), cliente: 'Elisa Exemplo Prado', equipamento: 'Notebook Lenovo (fictício)', servico: 'Limpeza interna + pasta térmica (notebook)', status: 'Entregue', valor: 152.9, entrega: d(-120), forma: 'Dinheiro' }
       ],
       pecas: [{ _row: 2, data: d(-3), os: 'OS-0012', peca: 'SSD 480 GB (exemplo)', qtd: 1, custoUnit: 180, precoUnit: 250, fornecedor: 'Loja exemplo', origem: 'Comprada para esta OS', link: '' }],
       financeiro: [
-        { _row: 2, data: d(-4), tipo: 'Entrada', categoria: 'Serviço', os: 'OS-0010', descricao: 'Recebimento OS OS-0010', forma: 'Pix', receita: 120, custo: 0 },
-        { _row: 4, data: d(-120), tipo: 'Entrada', categoria: 'Serviço', os: 'OS-0009', descricao: 'Recebimento OS OS-0009', forma: 'Dinheiro', receita: 90, custo: 0 },
+        { _row: 2, data: d(-4), tipo: 'Entrada', categoria: 'Serviço', os: 'OS-0010', descricao: 'Recebimento OS OS-0010', forma: 'Pix', receita: 66.9, custo: 0 },
+        { _row: 4, data: d(-120), tipo: 'Entrada', categoria: 'Serviço', os: 'OS-0009', descricao: 'Recebimento OS OS-0009', forma: 'Dinheiro', receita: 152.9, custo: 0 },
         { _row: 3, data: ym + '-02', tipo: 'Saída', categoria: 'Compra de peça', os: '', descricao: 'Pasta térmica (exemplo)', forma: 'Pix', receita: '', custo: 35 }
       ],
       tarefas: [
@@ -51,7 +51,7 @@
       ],
       maquinas: [{ id: 'MAQ-0001', cliente: 'Ana Exemplo Silva', tipo: 'Notebook', modelo: 'Acer Aspire (fictício)', serie: 'SN-EXEMPLO-001' }, { id: 'MAQ-0002', cliente: 'Ana Exemplo Silva', tipo: 'Desktop', modelo: 'PC montado (fictício)', serie: '' }],
       timelineCli: [{ quando: d(-4) + ' 17:00', cliente: 'Ana Exemplo Silva', os: 'OS-0010', evento: 'Avaliação pedida', detalhe: 'Link de avaliação aberto no WhatsApp' }],
-      contratos: [{ id: 'CT-0001', cliente: 'Carla Exemplo Souza', plano: 'Plano empresarial (fictício)', valor: 250, visitas: 2, status: 'Ativo', inicio: d(-30), obs: '' }],
+      contratos: [{ id: 'CT-0001', cliente: 'Carla Exemplo Souza', plano: 'Essencial', valor: 143.8, visitas: 0, status: 'Ativo', inicio: d(-30), obs: 'Exemplo fictício. Visita preventiva: a cada 2 meses. Até 3 computadores. Limpeza a cada 6 meses.' }],
       visitas: [{ id: 'VT-0001', contrato: 'CT-0001', cliente: 'Carla Exemplo Souza', data: hoje, prioridade: 'Alta', status: 'Agendada', inicio: '', fim: '', km: '', horas: '', os: '', obs: 'Rede do escritório (fictício)' }],
       cotaEmail: 95, // e-mails que ainda podem sair hoje (fictício)
       leadsLink: [
@@ -92,9 +92,9 @@
         { _row: 3, id: 'RV0002', compra: d(-12), equipamento: 'Notebook ThinkPad (fictício)', config: 'i5, 8 GB, SSD 256', status: 'À venda', precoCompra: 900, frete: 0, pecas: 120, insumos: 10, anunciado: 1490 }
       ],
       catalogo: [
-        { _row: 2, servico: 'Diagnóstico', preco: 50, tipo: 'Fixo', descricao: 'Avaliação do equipamento', tempo: '1 dia', ativo: 'Sim', status: 'Ativo' },
-        { _row: 3, servico: 'Formatação Windows', preco: 99.9, tipo: 'A partir de', descricao: 'Formatação com drivers', tempo: '1 dia', ativo: 'Sim', status: 'Ativo' },
-        { _row: 4, servico: 'Suporte remoto avulso', preco: '', tipo: 'Sob orçamento', descricao: '', ativo: 'Não', status: 'Proposto', sugerido: 'R$ 70 por hora (exemplo)' }
+        { _row: 2, servico: 'Diagnóstico/orçamento (bancada)', preco: 62.9, tipo: 'Fixo', descricao: 'Avaliação do equipamento (só mão de obra)', tempo: '1 dia', ativo: 'Sim', status: 'Ativo' },
+        { _row: 3, servico: 'Formatação sem backup', preco: 66.9, tipo: 'Fixo', descricao: 'Formatação com drivers (só mão de obra)', tempo: '1 dia', ativo: 'Sim', status: 'Ativo' },
+        { _row: 4, servico: 'Hora técnica', preco: '', tipo: 'Sob orçamento', descricao: 'Sem valor na tabela de 02/11/2026', ativo: 'Não', status: 'Proposto', sugerido: 'sob orçamento' }
       ]
     };
   }
@@ -260,7 +260,7 @@
     // ---- v0.6.0: OS com vários equipamentos (mesmas ações e respostas do crm-v3 v3.1; conta em os_multi.js) ----
     var OSM = typeof ProFixOSM !== 'undefined' ? ProFixOSM : require('./os_multi.js');
     D.osMulti = D.osMulti || {}; // num -> { revisao, dados }
-    D.catalogoOS = D.catalogoOS || OSM.CATALOGO_DEMO.map(function (c) { return Object.assign({ tipoPreco: '', ativo: 'Sim', fonte: 'Sugestão (mediana +12,5%)' }, c); });
+    D.catalogoOS = D.catalogoOS || OSM.CATALOGO_DEMO.map(function (c) { return Object.assign({ tipoPreco: '', ativo: 'Sim', fonte: 'Tabela aprovada 02/11/2026 (mercado Sorocaba −10%; só mão de obra)' }, c); });
     var copia = function (o) { return JSON.parse(JSON.stringify(o)); };
     var cliDe = function (nome) { var c = (D.clientes || []).filter(function (k) { return k.nome === nome; })[0] || {}; return { nome: c.nome || nome, whatsapp: c.whatsapp || '', bairro: c.bairro || '' }; };
     var osDe = function (num) { return (D.os || []).filter(function (o) { return String(o.num) === String(num); })[0] || null; };
@@ -394,7 +394,7 @@
       return { ok: true, html: '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Laudo técnico ' + esc(o.num) + '</title><button onclick="print()">🖨️ Imprimir / salvar PDF</button><h1>Laudo técnico – ' + esc(o.num) + '</h1>' +
         '<p><b>ProFix Computadores</b> (demonstração, dados fictícios)</p><h2>Atendimento</h2><p>' + esc(o.cliente) + ' · ' + esc(o.equipamento) + '</p><h2>Defeito relatado</h2><p>' + esc(o.defeito || '—') + '</p><h2>Diagnóstico</h2><p>' + esc(o.diagnostico || '—') + '</p>' +
         '<h2>Checklist</h2><p>' + (ck.length ? ck.map(function (c) { return esc(c.momento) + ': ' + Object.keys(c.itens).map(function (k) { return esc(k + ' ' + c.itens[k]); }).join(', '); }).join('<br>') : 'Sem checklist registrado.') + '</p>' +
-        '<h2>Garantia</h2><p>' + (g.length ? g[0].dias + ' dias, até ' + Dif.dataBR(g[0].ate) : 'Garantia de 30 dias a partir da entrega.') + '</p></html>' };
+        '<h2>Garantia</h2><p>' + 'Garantia legal de 90 dias (CDC).' + (g.length ? ' Garantia ProFix de ' + g[0].dias + ' dias a partir da entrega (até ' + Dif.dataBR(g[0].ate) + ').' : garDias() ? ' Garantia ProFix de ' + garDias() + ' dias a partir da entrega.' : '') + '</p></html>' };
     };
     S.linkClienteOS = function (x) { var o = osNum(x && x.num); return { ok: true, num: o.num, url: urlOS(o), msg: 'Link do cliente pronto.' }; };
     S.textoStatusOS = function (x) {
@@ -411,7 +411,7 @@
       if (!t) throw new Error('Tipo de mensagem inválido.'); var tel = telWa(c);
       return { ok: true, texto: t, podeAbrir: !!tel, waUrl: tel ? waUrl(tel, t) : '', aviso: tel ? '' : 'Cliente sem WhatsApp válido.' };
     };
-    S.resumoMes = function (x) { var r = Dif.resumoMesLocal(D, (x && x.mes) || h().slice(0, 7)); delete r.local; r.receitaContratos = D.contratos.filter(function (k) { return k.status === 'Ativo'; }).reduce(function (s, k) { return s + Number(k.valor || 0); }, 0); return r; };
+    S.resumoMes = function (x) { var r = Dif.resumoMesLocal(D, (x && x.mes) || h().slice(0, 7)); delete r.local; r.receitaContratos = D.contratos.filter(function (k) { return k.status === 'Ativo'; }).reduce(function (s, k) { return Math.round((s + Number(k.valor || 0)) * 100) / 100; }, 0); return r; };
     S.listaContratos = function () {
       var P = ['Urgente', 'Alta', 'Normal', 'Baixa'], ord = function (p) { return P.indexOf(p); };
       return { ok: true, contratos: copia(D.contratos), visitas: copia(D.visitas).sort(function (a, b) { return (a.status === 'Concluída') - (b.status === 'Concluída') || ord(a.prioridade) - ord(b.prioridade) || (a.data < b.data ? -1 : 1); }), prioridades: P };

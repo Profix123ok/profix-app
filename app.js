@@ -329,7 +329,7 @@
     'os-orc': function (row) {
       var o = achar('os', row);
       formulario('Orçamento da ' + e(o.num), [{ k: 'diagnostico', r: 'Diagnóstico / laudo', t: 'textarea' }, { k: 'itensOrc', r: 'Itens do orçamento', t: 'textarea' }, { k: 'orcamento', r: 'Valor do orçamento (R$)', t: 'number', req: true },
-        { k: 'validade', r: 'Válido até', t: 'date', ajuda: 'Em branco = 10 dias.' }, { k: 'previsao', r: 'Previsão de entrega', t: 'date' }], o)
+        { k: 'validade', r: 'Válido até', t: 'date', ajuda: 'Em branco = ' + (Dif.padroes(D).validadeDias || 7) + ' dias (padrão do servidor).' }, { k: 'previsao', r: 'Previsão de entrega', t: 'date' }], o)
         .then(function (v) { if (!v) return; escrever('salvarOrcamento', [Object.assign({ num: o.num, _row: o._row }, v)], aplicar('os', row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v))); });
     },
     'os-decidir': function (row) {
@@ -526,7 +526,7 @@
     var i = inp.dataset.osmQ, box = $('osmRes' + i); if (!box) return;
     var q = inp.value.trim(); if (!q) { box.innerHTML = ''; return; }
     var r = O.buscarCatalogo(CAT || [], q, 8);
-    box.innerHTML = r.map(function (c) { var k = (CAT || []).indexOf(c); return '<button type="button" class="osm-cat" data-osm="cat" data-p="' + i + '.' + k + '"><span>' + e(c.descricao) + ' <span class="muted">' + e(c.categoria || '') + '</span></span><b>' + (c.valor === '' || c.valor == null ? 'sem preço' : O.brl(c.valor)) + '</b></button>'; }).join('') +
+    box.innerHTML = r.map(function (c) { var k = (CAT || []).indexOf(c); return '<button type="button" class="osm-cat" data-osm="cat" data-p="' + i + '.' + k + '"><span>' + e(c.descricao) + ' <span class="muted">' + e(c.categoria || '') + '</span></span><b>' + precoTxt(c) + '</b></button>'; }).join('') +
       '<button type="button" class="osm-cat" data-osm="livre" data-p="' + i + '"><span>+ Lançar “' + e(q) + '” sem catálogo</span></button>' + (CAT ? '' : '<p class="muted">Catálogo ainda não carregado (precisa de internet na 1ª vez).</p>');
   }
   function mudou() { OSM.sujo = true; atualizarTotais(); }
@@ -690,7 +690,7 @@
     carregarCatalogo();
     var l = (CAT || []).map(function (c, k) { return { c: c, k: k }; }).filter(function (x) { return x.c.origem === 'Catálogo OS' || !x.c.origem; });
     return '<div class="row"><p class="muted">Preços usados no registro rápido da OS (aba “Catálogo OS”).</p>' + botao('+ Novo preço', 'cos-editar', '', '') + '</div>' +
-      (CAT ? lista(l, function (x) { return card(e(x.c.descricao), e(x.c.categoria || '') + ' · ' + (x.c.valor === '' || x.c.valor == null ? 'sem preço' : O.brl(x.c.valor)) + (x.c.fonte ? '<br>' + e(x.c.fonte) : ''), '', botao('Editar', 'cos-editar', String(x.k))); }, 'Catálogo OS vazio.') : '<div class="vazio">Carregando o catálogo…</div>');
+      (CAT ? lista(l, function (x) { return card(e(x.c.descricao), e(x.c.categoria || '') + ' · ' + precoTxt(x.c) + (x.c.fonte ? '<br>' + e(x.c.fonte) : ''), '', botao('Editar', 'cos-editar', String(x.k))); }, 'Catálogo OS vazio.') : '<div class="vazio">Carregando o catálogo…</div>');
   }
 
   // ---------- v0.7.0: Clientes 360 (ficha, LGPD, linha do tempo, máquinas), checklist, laudo, garantia, link da OS, contratos/visitas, painel do mês ----------
@@ -828,8 +828,15 @@
   // ---- OS: checklist, laudo, garantia, link de acompanhamento e mensagem de status ----
   function blocoGarantiaOS(o) {
     var g = Dif.garantiasDaOS(o, D.hoje, Dif.padroes(D).garantiaDias)[0]; if (!g) return '';
-    return '<div id="garantiaOS">' + (g.restam >= 0 ? tag('🛡 Garantia ' + g.dias + ' dias · até ' + Dif.dataBR(g.ate) + ' · faltam ' + g.restam + (g.restam === 1 ? ' dia' : ' dias'), 'ok') : tag('Garantia vencida em ' + Dif.dataBR(g.ate), 'vencido')) + '</div>';
+    return '<div id="garantiaOS">' + (g.restam >= 0 ? tag('🛡 Garantia ' + g.dias + ' dias · até ' + Dif.dataBR(g.ate) + ' · faltam ' + g.restam + (g.restam === 1 ? ' dia' : ' dias'), 'ok') : tag('Garantia vencida em ' + Dif.dataBR(g.ate), 'vencido')) +
+      '<p class="muted" id="garantiaRecibo">' + e(textoGarantiaRecibo()) + '</p></div>';
   }
+  /** Texto de garantia do recibo: garantia legal (CDC, 90 dias) + Garantia ProFix (dias vindos do servidor, hoje 30). */
+  function textoGarantiaRecibo() { var gd = Dif.padroes(D).garantiaDias; return 'Garantia legal de 90 dias (CDC).' + (gd ? ' Garantia ProFix de ' + gd + ' dias a partir da entrega.' : ''); }
+  /** Preço da tabela: só mão de obra; sem valor = "sob orçamento". */
+  function precoTxt(c) { return c.valor === '' || c.valor == null || /sob or/i.test(c.tipoPreco || '') ? 'sob orçamento' : O.brl(c.valor) + (/pe[çc]a n[ãa]o inclusa/i.test(c.descricao || '') ? ' (mão de obra)' : ''); }
+  /** Valor da visita técnica à empresa, do catálogo (tabela do servidor). Nada fixo no código. */
+  function txtVisita() { var v = (CAT || []).filter(function (c) { return /visita t[ée]cnica/i.test(c.descricao || '') && c.valor !== '' && c.valor != null; })[0]; return 'Visita técnica à parte' + (v ? ': ' + O.brl(v.valor) : ' (valor no Catálogo OS)') + '.'; }
   function botoesDifOS(o) {
     return '<div class="grandes" id="acoesDifOS">' + (api.pode('salvarChecklistOS') ? botao('✅ Checklist', 'os-chk', o._row, '').replace(' peq', '') : '') +
       (api.pode('textoStatusOS') ? botao('📲 Avisar status', 'os-msg', o._row, 'sec').replace(' peq', '') : '') +
@@ -885,6 +892,28 @@
   };
   PRECISA['os-chk'] = 'salvarChecklistOS'; PRECISA['cli-maq'] = 'salvarMaquina';
 
+  // Planos oficiais aprovados pelo Pedro em 08/11/2026 (areas/planos-empresas.md).
+  var PLANOS = [
+    { nome: 'Essencial', valor: 143.80, pcs: 3, frequencia: 'a cada 2 meses', limpeza: 6, visitas: 0, para: 'Para quem está começando e quer um cuidado básico.' },
+    { nome: 'Empresa', valor: 431.40, pcs: 6, frequencia: 'mensal', limpeza: 6, visitas: 1, para: 'Para empresas que dependem do computador o dia todo.' },
+    { nome: 'Empresa+', valor: 719.00, pcs: 10, frequencia: 'mensal', limpeza: 4, visitas: 1, para: 'Para equipes maiores, com prioridade na agenda.' }
+  ];
+  function planoOficial(nome) { return PLANOS.filter(function (p) { return p.nome === nome; })[0]; }
+  function frequenciaContrato(k) {
+    var p = planoOficial(k.plano); if (p) return 'Visita ' + p.frequencia;
+    if (/a cada 2 meses|bimestral/i.test(k.obs || '') || Number(k.visitas) === 0.5) return 'Visita a cada 2 meses';
+    return Number(k.visitas) === 1 ? 'Visita mensal' : String(k.visitas || 0) + ' visita(s)/mês';
+  }
+  function cardsPlanos() {
+    return '<section id="planosOficiais" aria-label="Planos oficiais"><h2>Planos para empresas</h2><div class="planos-grade">' + PLANOS.map(function (p) {
+      return '<article class="plano-oficial" data-plano="' + e(p.nome) + '"><h3>' + e(p.nome) + '</h3>' + (p.nome === 'Empresa' ? '<span class="plano-selo">Plano completo</span>' : '') +
+        '<p>' + e(p.para) + ' Até ' + p.pcs + ' computadores.</p><div class="plano-preco">' + V.brl(p.valor) + '<small>/mês</small></div><strong class="plano-destaque">Visita ' + p.frequencia + '</strong>' +
+        '<ul><li>Visita preventiva no local, fora do horário comercial</li><li>Checagem de desempenho em cada visita</li><li><strong>Limpeza interna completa de cada máquina a cada ' + p.limpeza + ' meses</strong></li>' +
+        (p.nome === 'Empresa+' ? '<li><strong>Prioridade na agenda da semana (à noite ou no fim de semana)</strong></li>' : '') +
+        '<li>Suporte por WhatsApp nos horários de atendimento</li><li>10% de desconto em serviços avulsos</li></ul></article>';
+    }).join('') + '</div><p class="muted">Máquina extra: R$ 71,90/mês cada, somada ao plano atual. Acima de 10 computadores: orçamento sob medida, depois de uma avaliação. Peças sempre à parte.</p>' +
+      '<p class="muted">Pagamento mensal, por Pix e antecipado. Direito de arrependimento de 7 dias (CDC). Atendimento com hora marcada: seg a sex, das 19h às 22h; sáb e dom, das 9h às 17h. Sem promessa de prazo de resposta ou emergência.</p></section>';
+  }
   // ---- Contratos e visitas técnicas (Mais > Visitas) ----
   function carregarCT() {
     if (carregarCT.indo) return; if (!api.pode('listaContratos')) { CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [] }; return; }
@@ -894,16 +923,16 @@
   }
   function telaVisitas() {
     if (!CT) { carregarCT(); return '<div class="vazio">Carregando contratos e visitas…</div>'; }
-    var vs = CT.visitas || [], abertas = vs.filter(function (v) { return v.status !== 'Concluída'; });
+    carregarCatalogo(); var vs = CT.visitas || [], abertas = vs.filter(function (v) { return v.status !== 'Concluída'; });
     return '<div class="row">' + (api.pode('salvarVisita') ? botao('+ Visita', 'vis-nova', '', '') : '') + (api.pode('salvarContrato') ? botao('+ Contrato', 'ct-novo', '') : '') + '</div>' + (CT.erro ? '<p class="muted">Sem internet: mostrando a última cópia.</p>' : '') +
-      '<h2>🚗 Visitas (' + abertas.length + ' abertas)</h2>' + lista(vs, function (v) {
+      '<h2>🚗 Visitas (' + abertas.length + ' abertas)</h2><p class="muted" id="visitaPreco">' + e(txtVisita()) + '</p>' + lista(vs, function (v) {
         var c = (D.clientes || []).filter(function (k) { return k.nome === v.cliente; })[0], end = c && c.endereco;
         return card(e(v.id) + ' · ' + e(v.cliente), V.dataBR(v.data) + (v.contrato ? ' · ' + e(v.contrato) : '') + (v.inicio ? '<br>Início ' + e(String(v.inicio).slice(11, 16) || v.inicio) : '') + (v.status === 'Concluída' ? ' · ' + String(v.horas).replace('.', ',') + ' h · ' + e(v.km) + ' km' : ''),
           tag(v.prioridade, V.norm(v.prioridade) === 'urgente' ? 'vencido' : V.norm(v.prioridade)) + tag(v.status, v.status === 'Concluída' ? 'ok' : v.status === 'Em andamento' ? 'azul' : 'cinza'),
           (v.status === 'Agendada' && api.pode('iniciarVisita') ? botao('▶️ Iniciar visita', 'vis-ini', v.id, '') : '') + (v.status === 'Em andamento' && api.pode('encerrarVisita') ? botao('⏹ Encerrar visita', 'vis-fim', v.id, '') : '') +
           (end ? mapsBtn(end) : '') + (c && telLink(c) ? '<a class="btn sec peq" href="' + e(telLink(c)) + '">📞 Ligar</a>' : '') + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-visita="' + e(v.id) + '"');
       }, 'Nenhuma visita.') +
-      '<h2>📄 Contratos mensais</h2>' + lista(CT.contratos || [], function (k) { return card(e(k.id) + ' · ' + e(k.cliente), e(k.plano || '') + ' · ' + V.brl(k.valor) + '/mês · ' + e(k.visitas) + ' visita(s)/mês', tag(k.status, k.status === 'Ativo' ? 'ok' : 'cinza'), ''); }, 'Nenhum contrato.');
+      cardsPlanos() + '<h2>📄 Contratos mensais</h2>' + lista(CT.contratos || [], function (k) { return card(e(k.id) + ' · ' + e(k.cliente), e(k.plano || '') + ' · ' + V.brl(k.valor) + '/mês · ' + e(frequenciaContrato(k)) + (/fictício/i.test(k.obs || '') ? ' · Exemplo fictício' : ''), tag(k.status, k.status === 'Ativo' ? 'ok' : 'cinza'), ''); }, 'Nenhum contrato.');
   }
   function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
   ACOES['vis-nova'] = function () {
@@ -913,9 +942,28 @@
       .then(function (v) { if (!v) return; depoisCT('salvarVisita', [Object.assign({ idOperacao: Dif.idOperacao('vis') }, v)]); });
   };
   ACOES['ct-novo'] = function () {
-    formulario('+ Contrato mensal', [{ k: 'cliente', r: 'Cliente', t: 'select', o: (D.clientes || []).map(function (c) { return c.nome; }), req: true }, { k: 'plano', r: 'Plano' }, { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
-      { k: 'visitas', r: 'Visitas por mês', t: 'number' }, { k: 'inicio', r: 'Início', t: 'date' }, { k: 'obs', r: 'Observações', t: 'textarea' }], { plano: 'Plano empresarial', visitas: '1', inicio: D.hoje })
-      .then(function (v) { if (!v) return; depoisCT('salvarContrato', [v]); });
+    formulario('+ Contrato mensal', [{ k: 'cliente', r: 'Cliente', t: 'select', o: (D.clientes || []).map(function (c) { return c.nome; }), req: true },
+      { k: 'plano', r: 'Plano', t: 'select', o: PLANOS.map(function (p) { return p.nome; }), req: true },
+      { k: 'extras', r: 'Máquinas extras (R$ 71,90/mês cada)', t: 'number' }, { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
+      { k: 'frequencia', r: 'Frequência da visita' }, { k: 'inicio', r: 'Início', t: 'date' }, { k: 'obs', r: 'Observações', t: 'textarea' }],
+      { plano: 'Essencial', extras: '0', valor: '143,80', frequencia: 'a cada 2 meses', inicio: D.hoje })
+      .then(function (v) {
+        if (!v) return; var p = planoOficial(v.plano), n = Number(v.extras || 0);
+        if (!p || !Number.isInteger(n) || n < 0) return aviso('Informe uma quantidade inteira de máquinas extras, maior ou igual a zero.');
+        // A API atual só tem visitas inteiras por mês. Não mandar 0,5 (seria arredondado para 1).
+        // Bimestral fica em obs e é exibido pelo plano oficial; não agenda visitas automaticamente.
+        var obs = 'Visita preventiva: ' + p.frequencia + '. Limpeza a cada ' + p.limpeza + ' meses. Máquinas extras: ' + n + '.' +
+          (p.nome === 'Empresa+' ? ' Prioridade na agenda (à noite ou no fim de semana), sem promessa de prazo ou emergência.' : '') + (v.obs ? '\n' + v.obs : '');
+        depoisCT('salvarContrato', [{ cliente: v.cliente, plano: p.nome, valor: Math.round((p.valor + n * 71.90) * 100) / 100, visitas: p.visitas, inicio: v.inicio, obs: obs }]);
+      });
+    $('c_valor').readOnly = true; $('c_frequencia').readOnly = true;
+    var preencher = function () {
+      var p = planoOficial($('c_plano').value), n = Number($('c_extras').value || 0), valido = Number.isInteger(n) && n >= 0;
+      $('c_extras').setCustomValidity(valido ? '' : 'Informe uma quantidade inteira maior ou igual a zero.');
+      $('c_valor').value = p && valido ? (p.valor + n * 71.90).toFixed(2).replace('.', ',') : '';
+      $('c_frequencia').value = p ? p.frequencia : '';
+    };
+    $('c_plano').onchange = preencher; $('c_extras').oninput = preencher;
   };
   ACOES['vis-ini'] = function (id) { depoisCT('iniciarVisita', [{ id: id }]); };
   ACOES['vis-fim'] = function (id) {
