@@ -220,7 +220,18 @@
         }, 'Nenhuma empresa com esse filtro.');
     },
     mais: function (sub) {
-      var cab = '<h1>Mais</h1>' + abas('mais', [['financeiro', 'Financeiro'], ['visitas', 'Visitas'], ['mes', 'Mês'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['lixeira', 'Lixeira'], ['ajustes', 'Ajustes']], sub);
+      // v0.7.7: no celular, Mais é uma lista; dentro da seção só fica o caminho de volta.
+      // CSS acompanha o breakpoint da barra lateral, inclusive ao girar/redimensionar a tela.
+      var itens = [['financeiro', 'Financeiro'], ['visitas', 'Visitas'], ['mes', 'Mês'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['lixeira', 'Lixeira'], ['ajustes', 'Ajustes']];
+      var atual = itens.filter(function (x) { return x[0] === sub; })[0];
+      var links = function (lista) { return itens.map(function (x) {
+        var on = (sub || 'financeiro') === x[0];
+        return '<a href="#mais/' + x[0] + '"' + (!lista && on ? ' class="ativo" aria-current="page"' : '') + '>' + x[1] + (lista ? '<span aria-hidden="true">›</span>' : '') + '</a>';
+      }).join(''); };
+      var cab = (sub ? '<a class="mais-voltar" href="#mais">← Voltar para Mais</a>' : '') +
+        '<h1><span class="mais-titulo-desktop">Mais</span><span class="mais-titulo-mobile">' + (atual ? atual[1] : 'Mais') + '</span></h1>' +
+        '<nav class="abas mais-abas" aria-label="Seções de Mais">' + links(false) + '</nav>' +
+        (!sub ? '<nav class="mais-lista" aria-label="Opções de Mais">' + links(true) + '</nav>' : '');
       if (sub === 'precos') return cab + telaPrecos();
       if (sub === 'visitas') return cab + telaVisitas();
       if (sub === 'mes') return cab + telaMes();
@@ -232,9 +243,9 @@
         '<div class="acoes"><button class="btn" id="bInstalar" hidden>📲 Instalar o app</button><button class="btn sec" id="bSync">🔄 Atualizar agora</button><button class="btn sec" id="bSair">Sair deste aparelho</button></div>' +
         '<p class="muted" id="dicaIos"></p><p class="muted">Versão ' + e(CFG.VERSAO_APP || '') + ' · ' + (api.tipo === 'mock' ? 'modo demonstração' : 'conectado à planilha') + (api.ultimaAtualizacao() ? ' · dados de ' + new Date(api.ultimaAtualizacao()).toLocaleString('pt-BR') : '') + '</p>';
       var ym = D.hoje.slice(0, 7), R = V.resumoMes(D, ym), l = (D.financeiro || []).slice().sort(function (a, b) { return String(b.data) < String(a.data) ? -1 : 1; });
-      return cab + '<div class="resumo"><div><b>' + V.brl(R.entradas) + '</b>entradas no mês</div><div><b>' + V.brl(R.saidas) + '</b>saídas no mês</div><div><b>' + V.brl(R.saldo) + '</b>saldo do mês</div><div><b>' + l.length + '</b>lançamentos</div></div>' +
+      return cab + '<div' + (!sub ? ' class="mais-padrao"' : '') + '><div class="resumo"><div><b>' + V.brl(R.entradas) + '</b>entradas no mês</div><div><b>' + V.brl(R.saidas) + '</b>saídas no mês</div><div><b>' + V.brl(R.saldo) + '</b>saldo do mês</div><div><b>' + l.length + '</b>lançamentos</div></div>' +
         '<div class="row">' + botao('+ Novo lançamento', 'fin-novo', '', '') + '</div>' +
-        lista(l, function (f) { return card(e(f.descricao || f.categoria), V.dataBR(f.data) + ' · ' + e(f.categoria) + (f.os ? ' · ' + e(f.os) : '') + ' · ' + e(f.forma || ''), tag(f.tipo, f.tipo === 'Entrada' ? '' : 'alta') + ' <b>' + V.brl(f.tipo === 'Entrada' ? f.receita : f.custo) + '</b>'); }, 'Sem lançamentos.');
+        lista(l, function (f) { return card(e(f.descricao || f.categoria), V.dataBR(f.data) + ' · ' + e(f.categoria) + (f.os ? ' · ' + e(f.os) : '') + ' · ' + e(f.forma || ''), tag(f.tipo, f.tipo === 'Entrada' ? '' : 'alta') + ' <b>' + V.brl(f.tipo === 'Entrada' ? f.receita : f.custo) + '</b>'); }, 'Sem lançamentos.') + '</div>';
     }
   };
 
