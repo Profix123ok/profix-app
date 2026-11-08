@@ -156,6 +156,17 @@
       var st = situacaoLead(x), muda = api.pode('definirStatusLead') ? SIT_LEAD.filter(function (k) { return k !== st && st !== 'Convertido'; }).map(function (k) { return botao(k === 'Convertido' ? '✅ Converter em cliente' : '→ ' + k, 'lead-st', x._row + '|' + k); }).join('') : '';
       return card(e(x.nome), [e(x.telefone), x.cidade ? e(x.cidade) : '', x.servico ? e(x.servico) : '', x.dataHora ? '⏰ ' + e(x.dataHora) : ''].filter(Boolean).join(' · ') + (x.clienteExistente ? '<br>⚠️ Telefone já é do cliente ' + e(x.clienteExistente.nome) + ' (não junta sozinho).' : '') + (x.statusEm ? '<br><span class="muted">' + e(st) + ' em ' + e(x.statusEm) + '</span>' : ''),
         tag(st, st === 'Novo' ? 'alta' : st === 'Convertido' ? 'ok' : 'cinza') + (x.followup ? tag('follow-up', 'media') : ''), (st !== 'Convertido' ? waLead(x) : '') + muda + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'lead-excluir', x._row, 'perigo') : ''), ' data-lead="' + x._row + '"'); }, 'Nenhum lead com esse filtro.'); }
+  function acoesHojeOS(o) {
+    if (!o) return '';
+    return (api.pode('textoStatusOS') ? botao('📲 Avisar status', 'os-msg', o._row) : '') +
+      (api.pode('mudarStatusOS') ? botao('Mudar status', 'os-status', o._row) : '') + botao('Abrir OS', 'os-abrir', o._row);
+  }
+  function cartaoHojeOS(o) { return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento), tagStatusOS(o.status), acoesHojeOS(o), ' data-hoje-os="' + o._row + '"'); }
+  function proximaOS(o) {
+    var a = V.proximaAcaoOS(o), acao = { 'os-pronto': 'mudarStatusOS', 'os-msg': 'textoStatusOS', 'os-chk': 'salvarChecklistOS', 'os-orc': 'salvarOrcamento', 'os-status': 'mudarStatusOS' };
+    if (!api.pode(acao[a[0]])) return '';
+    return '<div class="grandes" id="proximaOS">' + botao(a[1], a[0], o._row, 'primaria').replace(' peq', '') + '</div>';
+  }
   // ---------- Telas ----------
   var TELAS = {
     hoje: function () {
@@ -166,18 +177,18 @@
       };
       return '<h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
         '<div class="resumo"><div><b>' + H.chamar.length + '</b>para chamar</div><div><b>' + H.semResposta.length + '</b>sem resposta</div><div><b>' + H.cobrar.length + '</b>OS para cobrar</div><div><b>' + (H.agenda || []).length + '</b>na agenda (7 dias)</div></div>' +
-        secaoLeadsLink() +
+        secaoLeadsLink() + '<section id="prontasAvisar"><h2>📲 Prontas para avisar o cliente</h2><p class="muted">OS com status Pronto. Abrir o WhatsApp não confirma envio nem leitura.</p>' + lista(V.prontasOS(D), cartaoHojeOS, 'Nenhuma OS pronta.') + '</section>' +
         '<h2>📞 Quem chamar hoje</h2>' + lista(H.chamar, itemContato, 'Ninguém para chamar hoje 🎉') +
         '<h2>⏳ Sem resposta há 3 dias ou mais</h2>' + lista(H.semResposta, itemContato, 'Nenhum contato parado.') +
-        '<h2>💰 OS para cobrar</h2>' + lista(H.cobrar, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), 'Saldo ' + V.brl(x.saldo), tagStatusOS(x.status), botao('Receber', 'os-receber', x.ref._row, '') + botao('Abrir OS', 'os-abrir', x.ref._row)); }, 'Nenhuma OS para cobrar.') +
-        (H.paradas && H.paradas.length ? '<h2>🐢 OS paradas</h2>' + lista(H.paradas, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), e(x.status), '', botao('Abrir OS', 'os-abrir', x.ref ? x.ref._row : x.row)); }, '') : '') +
+        '<h2>💰 OS para cobrar</h2>' + lista(H.cobrar, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), 'Saldo ' + V.brl(x.saldo), tagStatusOS(x.status), botao('Receber', 'os-receber', x.ref._row, '') + acoesHojeOS(x.ref)); }, 'Nenhuma OS para cobrar.') +
+        (H.paradas && H.paradas.length ? '<h2>🐢 OS paradas</h2>' + lista(H.paradas, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), e(x.status), '', acoesHojeOS(x.ref || achar('os', x.row))); }, '') : '') +
         '<h2>✅ Tarefas</h2>' + lista(H.tarefas || [], function (t) { return card(e(t.tarefa), e(t.cliente || '') + ' · ' + V.dataBR(t.data), t.data < D.hoje ? tag('atrasada', 'vencido') : '', botao('Marcar feita', 'tar-feita', t._row)); }, 'Sem tarefas para hoje.') +
         '<h2>📅 Agenda</h2>' + lista(H.agenda || [], function (a) { return card(e(a.titulo), V.dataBR(a.data) + ' · ' + e(a.inicio || '') + (a.local ? ' · ' + e(a.local) : ''), a.eventoId ? '<span class="tag ok">Na agenda ✓</span>' : '', mapsBtn(a.local && a.local.length > 12 ? a.local : '') + (a.eventoId && api.pode('criarEventoAgenda') ? botao('Remarcar', 'ag-ev', a.eventoId) : '') + (a.eventoId && api.pode('removerEventoAgenda') ? botao('Tirar da agenda', 'ag-rem', a.eventoId) : '')); }, 'Agenda livre nos próximos 7 dias.');
     },
     servicos: function () {
       var q = V.norm(F.os.q), l = (D.os || []).filter(function (o) { return (!F.os.status || o.status === F.os.status) && (!q || V.norm([o.num, o.cliente, o.equipamento, o.defeito].join(' ')).indexOf(q) >= 0); })
         .sort(function (a, b) { return String(b.num) < String(a.num) ? -1 : 1; });
-      return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', '') + (api.pode('salvarOSMulti') ? botao('+ OS com vários equipamentos', 'osm-nova', '', 'sec') : '') + '</div>' +
+      return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', 'primaria') + '</div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
         lista(l, function (o) { var s = V.saldoOS(D, o); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status), botao('Abrir', 'os-abrir', o._row, '')); }, 'Nenhuma OS com esse filtro.');
@@ -195,7 +206,12 @@
       return telaClientesLista(cab); // v0.7.0: busca única + chips + cartão (diferenciais.js)
     },
     vendas: function (sub) {
-      var cab = '<h1>Vendas</h1>' + abas('vendas', [['oportunidades', 'Oportunidades'], ['revenda', 'Revenda']], sub);
+      var itens = [['oportunidades', 'Oportunidades'], ['revenda', 'Revenda']], atual = itens.find(function (i) { return i[0] === sub; });
+      var links = function (lista) { return itens.map(function (i) { return '<a href="#vendas/' + i[0] + '"' + (!lista && (sub || 'oportunidades') === i[0] ? ' class="ativo" aria-current="page"' : '') + '>' + i[1] + (lista ? '<span aria-hidden="true">›</span>' : '') + '</a>'; }).join(''); };
+      var cab = (sub ? '<a class="mais-voltar vendas-voltar" href="#vendas">← Voltar para Vendas</a>' : '') +
+        '<h1><span class="mais-titulo-desktop">Vendas</span><span class="mais-titulo-mobile">' + (atual ? atual[1] : 'Vendas') + '</span></h1>' +
+        '<nav class="abas mais-abas vendas-abas" aria-label="Seções de Vendas">' + links(false) + '</nav>' +
+        (!sub ? '<nav class="mais-lista vendas-lista" aria-label="Opções de Vendas">' + links(true) + '</nav>' : '');
       if (sub === 'revenda') return cab + '<div class="row">' + botao('+ Novo item', 'rv-novo', '', '') + '</div>' + lista(D.revenda || [], function (r) {
         var lu = V.lucroRevenda(r);
         return card(e(r.id) + ' · ' + e(r.equipamento), e(r.config || '') + '<br>Custo ' + V.brl(V.custoRevenda(r)) + ' · ' + (r.status === 'Vendido' ? 'vendido por ' + V.brl(r.precoVenda) : 'anunciado ' + V.brl(r.anunciado)) + (lu != null ? ' · lucro ' + V.brl(lu) : ''),
@@ -211,13 +227,13 @@
       var nWa = (D.oportunidades || []).filter(V.temWaOp).length;
       var barraWa = '<div class="chips" role="group" aria-label="Filtrar por WhatsApp"><button type="button" class="chip" id="fWa" aria-pressed="' + !!F.op.wa + '">📲 WhatsApp (' + nWa + ')</button></div>';
       var ops = V.filtrarOps(D.oportunidades, fOp);
-      return cab + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
+      return cab + '<div' + (!sub ? ' class="mais-padrao"' : '') + '>' + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
         '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
         (ops.length > LIMITE ? '<p class="muted">Mostrando as ' + LIMITE + ' primeiras. Use os filtros ou a busca para achar as outras.</p>' : '') +
         lista(ops.slice(0, LIMITE), function (o) {
           return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + (o.ultimoContato ? '<br>Último contato ' + V.dataBR(o.ultimoContato) : ''),
             tagPri(o.prioridade) + tag(o.status), waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
-        }, 'Nenhuma empresa com esse filtro.');
+        }, 'Nenhuma empresa com esse filtro.') + '</div>';
     },
     mais: function (sub) {
       // v0.7.7: no celular, Mais é uma lista; dentro da seção só fica o caminho de volta.
@@ -308,6 +324,120 @@
   }
   function aplicar(lista, row, mud) { return function (cache) { var x = (cache[lista] || []).filter(function (y) { return y._row === Number(row); })[0]; if (x) Object.keys(mud).forEach(function (k) { if (k[0] !== '_') x[k] = mud[k]; }); }; }
 
+  // ---------- v0.7.8: OS rápida, sem sair do formulário ----------
+  function abrirOSRapida(row, pre) {
+    var o = row ? achar('os', row) : Object.assign({ cliente: '' }, pre), ocupada = false, clientePendente = false;
+    var campos = [{ k: 'cliente', r: 'Cliente', t: 'select', req: true }, { k: 'equipamento', r: 'Equipamento', req: true }, { k: 'defeito', r: 'Defeito relatado' },
+      { k: 'servico', r: 'Serviço', t: 'select', o: (D.catalogo || []).filter(function (s) { return s.ativo !== 'Não' && s.status !== 'Inativo'; }).map(function (s) { return s.servico; }) },
+      { k: 'valor', r: 'Valor cobrado (R$)', t: 'number', ajuda: '<span id="precoAjuda">Preço do catálogo, editável. Peças à parte.</span>' },
+      { k: 'previsao', r: 'Previsão de entrega', t: 'date' }, { k: 'acessorios', r: 'Acessórios deixados' }, { k: 'obsInt', r: 'Observações internas', t: 'textarea' }];
+    formulario(row ? 'Editar ' + e(o.num) : 'Nova OS', campos, o,
+      '<div><label for="osBuscaCli">Buscar cliente por nome ou WhatsApp</label><input id="osBuscaCli" type="search" autocomplete="off"></div>' +
+      '<details id="osClienteNovo"><summary>Cadastrar cliente aqui</summary><label for="osCliNome">Nome *</label><input id="osCliNome" autocomplete="off">' +
+      '<label for="osCliWa">WhatsApp *</label><input id="osCliWa" type="tel" autocomplete="off"><label class="chk"><input id="osCliConsent" type="checkbox">Cliente autorizou contato por WhatsApp</label>' +
+      '<p class="muted">Sem marcar: consentimento Não. Não altera clientes já existentes.</p><button type="button" class="btn sec" id="osCliSalvar">Cadastrar cliente</button><p id="osCliResultado" role="status"></p></details>');
+    var m = $('modal'), f = $('fGen'), selecao = o._rowCliente || ((D.clientes || []).find(function (c) { return c.nome === o.cliente; }) || {})._row;
+    function opcoes() {
+      var clientes = V.buscarClientesOS(D.clientes, $('osBuscaCli').value), escolhido = (D.clientes || []).find(function (c) { return c._row === Number(selecao); });
+      if (escolhido && !clientes.some(function (c) { return c._row === escolhido._row; })) clientes.unshift(escolhido);
+      $('c_cliente').innerHTML = '<option value="">Escolha o cliente</option>' + clientes.map(function (c) { return '<option value="' + c._row + '"' + (c._row === Number(selecao) ? ' selected' : '') + '>' + e(c.nome) + (c.whatsapp ? ' · ' + e(c.whatsapp) : '') + '</option>'; }).join('');
+    }
+    opcoes(); $('osBuscaCli').oninput = opcoes; $('c_cliente').onchange = function () { selecao = this.value; };
+    $('c_servico').onchange = function () {
+      var s = (D.catalogo || []).find(function (s) { return s.servico === $('c_servico').value; });
+      $('c_valor').value = V.precoServicoOS(s);
+      $('precoAjuda').textContent = (!s ? 'Selecione um serviço.' : V.precoServicoOS(s) === '' ? 'Sob orçamento: informe o valor após avaliar.' : (s.tipo === 'A partir de' ? 'A partir de: ' : 'Preço do catálogo: ') + V.brl(Number(V.precoServicoOS(s))) + '. Valor editável.') + (s && s.descricao ? ' ' + s.descricao : '') + ' Peças à parte (peça não inclusa).';
+    };
+    function valores() { var v = {}; campos.forEach(function (c) { v[c.k] = $('c_' + c.k).value.trim(); }); return v; }
+    function travar(sim) { ocupada = sim; f.querySelectorAll('button').forEach(function (b) { b.disabled = sim; }); }
+    $('osCliSalvar').onclick = async function () {
+      if (ocupada) return;
+      var nome = $('osCliNome').value.trim(), wa = $('osCliWa').value.trim(), out = $('osCliResultado');
+      if (clientePendente) { out.textContent = 'Cadastro na fila: conecte e sincronize antes de criar a OS. Não cadastre outra vez.'; return; }
+      if (!api.pode('salvarCliente')) { out.textContent = 'Cadastro ainda não liberado no servidor.'; return; }
+      if (!navigator.onLine || offline) { out.textContent = 'Conecte para cadastrar e obter o vínculo do cliente antes de salvar a OS.'; return; }
+      if (!nome || !V.numeroWa(wa)) { out.textContent = 'Informe nome e WhatsApp válido.'; return; }
+      var igual = (D.clientes || []).find(function (c) { return V.norm(c.nome) === V.norm(nome) || (V.numeroWa(c.whatsapp) && V.numeroWa(c.whatsapp) === V.numeroWa(wa)); });
+      if (igual) { selecao = igual._row; opcoes(); out.textContent = 'Cliente já cadastrado: selecionado, sem duplicar. Confira os dados.'; return; }
+      travar(true);
+      try {
+        var consent = $('osCliConsent').checked;
+        var r = await api.escrever('salvarCliente', [{ nome: nome, whatsapp: wa, consent: consent ? 'Sim' : 'Não', naoContatar: 'Não', dataConsent: consent ? D.hoje : '' }]);
+        clientePendente = true;
+        if (r.enfileirado) { out.textContent = 'Cadastro na fila: sincronize antes de criar a OS. Não cadastre outra vez.'; faixa(); return; }
+        var carga = await api.carregar(); if (carga.dados) D = carga.dados;
+        var novo = (D.clientes || []).find(function (c) { return V.norm(c.nome) === V.norm(nome) && V.numeroWa(c.whatsapp) === V.numeroWa(wa); });
+        if (!novo) { out.textContent = 'Cliente salvo, mas vínculo ainda não retornou. Atualize os dados antes de criar a OS; não cadastre novamente.'; return; }
+        if (!f.isConnected) return;
+        clientePendente = false; selecao = novo._row; opcoes(); $('osClienteNovo').open = false; out.textContent = 'Cliente cadastrado e selecionado.';
+      } catch (er) { if (f.isConnected) out.textContent = 'Não foi possível confirmar o cadastro: ' + er.message; }
+      finally { if (f.isConnected) travar(false); }
+    };
+    if (!row && api.pode('salvarOSMulti')) {
+      var multi = document.createElement('button'); multi.type = 'button'; multi.id = 'osMaisEquipamentos'; multi.className = 'btn sec'; multi.textContent = 'Usar vários equipamentos'; f.querySelector('.acoes').appendChild(multi);
+      multi.onclick = function () {
+        if (ocupada || clientePendente) return;
+        if ($('osCliNome').value.trim() && $('osClienteNovo').open) { $('fErro').textContent = 'Cadastre ou selecione o cliente antes de mudar para vários equipamentos.'; return; }
+        var v = valores(), c = achar('clientes', v.cliente), eq = eqVazio(1);
+        eq.identificacao = v.equipamento; eq.defeito = v.defeito; eq.servico = v.servico;
+        if (v.valor !== '') eq.itens = [{ tipo: 'serviço', descricao: v.servico || 'Serviço', qtd: '1', valorUnit: v.valor }];
+        PRE_OSM = { cliente: c ? c.nome : '', equipamentos: [eq] }; OSM = null; abrirOSM('');
+        OSM.d.previsao = v.previsao; OSM.d.acessorios = v.acessorios; OSM.d.obsInt = v.obsInt;
+        m.close(''); location.hash = '#osm';
+      };
+    }
+    f.onsubmit = async function (ev) {
+      if (ev.submitter && ev.submitter.value === 'cancelar') return;
+      ev.preventDefault(); if (ocupada) return;
+      if (clientePendente) { $('fErro').textContent = 'Sincronize o cadastro pendente antes de vincular a OS.'; return; }
+      var v = valores(), cli = achar('clientes', v.cliente);
+      if (!cli || !v.equipamento) { $('fErro').textContent = 'Selecione o cliente e informe o equipamento.'; return; }
+      if (v.valor !== '' && (!isFinite(Number(v.valor.replace(',', '.'))) || Number(v.valor.replace(',', '.')) < 0)) { $('fErro').textContent = 'Informe um valor válido, igual ou maior que zero.'; return; }
+      if (v.valor !== '') v.valor = Number(v.valor.replace(',', '.'));
+      v.cliente = cli.nome; var d = Object.assign({}, v, { _rowCliente: cli._row }); if (row) { d._row = o._row; d.num = o.num; }
+      travar(true);
+      try { var r = await api.escrever('salvarOS', [d], row ? aplicar('os', row, v) : null); m.close(''); aviso(r.msg); await iniciar(); }
+      catch (er) { if (f.isConnected) $('fErro').textContent = 'Não salvou: ' + er.message; }
+      finally { if (f.isConnected) travar(false); }
+    };
+  }
+  function orcamentoRapido(row) {
+    var o = achar('os', row), c = V.clienteDaOS(D, o) || {}, dias = Dif.padroes(D).validadeDias || 7, busy = false;
+    var campos = [{ k: 'diagnostico', r: 'Diagnóstico / laudo', t: 'textarea' }, { k: 'itensOrc', r: 'Itens do orçamento', t: 'textarea' }, { k: 'orcamento', r: 'Valor do orçamento (R$)', t: 'number', req: true },
+      { k: 'validade', r: 'Válido até', t: 'date', ajuda: 'Em branco = ' + dias + ' dias (padrão do servidor).' }, { k: 'previsao', r: 'Previsão de entrega', t: 'date' }];
+    var regra = V.botaoWaCliente(c, 'os', 'Orçamento');
+    formulario('Orçamento da ' + e(o.num), campos, o, '<p class="muted">Só abre wa.me com o texto pronto; quem envia é você.</p>' + (regra && regra.aviso ? '<p class="alerta">Sem consentimento LGPD: só mensagem sobre a OS.</p>' : ''));
+    var m = $('modal'), f = $('fGen');
+    if (regra) {
+      var b = document.createElement('button'); b.className = 'btn wa'; b.id = 'fSalvarWa'; b.value = 'ok'; b.textContent = 'Salvar e abrir WhatsApp'; f.querySelector('.acoes').prepend(b);
+      $('fSalvar').classList.add('sec');
+    } else f.querySelector('h2').insertAdjacentHTML('afterend', '<p class="muted">' + (Dif.naoContatar(c) ? 'Cliente marcado como Não contatar.' : 'WhatsApp inválido: salve o orçamento e combine por outro canal.') + '</p>');
+    f.onsubmit = async function (ev) {
+      if (ev.submitter && ev.submitter.value === 'cancelar') return;
+      ev.preventDefault(); if (busy) return;
+      var v = {}; campos.forEach(function (k) { v[k.k] = $('c_' + k.k).value.trim(); });
+      if (!v.orcamento || !isFinite(Number(v.orcamento.replace(',', '.'))) || Number(v.orcamento.replace(',', '.')) < 0) { $('fErro').textContent = 'Informe um valor de orçamento válido.'; return; }
+      v.orcamento = Number(v.orcamento.replace(',', '.'));
+      var prazoPadrao = !v.validade; v.validade = v.validade || V.somaDias(D.hoje, dias);
+      var enviar = ev.submitter && ev.submitter.id === 'fSalvarWa', popup = null;
+      // Abrir no gesto do usuário evita bloqueio de popup após a espera da API.
+      if (enviar && navigator.onLine && !offline) { popup = window.open('about:blank', '_blank'); if (popup) { popup.opener = null; popup.document.body.textContent = 'Salvando orçamento… O WhatsApp abrirá após a confirmação.'; } }
+      busy = true; f.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      try {
+        var r = await api.escrever('salvarOrcamento', [Object.assign({ num: o.num, _row: o._row }, v)], aplicar('os', row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v)));
+        if (r.enfileirado) { if (popup) popup.close(); m.close(''); aviso('Orçamento salvo na fila. Sincronize antes de abrir o WhatsApp.'); await iniciar(); return; }
+        var texto = V.textoOrcamentoSimples(Object.assign({}, o, v), c, v.validade, prazoPadrao ? dias : null), wa = V.botaoWaCliente(c, 'os', texto);
+        m.close(''); await iniciar();
+        if (enviar && wa) {
+          if (popup && !popup.closed) { popup.location.href = wa.href; registrarAberta({ dataset: { regNome: c.nome, regOs: o.num, regTipo: 'orcamento', regTexto: texto } }); }
+          else abrirMsg({ titulo: 'Orçamento da ' + o.num, texto: texto, waUrl: wa.href, aviso: wa.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '', cliente: c, os: o.num, tipo: 'orcamento' });
+        } else if (popup) popup.close();
+        aviso(r.msg);
+      } catch (er) { if (popup) popup.close(); if (f.isConnected) $('fErro').textContent = 'Não salvou: ' + er.message; }
+      finally { busy = false; if (f.isConnected) f.querySelectorAll('button').forEach(function (b) { b.disabled = false; }); }
+    };
+  }
+
   // ---------- Ações ----------
   var ACOES = {
     'op-editar': function (row) {
@@ -324,15 +454,16 @@
     'os-abrir': function (row) {
       var o = achar('os', row), pecas = V.pecasOS(D, o.num), m = $('modal');
       var lin = function (r, v) { return v === '' || v == null ? '' : '<div><span class="muted">' + r + ':</span> ' + v + '</div>'; };
-      m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(o.num) + ' · ' + e(o.cliente) + '</h2><div>' + tagStatusOS(o.status) + '</div>' + blocoGarantiaOS(o) + botoesDifOS(o) +
+      m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(o.num) + ' · ' + e(o.cliente) + '</h2><div>' + tagStatusOS(o.status) + '</div>' + blocoGarantiaOS(o) + proximaOS(o) +
         lin('Equipamento', e(o.equipamento)) + lin('Defeito', e(o.defeito)) + lin('Serviço', e(o.servico)) + lin('Entrada', V.dataBR(o.entrada)) + lin('Previsão', V.dataBR(o.previsao)) +
         lin('Acessórios', e(o.acessorios)) + '<div><span class="muted">Senha do aparelho:</span> <span id="senhaOS">' + e(V.textoSenha(o, ajustes.mostrarSenha)) + '</span></div>' +
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<div class="acoes">' + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
-        '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div>' +
+        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
+        '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div></details>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
+      var principal = m.querySelector('#proximaOS [data-a]'); if (principal) m.querySelectorAll('#maisAcoesOS [data-a="' + principal.dataset.a + '"]').forEach(function (b) { b.remove(); });
       m.onclose = null; m.showModal(); ligarAcoes(m, true);
     },
     'os-status': function (row) {
@@ -340,19 +471,17 @@
       formulario('Status da ' + e(o.num), [{ k: 'status', r: 'Novo status', t: 'select', o: D.statusOS, req: true }, { k: 'manterSenha', r: 'Na entrega, manter a senha do aparelho (o padrão é apagar – LGPD)', t: 'checkbox' }], { status: o.status })
         .then(function (v) { if (!v) return; var opc = v.status === 'Entregue' ? { entrega: D.hoje, apagarSenha: !v.manterSenha } : {}; if (v.status === 'Entregue' && !v.manterSenha) delete opc.apagarSenha; if (v.manterSenha) opc.apagarSenha = false; escrever('mudarStatusOS', [o.num, o._row, v.status, opc], aplicar('os', row, { status: v.status, statusEm: D.hoje })); });
     },
-    'os-editar': function (row, pre) {
-      var o = row ? achar('os', row) : Object.assign({ cliente: '' }, pre), nomes = (D.clientes || []).map(function (c) { return c.nome; });
-      formulario(row ? 'Editar ' + e(o.num) : 'Nova OS', [{ k: 'cliente', r: 'Cliente', t: 'select', o: nomes, req: true }, { k: 'equipamento', r: 'Equipamento', req: true }, { k: 'defeito', r: 'Defeito relatado' },
-        { k: 'servico', r: 'Serviço', t: 'select', o: (D.catalogo || []).map(function (s) { return s.servico; }) }, { k: 'valor', r: 'Valor cobrado (R$)', t: 'number' }, { k: 'previsao', r: 'Previsão de entrega', t: 'date' },
-        { k: 'acessorios', r: 'Acessórios deixados' }, { k: 'obsInt', r: 'Observações internas', t: 'textarea' }], o)
-        .then(function (v) { if (!v) return; var cli = (D.clientes || []).filter(function (c) { return c.nome === v.cliente; })[0]; var d = Object.assign({}, v, { _rowCliente: cli && cli._row }); if (row) { d._row = o._row; d.num = o.num; } escrever('salvarOS', [d], row ? aplicar('os', row, v) : null); });
-    },
-    'os-nova': function () { ACOES['os-editar'](''); },
-    'os-orc': function (row) {
+    'os-editar': function (row, pre) { abrirOSRapida(row, pre); },
+    'os-nova': function () { abrirOSRapida(''); },
+    'os-orc': function (row) { orcamentoRapido(row); },
+    'os-pronto': function (row) {
       var o = achar('os', row);
-      formulario('Orçamento da ' + e(o.num), [{ k: 'diagnostico', r: 'Diagnóstico / laudo', t: 'textarea' }, { k: 'itensOrc', r: 'Itens do orçamento', t: 'textarea' }, { k: 'orcamento', r: 'Valor do orçamento (R$)', t: 'number', req: true },
-        { k: 'validade', r: 'Válido até', t: 'date', ajuda: 'Em branco = ' + (Dif.padroes(D).validadeDias || 7) + ' dias (padrão do servidor).' }, { k: 'previsao', r: 'Previsão de entrega', t: 'date' }], o)
-        .then(function (v) { if (!v) return; escrever('salvarOrcamento', [Object.assign({ num: o.num, _row: o._row }, v)], aplicar('os', row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v))); });
+      perguntar('Marcar ' + o.num + ' como Pronto? Depois você poderá abrir o WhatsApp; nenhuma mensagem é enviada automaticamente.', { titulo: 'OS pronta', sim: 'Marcar pronto' }).then(function (ok) {
+        if (!ok) return;
+        api.escrever('mudarStatusOS', [o.num, o._row, 'Pronto', {}], aplicar('os', row, { status: 'Pronto', statusEm: D.hoje })).then(function (r) {
+          aviso(r.msg); return iniciar().then(function () { if (!r.enfileirado && api.pode('textoStatusOS')) ACOES['os-msg'](row); });
+        }, function (er) { aviso('Não salvou: ' + er.message); });
+      });
     },
     'os-decidir': function (row) {
       var o = achar('os', row);
@@ -784,7 +913,7 @@
       '<div class="muted">' + [c.id, c.tipoCli, nu.situacao, f.origem || c.origem].filter(Boolean).map(e).join(' · ') + '</div>' +
       '<div><span class="tag ' + selo.cls + '" id="seloLgpd">' + e(selo.texto) + '</span>' + (gar.length ? tag('🛡 Garantia até ' + Dif.dataBR(gar[0].ate) + ' · faltam ' + Dif.diasRestantes(gar[0].ate, D.hoje) + ' dias', 'ok') : '') + (Dif.aniversariante(c, D.hoje) ? tag('🎂 Aniversário ' + c.aniversario, 'roxo') : '') + '</div></div></div>' +
       '<div class="grandes" id="acoesFicha">' + waCli(c, '', tipoWa).replace('btn wa peq', 'btn wa') + (tel ? '<a class="btn sec" id="bLigar" href="' + e(tel) + '">📞 Ligar</a>' : '<span class="muted">Sem telefone para ligar.</span>') +
-      botao('🧾 Nova OS', 'cli-os', c._row, '').replace(' peq', '') + (api.pode('salvarOSMulti') ? botao('💻 Nova OS com vários equipamentos', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
+      botao('🧾 Nova OS', 'cli-os', c._row, 'primaria').replace(' peq', '') + (api.pode('salvarOSMulti') ? botao('💻 Usar equipamentos marcados', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
       '<div class="acoes">' + botao('📅 Agendar retorno', 'cli-retorno', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Editar', 'cli-editar', c._row) +
       (selo.chave === 'sim' ? botao('🛡 Revogar consentimento', 'cli-lgpd', c._row) : selo.chave === 'nao' ? botao('🛡 Registrar consentimento', 'cli-lgpd', c._row, '') : '') + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'cli-excluir', c._row, 'perigo') : '') + '</div>' +
       (c.proximo ? '<p id="proxRetorno">⏰ Retorno: <b>' + V.dataBR(c.proximo) + '</b> ' + e(c.acao || '') + '</p>' : '') +
@@ -792,7 +921,7 @@
       tile('Último atendimento', e(Dif.tempoDesde(R.diasSemRetorno)), 'tDesde') + tile('Garantia até', nu.garantiaAte ? Dif.dataBR(nu.garantiaAte) : '—') + tile('Preventiva em', nu.preventivaEm ? Dif.dataBR(nu.preventivaEm) : '—') + tile('Indicou', (f.indicou || []).length) + '</div>' +
       '<h2>💬 Mensagens de relacionamento</h2>' + (mk.pode ? '<div class="acoes" id="mktFicha">' + [['reativacao', '👋 Reativação'], ['aniversario', '🎂 Aniversário'], ['preventiva', '🧽 Preventiva'], ['indicacao', '🤝 Indicação']].map(function (t) { return botao(t[1], 'cli-mkt', c._row + '|' + t[0]); }).join('') + '</div>'
         : '<p class="muted" id="mktOculto">' + e(mk.aviso) + '</p>') +
-      '<h2>💻 Equipamentos salvos (' + (f.maquinas || []).length + ')</h2>' + ((f.maquinas || []).length ? '<div class="lista-maq">' + f.maquinas.map(function (m) { return '<label class="chk maq"><input type="checkbox" data-maq="' + e(m.id) + '"> <b>' + e(m.id) + '</b> ' + e([m.tipo, m.modelo].filter(Boolean).join(' · ')) + (m.serie ? ' <span class="muted">série ' + e(m.serie) + '</span>' : '') + '</label>'; }).join('') + '</div><p class="muted">Marque e toque em “Nova OS com vários equipamentos” para levar as máquinas para a OS.</p>' : '<p class="muted">Nenhum equipamento salvo.</p>') +
+      '<h2>💻 Equipamentos salvos (' + (f.maquinas || []).length + ')</h2>' + ((f.maquinas || []).length ? '<div class="lista-maq">' + f.maquinas.map(function (m) { return '<label class="chk maq"><input type="checkbox" data-maq="' + e(m.id) + '"> <b>' + e(m.id) + '</b> ' + e([m.tipo, m.modelo].filter(Boolean).join(' · ')) + (m.serie ? ' <span class="muted">série ' + e(m.serie) + '</span>' : '') + '</label>'; }).join('') + '</div><p class="muted">Marque e toque em “Usar equipamentos marcados” para levar as máquinas para a OS.</p>' : '<p class="muted">Nenhum equipamento salvo.</p>') +
       '<div class="acoes">' + (api.pode('salvarMaquina') ? botao('+ Salvar equipamento', 'cli-maq', c._row) : '') + '</div>' +
       '<h2>🧾 OS (' + (f.os || []).length + ')</h2>' + lista(f.os || [], function (o) { return card(e(o.num) + ' · ' + e(o.equipamento || ''), V.dataBR(o.entrada) + (o.valor ? ' · ' + V.brl(o.valor) : o.orcamento ? ' · orçamento ' + V.brl(o.orcamento) : ''), tag(Dif.statusCanon(o.status), Dif.corStatus(o.status)), o._row ? botao('Abrir', 'os-abrir', o._row, '') : ''); }, 'Nenhuma OS.') +
       (f.contrato ? '<p>📄 Contrato ' + e(f.contrato.id) + ' · ' + e(f.contrato.plano || '') + ' · ' + V.brl(f.contrato.valor) + '/mês</p>' : '') +
@@ -805,7 +934,7 @@
   }
   TELAS.cliente = telaFicha;
   ACOES['cli-ficha'] = function (row) { location.hash = '#cliente/' + row; };
-  ACOES['cli-os'] = function (row) { var c = achar('clientes', row); ACOES['os-editar']('', { cliente: c.nome }); };
+  ACOES['cli-os'] = function (row) { var c = achar('clientes', row); ACOES['os-editar']('', { cliente: c.nome, _rowCliente: c._row }); };
   ACOES['cli-osm'] = function (row) {
     var c = achar('clientes', row), f = FICHA.nome === c.nome && FICHA.dados ? FICHA.dados : { maquinas: [] }, marc = {};
     document.querySelectorAll('[data-maq]:checked').forEach(function (i) { marc[i.dataset.maq] = 1; });

@@ -188,5 +188,29 @@
       tarefas: (D.tarefas || []).filter(function (t) { return t.status !== 'Feita' && t.data && t.data <= h; }),
       agenda: (D.agenda || []).filter(function (a) { return a.data >= h && a.data <= fim; }) };
   };
+  // v0.7.8: helpers puros do fluxo rápido; preços e prazos vêm dos dados.
+  V.buscarClientesOS = function (clientes, busca) {
+    var q = V.norm(busca || ''), dig = String(busca || '').replace(/\D/g, '');
+    return (clientes || []).filter(function (c) { return !q || V.norm(c.nome).indexOf(q) >= 0 || (dig && String(c.whatsapp || '').replace(/\D/g, '').indexOf(dig) >= 0); });
+  };
+  V.precoServicoOS = function (s) {
+    if (!s || s.preco === '' || s.preco == null || /sob or/i.test(s.tipo || '')) return '';
+    var n = Number(String(s.preco).replace(',', '.')); return isFinite(n) && n >= 0 ? String(n) : '';
+  };
+  V.proximaAcaoOS = function (o) {
+    if (o.status === 'Em reparo') return ['os-pronto', 'Marcar pronto e preparar aviso'];
+    if (o.status === 'Pronto' || o.status === 'Aguardando aprovação') return ['os-msg', '📲 Avisar status'];
+    if (o.status === 'Recebido') return ['os-chk', '✅ Checklist'];
+    if (o.status === 'Em diagnóstico') return ['os-orc', 'Orçamento'];
+    return ['os-status', 'Mudar status'];
+  };
+  V.textoOrcamentoSimples = function (o, c, validade, dias) {
+    return 'Olá, ' + String(c.nome || '').split(' ')[0] + '! Orçamento ProFix Computadores · ' + o.num +
+      '\nEquipamento: ' + (o.equipamento || '—') + (o.diagnostico ? '\nDiagnóstico: ' + o.diagnostico : '') +
+      (o.itensOrc ? '\nItens: ' + o.itensOrc : '') + '\nValor: ' + V.brl(Number(String(o.orcamento).replace(',', '.'))) +
+      '\nValidade: até ' + V.dataBR(validade) + (dias ? ' (' + dias + ' dias).' : '.') +
+      (o.previsao ? '\nPrevisão: ' + V.dataBR(o.previsao) : '') + '\nPodemos seguir com o serviço?';
+  };
+  V.prontasOS = function (D) { return (D.os || []).filter(function (o) { return o.status === 'Pronto'; }); };
   return V;
 });
