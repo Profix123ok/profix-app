@@ -92,3 +92,13 @@ dialog.cheia{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:
 .plano-preco small{font-size:.9rem;color:#fff}.plano-destaque,.plano-oficial li strong{color:#22c55e}.plano-oficial ul{padding-left:20px;line-height:1.65}
 .plano-selo{color:#22c55e;border:1px solid #22c55e;border-radius:12px;padding:3px 8px;font-size:.8rem}
 @media(max-width:760px){.planos-grade{grid-template-columns:1fr}}
+/* v0.7.6: toque e leitura em telas estreitas, sem bloquear o scroll. */
+.card,.lista2>*{min-width:0}.card .t,.card .m,.plano-oficial{overflow-wrap:anywhere}
+@media(max-width:760px){
+  .chip{min-height:44px}.btn,input,select,textarea{font-size:16px}
+  .conteudo{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+  .menu{padding-bottom:env(safe-area-inset-bottom)}
+  .grandes{grid-template-columns:1fr}.planos-grade{min-width:0}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
+@media(max-width:760px){.btn.peq{min-height:44px}}

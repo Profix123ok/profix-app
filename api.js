@@ -127,16 +127,12 @@
       if (!online()) return Promise.resolve({ dados: cache, offline: true });
       if (api._recemValidado && cache) { var d0 = cache; api._recemValidado = false; return Promise.resolve({ dados: d0, offline: false }); } // acabou de baixar ao validar a chave
       return api.sincronizar().then(function () { return chamar('getDados', []); }).then(function (d) {
-        if (d && !d.agenda && tipo === 'gas' && api.pode('listarAgenda')) return chamar('listarAgenda', [7]).then(function (a) { d.agenda = a; return d; }, function () { return d; });
-        return d;
-      }).then(function (d) {
-        // v0.5.4: leads da página pública de cadastro (só leitura). Falha aqui não derruba o carregamento.
-        if (d && !Array.isArray(d.leadsLink) && api.pode('leadsLink')) return chamar('leadsLink', []).then(function (l) { d.leadsLink = Array.isArray(l) ? l : []; return d; }, function () { return d; });
-        return d;
-      }).then(function (d) {
-        // v0.7.1: resumo dos clientes calculado pelo servidor (listarClientesResumo). Falhou? O app usa a conta local (diferenciais.js).
-        if (d && !Array.isArray(d.clientesResumo) && api.pode('listarClientesResumo')) return chamar('listarClientesResumo', []).then(function (r) { if (r && Array.isArray(r.clientes)) d.clientesResumo = r.clientes; return d; }, function () { return d; });
-        return d;
+        // Leituras independentes: não somar três latências de rede depois de getDados.
+        var tarefas = [];
+        if (d && !d.agenda && tipo === 'gas' && api.pode('listarAgenda')) tarefas.push(chamar('listarAgenda', [7]).then(function (a) { d.agenda = a; }, function () {}));
+        if (d && !Array.isArray(d.leadsLink) && api.pode('leadsLink')) tarefas.push(chamar('leadsLink', []).then(function (l) { d.leadsLink = Array.isArray(l) ? l : []; }, function () {}));
+        if (d && !Array.isArray(d.clientesResumo) && api.pode('listarClientesResumo')) tarefas.push(chamar('listarClientesResumo', []).then(function (r) { if (r && Array.isArray(r.clientes)) d.clientesResumo = r.clientes; }, function () {}));
+        return Promise.all(tarefas).then(function () { return d; });
       }).then(function (d) { guardar(d); return { dados: d, offline: false }; },
         function (e) { if (e.doServidor || e.codigo === 'SEM_TOKEN') throw e; return { dados: cache, offline: true }; });
     };

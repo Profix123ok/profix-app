@@ -1,8 +1,17 @@
 /* ProFix – telas, navegação e formulários. Dados e gravações passam SEMPRE pelo adaptador (api.js). */
-(function () {
+(async function () {
   'use strict';
   var V = ProFixVista, CFG = window.PROFIX_CONFIG || {};
   var demo = /[?&]demo=1/.test(location.search) || !CFG.API_URL;
+  // Dados fictícios só são baixados/interpretados ao abrir o modo demonstração.
+  if (demo && !window.ProFixMock) {
+    var demoPronto = await new Promise(function (ok) {
+      var script = document.createElement('script'); script.src = 'mock-dados.js';
+      script.onload = function () { ok(true); }; script.onerror = function () { ok(false); };
+      document.head.appendChild(script);
+    });
+    if (!demoPronto) { document.getElementById('erro-senha').textContent = 'Não foi possível carregar a demonstração. Conecte à internet e tente novamente.'; return; }
+  }
   var api = demo ? ProFixAPI.criarAdaptadorMock({ hoje: CFG.HOJE_FIXO, enviarSenha: true, semAcoes: ((location.search.match(/[?&]semAcoes=([\w,]+)/) || [])[1] || '').split(',').filter(Boolean) })
     : ProFixAPI.criarAdaptadorGas(CFG.API_URL, { liberadas: CFG.ACOES_SERVIDOR });
   var D = null, offline = false;
@@ -71,7 +80,9 @@
   }
   function rota() { var h = (location.hash || '#hoje').slice(1).split('/'); return { tela: h[0] || 'hoje', sub: h[1] || '' }; }
   var carregando = false;
+  var buscaTimer;
   function render() {
+    clearTimeout(buscaTimer);
     var r = rota();
     var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela === 'cliente' ? 'clientes' : r.tela;
     document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === telaMenu; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -424,8 +435,9 @@
   }
   function carregarCatalogo() {
     if (!CAT) { try { CAT = JSON.parse(localStorage.getItem(CATK)) || null; } catch (x) { CAT = null; } }
-    if (!api.pode('catalogoOS') || carregarCatalogo.indo) return;
-    carregarCatalogo.indo = true;
+    // Evita o ciclo ler -> render -> ler da aba Preços; atualiza no máximo a cada 5 min.
+    if (!api.pode('catalogoOS') || carregarCatalogo.indo || Date.now() - (carregarCatalogo.quando || 0) < 300000) return;
+    carregarCatalogo.indo = true; carregarCatalogo.quando = Date.now();
     api.ler('catalogoOS', []).then(function (r) { carregarCatalogo.indo = false; CAT = (r && r.itens) || []; try { localStorage.setItem(CATK, JSON.stringify(CAT)); } catch (x) { /* cota */ }
       var res = document.querySelectorAll('[data-osm-q]'); res.forEach(function (el) { mostrarBusca(el); }); if (rota().tela === 'mais' && rota().sub === 'precos') render(); },
       function () { carregarCatalogo.indo = false; });
@@ -683,7 +695,7 @@
     formulario(k !== '' ? e(c.descricao) : 'Novo preço no catálogo', [{ k: 'categoria', r: 'Categoria', t: 'select', o: ['Serviço', 'Mão de obra', 'Peça'], req: true }, { k: 'descricao', r: 'Descrição', req: true },
       { k: 'valor', r: 'Valor base (R$)', t: 'number' }, { k: 'tipoPreco', r: 'Tipo de preço', t: 'select', o: ['Fixo', 'A partir de', 'Por hora', 'Sob orçamento'] }, { k: 'ativo', r: 'Ativo', t: 'select', o: ['Sim', 'Não'] }, { k: 'fonte', r: 'Fonte / obs' }],
       Object.assign({ ativo: 'Sim' }, c)).then(function (v) { if (!v) return; var d = Object.assign({}, v); if (c.id) d.id = c.id;
-        api.escrever('salvarCatalogoOS', [d]).then(function (r) { aviso(r.msg); try { localStorage.removeItem(CATK); } catch (x) { /* ok */ } CAT = null; carregarCatalogo(); }, function (er) { aviso('Não salvou: ' + er.message); }); });
+        api.escrever('salvarCatalogoOS', [d]).then(function (r) { aviso(r.msg); try { localStorage.removeItem(CATK); } catch (x) { /* ok */ } CAT = null; carregarCatalogo.quando = 0; carregarCatalogo(); }, function (er) { aviso('Não salvou: ' + er.message); }); });
   };
   PRECISA['osm-nova'] = 'salvarOSMulti'; PRECISA['cos-editar'] = 'salvarCatalogoOS';
   function telaPrecos() {
@@ -1083,7 +1095,14 @@
   }
   function ligar(c) {
     var filtro = function (id, obj, k) { var el = $(id); if (!el) return; if (el.tagName === 'SELECT') el.onchange = function () { obj[k] = el.value; render(); };
-      else el.oninput = function () { obj[k] = el.value; var pos = el.selectionStart; render(); var n = $(id); n.focus(); n.setSelectionRange(pos, pos); }; };
+      else el.oninput = function () {
+        obj[k] = el.value; clearTimeout(buscaTimer); var origem = rota(), texto = el.value;
+        buscaTimer = setTimeout(function () {
+          if (!el.isConnected || rota().tela !== origem.tela || rota().sub !== origem.sub || el.value !== texto) return;
+          var foco = document.activeElement === el, pos = el.selectionStart; render(); var n = $(id);
+          if (foco && n) { n.focus({ preventScroll: true }); n.setSelectionRange(pos, pos); }
+        }, 180);
+      }; };
     filtro('fSt', F.op, 'status'); filtro('fPri', F.op, 'prioridade'); filtro('fSeg', F.op, 'segmento'); filtro('fQ', F.op, 'q');
     c.querySelectorAll('[data-cidade]').forEach(function (b) { b.onclick = function () {
       F.op.cidade = b.dataset.cidade; try { localStorage.setItem(CID, F.op.cidade); } catch (x) { /* sem armazenamento */ }
@@ -1120,7 +1139,10 @@
   window.addEventListener('hashchange', render);
   window.addEventListener('online', function () { api.sincronizar().then(function (s) { if (s.enviados) aviso(s.enviados + ' alteração(ões) enviada(s).'); if (s.erros.length) aviso('Algumas alterações foram recusadas: ' + s.erros.join('; ')); iniciar(); }, function (er) { if (er.codigo !== 'TOKEN_INVALIDO') aviso(er.message); }); });
   window.addEventListener('offline', function () { offline = true; faixa(); });
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').then(function () {
+    // Primeiro uso do demo pode ter baixado o script antes do SW assumir a página.
+    if (demo) navigator.serviceWorker.ready.then(function (r) { if (r.active) r.active.postMessage('guardar-demonstracao'); });
+  }).catch(function () {});
   window.ProFixApp = { api: api, iniciar: iniciar, ajustes: ajustes };
   iniciar();
 })();
