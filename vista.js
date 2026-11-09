@@ -331,8 +331,8 @@
   };
   /** Combos oficiais (Financeiro). Sem preço Pix até o Pedro confirmar. */
   V.COMBOS_OFICIAIS = [
-    { servico: 'Combo PC Novo de Novo (sem backup)', preco: 165.80, tipo: 'Fixo', descricao: 'Formatação sem backup + limpeza interna de desktop. À vista. Desconto Pix a definir.', ativo: 'Sim', status: 'Ativo', combo: true },
-    { servico: 'Combo PC Novo de Novo (com backup)', preco: 246.80, tipo: 'Fixo', descricao: 'Formatação com backup + limpeza interna de desktop. À vista. Desconto Pix a definir.', ativo: 'Sim', status: 'Ativo', combo: true }
+    { servico: 'Combo PC Novo de Novo (sem backup)', preco: 157.51, tipo: 'Fixo', descricao: 'Formatação sem backup + limpeza interna de desktop. Combo com 5% de desconto em qualquer forma de pagamento; não soma com desconto do Pix.', ativo: 'Sim', status: 'Ativo', combo: true },
+    { servico: 'Combo PC Novo de Novo (com backup)', preco: 234.46, tipo: 'Fixo', descricao: 'Formatação com backup + limpeza interna de desktop. Combo com 5% de desconto em qualquer forma de pagamento; não soma com desconto do Pix.', ativo: 'Sim', status: 'Ativo', combo: true }
   ];
   V.catalogoComCombos = function (catalogo) {
     var nomes = {}; (catalogo || []).forEach(function (s) { nomes[V.norm(s.servico)] = 1; });
