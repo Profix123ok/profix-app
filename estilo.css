@@ -152,3 +152,17 @@ dialog form#fGen > .acoes{position:sticky;bottom:0;background:var(--card);paddin
 @media(max-width:359px){#fVisita .lin2{grid-template-columns:1fr}}
 #vHora option{font-weight:600}
 #visitasHoje .card .acoes{gap:6px}
+
+/* v0.8.3: painel Mensagens — bottom sheet no celular */
+dialog:has(.sheet-msgs){border:0;padding:0;max-width:100%;width:100%;margin:0;background:transparent}
+dialog:has(.sheet-msgs)::backdrop{background:rgba(0,0,0,.45)}
+.sheet-msgs{background:var(--card);border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto;margin-top:auto}
+@media(min-width:900px){
+  dialog:has(.sheet-msgs){max-width:520px;width:min(520px,92vw);margin:auto;background:transparent}
+  .sheet-msgs{border-radius:16px;max-height:80vh}
+}
+.msg-grupo{font-size:13px;margin:12px 0 6px;color:var(--verde);text-transform:uppercase;letter-spacing:.04em}
+.msg-lista{display:flex;flex-wrap:wrap;gap:8px}
+.msg-lista .btn{min-height:44px}
+#msgsTodas{margin-top:10px}
+#msgsTodas > summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}

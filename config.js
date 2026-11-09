@@ -26,5 +26,5 @@ window.PROFIX_CONFIG = {
     fimDeSemana: { inicio: '09:00', fim: '17:00' }
   },
   PRECO_VISITA_EMPRESA: 179.90, // tabela oficial 02/11/2026 (visita técnica a empresa)
-  VERSAO_APP: '0.8.2'
+  VERSAO_APP: '0.8.3'
 };

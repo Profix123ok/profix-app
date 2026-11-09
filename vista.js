@@ -292,27 +292,51 @@
     return 'Oi' + (nome ? ', ' + nome : '') + '! Conversamos sobre o seu ' + ap + ' uns dias atrás. Se ainda precisar, posso marcar um horário. Se não for o momento, tudo bem também.';
   };
   V.AVISO_NAO_CONTATAR = 'Este cliente pediu para não receber mensagens. Fale com ele só se ele te procurar.';
-  /** Planos B2B — Financeiro 09/11. Máquina extra / Pix / fidelidade = a definir (null). */
+  /** Planos B2B — Financeiro 09/11. Pedro 09/11: extra R$35; Pix 5% e anual 10% (editáveis no App). */
   V.PLANOS_B2B = [
     { nome: 'Essencial', pcs: 5, pcsTxt: 'até 5', visitas: 1, frequencia: '1x por mês', valor: 359.50, limpeza: 6, suporte: 'Suporte remoto', para: 'Para quem está começando e quer um cuidado básico.' },
     { nome: 'Empresa', pcs: 10, pcsTxt: 'até 10', visitas: 2, frequencia: '2x por mês', valor: 719.00, limpeza: 6, suporte: 'Suporte remoto prioritário', para: 'Para empresas que dependem do computador o dia todo.', selo: true },
     { nome: 'Empresa+', pcsMin: 11, pcsTxt: '11 ou mais', visitas: 3, frequencia: '3x por mês', valorPorPc: 71.90, valorMin: 790.90, limpeza: 6, suporte: 'Atendimento prioritário', para: 'Para equipes maiores, com prioridade na agenda.' }
   ];
-  V.EXTRA_MAQUINA = null; // a definir pelo Pedro
-  V.DESCONTO_PIX = null;
-  V.DESCONTO_FIDELIDADE = null;
+  V.EXTRA_MAQUINA = 35; // R$/PC/mês (Pedro 09/11)
+  V.DESCONTO_PIX = 5; // % padrão; editável em Mais › Ajustes
+  V.DESCONTO_ANUAL = 10; // % contrato anual; editável em Mais › Ajustes
+  V.DESCONTO_FIDELIDADE = V.DESCONTO_ANUAL; // alias legado
   V.planoOficial = function (nome) { return V.PLANOS_B2B.filter(function (p) { return p.nome === nome; })[0]; };
-  V.valorPlano = function (nome, pcs, extras) {
+  /** cfg opcional: { extra, pix, anual } vindos dos ajustes do aparelho. */
+  V.precosComerciais = function (cfg) {
+    cfg = cfg || {};
+    return {
+      extra: cfg.extra != null && cfg.extra !== '' ? Number(cfg.extra) : V.EXTRA_MAQUINA,
+      pix: cfg.pix != null && cfg.pix !== '' ? Number(cfg.pix) : V.DESCONTO_PIX,
+      anual: cfg.anual != null && cfg.anual !== '' ? Number(cfg.anual) : V.DESCONTO_ANUAL
+    };
+  };
+  V.valorPlano = function (nome, pcs, extras, cfg) {
     var p = V.planoOficial(nome); if (!p) return null;
     extras = Number(extras) || 0;
+    var precos = V.precosComerciais(cfg), extra = precos.extra;
+    var v;
     if (p.valorPorPc) {
       var n = Math.max(Number(pcs) || p.pcsMin || 11, p.pcsMin || 11);
-      var base = Math.round(n * p.valorPorPc * 100) / 100;
-      return Math.max(base, p.valorMin || 0);
+      v = Math.round(n * p.valorPorPc * 100) / 100;
+      v = Math.max(v, p.valorMin || 0);
+    } else {
+      v = p.valor;
     }
-    var v = p.valor;
-    if (V.EXTRA_MAQUINA != null && extras > 0) v = Math.round((v + extras * V.EXTRA_MAQUINA) * 100) / 100;
+    if (extra != null && extras > 0) v = Math.round((v + extras * extra) * 100) / 100;
     return v;
+  };
+  /** Aplica % Pix sobre um valor. Combos oficiais NÃO usam este desconto (já têm 5% próprio). */
+  V.valorComPix = function (valor, cfg) {
+    var p = V.precosComerciais(cfg).pix;
+    if (valor == null || !(p > 0)) return valor;
+    return Math.round(valor * (1 - p / 100) * 100) / 100;
+  };
+  V.valorComAnual = function (valorMensal, cfg) {
+    var p = V.precosComerciais(cfg).anual;
+    if (valorMensal == null || !(p > 0)) return valorMensal == null ? null : Math.round(valorMensal * 12 * 100) / 100;
+    return Math.round(valorMensal * 12 * (1 - p / 100) * 100) / 100;
   };
   V.precoTxtPlano = function (p) {
     if (!p) return 'a definir';
@@ -329,7 +353,7 @@
     });
     return out;
   };
-  /** Combos oficiais (Financeiro). Sem preço Pix até o Pedro confirmar. */
+  /** Combos oficiais: 5% próprio no preço; não soma com desconto Pix das Configurações. */
   V.COMBOS_OFICIAIS = [
     { servico: 'Combo PC Novo de Novo (sem backup)', preco: 157.51, tipo: 'Fixo', descricao: 'Formatação sem backup + limpeza interna de desktop. Combo com 5% de desconto em qualquer forma de pagamento; não soma com desconto do Pix.', ativo: 'Sim', status: 'Ativo', combo: true },
     { servico: 'Combo PC Novo de Novo (com backup)', preco: 234.46, tipo: 'Fixo', descricao: 'Formatação com backup + limpeza interna de desktop. Combo com 5% de desconto em qualquer forma de pagamento; não soma com desconto do Pix.', ativo: 'Sim', status: 'Ativo', combo: true }
@@ -351,7 +375,7 @@
       '\n\nSeus dados (LGPD): usamos seu nome e telefone só para este atendimento e para avisos que você aceitar. Não passamos seus dados para ninguém. Você pode pedir para ver, corrigir ou apagar seus dados no WhatsApp (15) 98112-8309.';
   };
 
-  // v0.8.2: horários e textos de visita técnica (Atendimento §9 + config).
+  // v0.8.2+: horários e textos de visita técnica (Atendimento §9 + config).
   V.DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   V.horariosVisitaCfg = function (CFG) {
     var h = (CFG && CFG.HORARIOS_VISITA) || {}, passo = Number((CFG && CFG.PASSO_VISITA_MIN) != null ? CFG.PASSO_VISITA_MIN : 30) || 30;
@@ -452,12 +476,19 @@
     var nome = V.primeiroNome(c, v);
     return 'Oi' + (nome ? ', ' + nome : '') + '! Estou a caminho para a visita das ' + (V.horaVisita(v) || '[hora]') + '. Chego em cerca de [__] minutos.';
   };
-  V.textoRemarcarVisita = function (c, v) {
+  // v0.8.3: Remarcar separado (§9) — cliente pediu vs Pedro precisa mudar (sem colchete de escolha).
+  V.textoRemarcarClientePediu = function (c, v) {
     var nome = V.primeiroNome(c, v);
-    // §9: [Você pediu para mudar / Preciso mudar] — deixa as duas opções editáveis no texto
-    return 'Oi' + (nome ? ', ' + nome : '') + '! [Você pediu para mudar / Preciso mudar] a visita de ' + V.dataBR(v.data) + ' às ' + (V.horaVisita(v) || '[hora]') +
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Sem problema, vamos mudar a visita de ' + V.dataBR(v.data) + ' às ' + (V.horaVisita(v) || '[hora]') +
       '. Tenho estes horários: [opção 1] ou [opção 2]. Qual fica melhor pra você?';
   };
+  V.textoRemarcarPedroPrecisa = function (c, v) {
+    var nome = V.primeiroNome(c, v);
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Vou precisar mudar a nossa visita de ' + V.dataBR(v.data) + ' às ' + (V.horaVisita(v) || '[hora]') +
+      ', desculpa pelo transtorno. Tenho estes horários: [opção 1] ou [opção 2]. Qual fica melhor pra você?';
+  };
+  /** @deprecated 0.8.3 — use textoRemarcarClientePediu / textoRemarcarPedroPrecisa */
+  V.textoRemarcarVisita = function (c, v) { return V.textoRemarcarClientePediu(c, v); };
   V.textoVisitaFeita = function (c, v, contrato) {
     var nome = V.primeiroNome(c, v);
     var onde = v && v.os ? ('na OS ' + v.os) : (contrato ? 'no seu plano' : '[na OS / no seu plano]');
@@ -465,5 +496,235 @@
       '. O que foi feito: [resumo].' + (contrato ? ' Próxima visita do plano: [data].' : '') +
       ' Se notar qualquer coisa, me chama aqui.';
   };
+
+  // ---- v0.8.3: Mensagens prontas (§10 + visitas §9 + kit 19). Sem etapas? Inclui 3 da peça. ----
+  V.parseAgendadoPara = function (s) {
+    var m = String(s || '').trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+    return m ? { data: m[1], hora: m[2], quando: m[1] + ' ' + m[2] } : null;
+  };
+  V.PRECO_DIAGNOSTICO = 62.90;
+  V.osPaga = function (D, o) {
+    if (!o) return false;
+    var rec = V.recebidoOS(D, o.num);
+    if (!(rec > 0)) return false;
+    return V.saldoOS(D, o) <= 0;
+  };
+  V.textoConfirmarAgendamentoTraz = function (c, o, dataIso, hora) {
+    var nome = V.primeiroNome(c, o), ap = (o && o.equipamento) || '[aparelho]', motivo = (o && o.defeito) || '[o que o cliente contou]';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Aqui é o Pedro, da ProFix. Seu atendimento está confirmado para **' +
+      V.dataExtensoVisita(dataIso) + ', às ' + (hora || '[hora]') + '**. ✅\n' +
+      '💻 Aparelho: ' + ap + ' · Motivo: ' + motivo + '\n' +
+      '📍 [O local eu te mando aqui, combinado só com você.]\n' +
+      'O diagnóstico é ' + V.brl(V.PRECO_DIAGNOSTICO) + '. Depois disso eu te passo o valor do conserto, e você só aprova se quiser.\n' +
+      'Pode me confirmar com um "ok"? Se precisar mudar, é só avisar.';
+  };
+  V.textoConfirmarEntregaRetirada = function (c, o, dataIso, hora) {
+    var nome = V.primeiroNome(c, o), ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Combinado: a entrega do seu ' + ap + ' (OS ' + num + ') fica para **' +
+      V.dataExtensoVisita(dataIso) + ', às ' + (hora || '[hora]') + '**[, aí com você / aqui com hora marcada]. Na entrega a gente testa junto, e eu te passo o termo de garantia. 🙂 Pode confirmar com um "ok"?';
+  };
+  V.textoLembreteAgendamento = function (c, hora) {
+    var nome = V.primeiroNome(c);
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Lembrando do nosso horário **hoje às ' + (hora || '[hora]') + '**. Se algo mudou, me avisa por aqui. 🙂';
+  };
+  V.textoRecebiAparelho = function (c, o, link) {
+    var nome = V.primeiroNome(c, o), ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Seu ' + ap + ' ficou comigo, OS ' + num +
+      '. Você pode acompanhar por aqui: ' + (link || '[link da OS]') +
+      '. Assim que eu terminar o diagnóstico, te passo o valor do conserto. Nada é feito sem o seu ok.';
+  };
+  V.textoOrcamentoProntoMsg = function (c, o, link) {
+    var nome = V.primeiroNome(c, o) || '[nome]', ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
+    var causa = (o && (o.diagnostico || o.defeito)) || '[causa]', serv = (o && o.servico) || '[serviço]';
+    var valor = (o && (o.orcamento || o.valor)) ? V.brl(o.orcamento || o.valor) : 'R$ [__]';
+    var validade = (o && o.validade) ? V.dataBR(o.validade) : '[data]';
+    return nome + ', terminei o diagnóstico do seu ' + ap + ' (OS ' + num + ').\n' +
+      '🔎 O que encontrei: ' + causa + '\n' +
+      '🛠️ O que proponho: ' + serv + ' · **' + valor + '**[, peça não inclusa / peça: R$ __]\n' +
+      '⏱️ Prazo: [__] · Orçamento válido até ' + validade + '\n' +
+      'Você pode aprovar por aqui ou pelo link: ' + (link || '[link]') + '. Se preferir não fazer, tudo bem também.';
+  };
+  V.textoAparelhoPronto = function (c, o) {
+    var nome = V.primeiroNome(c, o) || '[nome]', ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
+    var valor = (o && (o.valor || o.orcamento)) ? V.brl(o.valor || o.orcamento) : 'R$ [__]';
+    return 'Boa notícia, ' + nome + '! Seu ' + ap + ' está pronto e testado ✅ (OS ' + num +
+      '). Valor final: **' + valor + '**. Pagamento: Pix, dinheiro ou cartão (até 3x sem juros ou até 12x com juros). Vamos combinar a entrega? [opção 1] ou [opção 2].';
+  };
+  V.textoAgradecimentoEntrega = function (c) {
+    var nome = V.primeiroNome(c);
+    return 'Obrigado pela confiança' + (nome ? ', ' + nome : '') + '! 🙏 A garantia do serviço é de 30 dias a partir de hoje. Qualquer coisa, me chama aqui.';
+  };
+  /** kit-whatsapp §19 — sem review gating; nunca ofereça brinde/desconto. */
+  V.textoAvaliacaoGoogle = function (c, o, url) {
+    var nome = V.primeiroNome(c, o) || '[nome]';
+    return nome + ', obrigado pela confiança 🙏\n' +
+      'A ProFix está começando e a opinião sincera de quem foi atendido ajuda outras pessoas de Sorocaba a decidir. Se quiser deixar sua avaliação no Google, leva 1 minutinho:\n' +
+      '👉 ' + (url || 'https://g.page/r/CZQuYc9gn5lJECE/review') + '\n' +
+      'Se algo não saiu como você esperava, me conta aqui também, que eu quero resolver.';
+  };
+  V.textoOrcamentoPeca = function (c, o, link, validadeIso) {
+    var nome = V.primeiroNome(c, o) || '[nome]', ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
+    var val = validadeIso ? V.dataBR(validadeIso) : '[data]';
+    return nome + ', para o seu ' + ap + ' (OS ' + num + ') vai precisar de [peça]. A peça fica **R$ [__]**[ com frete] e o serviço, R$ [__]. O valor da peça vale até ' + val + '. A peça leva cerca de [__] dias para chegar depois que você aprovar e pagar. Pode aprovar por aqui ou pelo link: ' + (link || '[link]') + '. Se preferir não fazer, tudo bem também.';
+  };
+  V.textoPecaEncomendada = function (c, o) {
+    var nome = V.primeiroNome(c, o), ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Recebi o pagamento e já encomendei a [peça] do seu ' + ap + ' (OS ' + num +
+      '). A previsão do fornecedor é [data / "ainda sem data confirmada; te aviso assim que ela sair"]. 🙂';
+  };
+  V.textoPecaChegou = function (c, o) {
+    var nome = V.primeiroNome(c, o), ap = (o && o.equipamento) || '[aparelho]';
+    return 'Boa notícia' + (nome ? ', ' + nome : '') + '! A [peça] chegou. Já vou instalar no seu ' + ap + ' e a previsão é deixar pronto até [data]. Te aviso quando terminar.';
+  };
+  V.ASSUNTOS_MSG_EMAIL = {
+    'ag-traz': 'Confirmação do seu atendimento — ProFix',
+    'ag-entrega': 'Entrega/retirada combinada — ProFix',
+    'ag-lembrete': 'Lembrete do horário de hoje — ProFix',
+    'vis-confirmar': 'Confirmação da visita técnica — ProFix',
+    'vis-lembrete': 'Lembrete da visita — ProFix',
+    'vis-caminho': 'Estou a caminho — ProFix',
+    'vis-remarcar-cli': 'Remarcação da visita — ProFix',
+    'vis-remarcar-pedro': 'Preciso remarcar a visita — ProFix',
+    'vis-feita': 'Visita registrada — ProFix',
+    'os-recebi': 'Recebemos seu aparelho — ProFix',
+    'os-orc': 'Orçamento pronto — ProFix',
+    'os-pronto': 'Aparelho pronto — ProFix',
+    'os-peca-orc': 'Orçamento da peça — ProFix',
+    'os-peca-encom': 'Peça encomendada — ProFix',
+    'os-peca-chegou': 'Peça chegou — ProFix',
+    'pos-agrade': 'Obrigado pela confiança — ProFix',
+    'pos-revisao': 'Tudo certo com o aparelho? — ProFix',
+    'pos-garantia': 'Aviso de garantia — ProFix',
+    'pos-google': 'Sua opinião ajuda a ProFix — ProFix'
+  };
+  /**
+   * ctx: { cliente, os, visita, D, googleReviewUrl, linkOS, contrato, precoVisita, hoje }
+   */
+  V.catalogoMensagensProntas = function (ctx) {
+    ctx = ctx || {};
+    var c = ctx.cliente || {}, o = ctx.os || null, v = ctx.visita || null, D = ctx.D || {};
+    var st = o ? String(o.status || '') : '';
+    var osAberta = !!(o && ['Entregue', 'Cancelada', 'Descartada'].indexOf(st) < 0);
+    var osEntregue = !!(o && st === 'Entregue');
+    var temVisita = !!(v && v.status !== 'Concluída' && v.status !== 'Cancelada');
+    var paga = !!(o && V.osPaga(D, o));
+    var item = function (id, grupo, rotulo, opts) {
+      return Object.assign({ id: id, grupo: grupo, rotulo: rotulo, precisaHorario: false, tipoWa: 'os', marketing: false }, opts || {});
+    };
+    var todas = [
+      item('ag-traz', 'Agendamento', 'Confirmar agendamento: traz o aparelho', { precisaHorario: true }),
+      item('ag-entrega', 'Agendamento', 'Confirmar entrega ou retirada', { precisaHorario: true, precisaOS: true }),
+      item('ag-lembrete', 'Agendamento', 'Lembrete do agendamento', { precisaHorario: true }),
+      item('vis-confirmar', 'Agendamento', 'Confirmar visita', { precisaVisita: true }),
+      item('vis-lembrete', 'Agendamento', 'Lembrete da visita', { precisaVisita: true }),
+      item('vis-caminho', 'Agendamento', 'A caminho (visita)', { precisaVisita: true }),
+      item('vis-remarcar-cli', 'Agendamento', 'Remarcar: cliente pediu', { precisaVisita: true }),
+      item('vis-remarcar-pedro', 'Agendamento', 'Remarcar: eu preciso mudar', { precisaVisita: true }),
+      item('vis-feita', 'Agendamento', 'Visita feita', { precisaVisita: true }),
+      item('os-recebi', 'OS', 'Recebi o aparelho', { precisaOS: true }),
+      item('os-orc', 'OS', 'Orçamento pronto', { precisaOS: true }),
+      item('os-pronto', 'OS', 'Aparelho pronto', { precisaOS: true }),
+      item('os-peca-orc', 'OS', 'Orçamento da peça', { precisaOS: true }),
+      item('os-peca-encom', 'OS', 'Peça encomendada', { precisaOS: true, precisaPaga: true }),
+      item('os-peca-chegou', 'OS', 'Peça chegou', { precisaOS: true }),
+      item('pos-agrade', 'Pós-venda', 'Agradecimento pós-entrega', { precisaOS: true }),
+      item('pos-revisao', 'Pós-venda', 'Revisão 30 dias', { precisaOS: true, marketing: true }),
+      item('pos-garantia', 'Pós-venda', 'Fim de garantia', { precisaOS: true }),
+      item('pos-google', 'Pós-venda', 'Avaliação no Google', { precisaOS: true, precisaGoogle: true })
+    ];
+    var idsM = {};
+    if (temVisita || ctx.agendado) {
+      ['ag-traz', 'ag-lembrete', 'vis-confirmar', 'vis-lembrete', 'vis-remarcar-cli', 'vis-remarcar-pedro', 'vis-caminho'].forEach(function (id) { idsM[id] = 1; });
+    }
+    if (osAberta) {
+      ['os-recebi', 'os-orc', 'os-pronto', 'ag-entrega', 'os-peca-orc', 'os-peca-chegou'].forEach(function (id) { idsM[id] = 1; });
+      if (paga) idsM['os-peca-encom'] = 1;
+      if (st === 'Pronto' || /retirada|pronto/i.test(st)) { idsM['ag-entrega'] = 1; idsM['os-pronto'] = 1; }
+    }
+    if (osEntregue) {
+      ['pos-agrade', 'pos-revisao', 'pos-garantia', 'pos-google'].forEach(function (id) { idsM[id] = 1; });
+    }
+    if (!o) {
+      ['ag-traz', 'ag-lembrete'].forEach(function (id) { idsM[id] = 1; });
+      if (temVisita) ['vis-confirmar', 'vis-lembrete', 'vis-remarcar-cli', 'vis-remarcar-pedro', 'vis-caminho'].forEach(function (id) { idsM[id] = 1; });
+    }
+    var ok = function (it) {
+      if (it.precisaOS && !o) return false;
+      if (it.precisaVisita && !v) return false;
+      if (it.precisaGoogle && !ctx.googleReviewUrl) return false;
+      if (it.precisaPaga && !paga) return false;
+      return true;
+    };
+    var momento = todas.filter(function (it) { return idsM[it.id] && ok(it); });
+    var resto = todas.filter(function (it) { return ok(it) && !idsM[it.id]; });
+    return { momento: momento, resto: resto, todas: todas.filter(ok) };
+  };
+  V.montarMensagemPronta = function (id, ctx, dataIso, hora) {
+    ctx = ctx || {};
+    var c = ctx.cliente || {}, o = ctx.os, v = ctx.visita, link = ctx.linkOS || '';
+    if (id === 'ag-traz') return V.textoConfirmarAgendamentoTraz(c, o, dataIso, hora);
+    if (id === 'ag-entrega') return V.textoConfirmarEntregaRetirada(c, o, dataIso, hora);
+    if (id === 'ag-lembrete') return V.textoLembreteAgendamento(c, hora);
+    if (id === 'vis-confirmar') return V.textoConfirmarVisita(c, v, ctx.contrato, ctx.precoVisita);
+    if (id === 'vis-lembrete') return V.textoLembreteVisita(c, v);
+    if (id === 'vis-caminho') return V.textoACaminhoVisita(c, v);
+    if (id === 'vis-remarcar-cli') return V.textoRemarcarClientePediu(c, v);
+    if (id === 'vis-remarcar-pedro') return V.textoRemarcarPedroPrecisa(c, v);
+    if (id === 'vis-feita') return V.textoVisitaFeita(c, v, ctx.contrato);
+    if (id === 'os-recebi') return V.textoRecebiAparelho(c, o, link);
+    if (id === 'os-orc') return V.textoOrcamentoProntoMsg(c, o, link);
+    if (id === 'os-pronto') return V.textoAparelhoPronto(c, o);
+    if (id === 'os-peca-orc') {
+      var valPeca = ctx.hoje ? V.somaDias(ctx.hoje, 3) : (dataIso ? V.somaDias(dataIso, 3) : '');
+      return V.textoOrcamentoPeca(c, o, link, valPeca);
+    }
+    if (id === 'os-peca-encom') return V.textoPecaEncomendada(c, o);
+    if (id === 'os-peca-chegou') return V.textoPecaChegou(c, o);
+    if (id === 'pos-agrade') return V.textoAgradecimentoEntrega(c);
+    if (id === 'pos-revisao') return V.textoRevisao30(c, o);
+    if (id === 'pos-garantia') {
+      var ate = o && o.entrega ? V.somaDias(o.entrega, 30) : (dataIso || ctx.hoje);
+      return V.textoFimGarantia(c, o, ate);
+    }
+    if (id === 'pos-google') return V.textoAvaliacaoGoogle(c, o, ctx.googleReviewUrl);
+    return '';
+  };
+
+
+  V.RODAPE_EMAIL_PARAR = "Recebeu este e-mail porque tem um atendimento com a ProFix. Para não receber mais, responda com 'parar'.";
+  /** Assunto+corpo de e-mail §12.3 quando há correspondente; senão null (usa texto da mensagem). */
+  V.emailMensagemPronta = function (id, ctx, dataIso, hora) {
+    ctx = ctx || {};
+    var c = ctx.cliente || {}, o = ctx.os, nome = V.primeiroNome(c, o) || '[primeiro nome]';
+    var ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]', link = ctx.linkOS || '[link da OS / Minha Área]';
+    var rodape = '\n\n' + V.RODAPE_EMAIL_PARAR;
+    var dataExt = dataIso ? V.dataExtensoVisita(dataIso) : '[dia da semana], [data]';
+    var hr = hora || '[hora]';
+    if (id === 'ag-traz' || id === 'ag-entrega' || id === 'ag-lembrete' || id === 'vis-confirmar') {
+      var oque = id === 'ag-entrega' ? 'entrega do aparelho' : (id === 'vis-confirmar' ? 'visita na empresa' : 'atendimento com hora marcada');
+      var dataBr = dataIso ? V.dataBR(dataIso) : '[data]';
+      return {
+        assunto: 'Seu atendimento na ProFix: ' + dataBr + ' às ' + hr,
+        corpo: 'Olá, ' + nome + '!\nSeu atendimento está marcado para **' + dataExt + ', às ' + hr + '** (' + oque + ').\nAcompanhe ou confirme por aqui: ' + link + '\nPrecisa mudar? Fale com o Pedro no WhatsApp (15) 98112-8309.\nProFix Computadores · Sorocaba' + rodape
+      };
+    }
+    if (id === 'os-pronto') {
+      var valor = (o && (o.valor || o.orcamento)) ? V.brl(o.valor || o.orcamento) : 'R$ [__]';
+      return {
+        assunto: 'Seu ' + ap + ' está pronto (OS ' + num + ')',
+        corpo: 'Olá, ' + nome + '! Seu ' + ap + ' está pronto e testado. Valor final: ' + valor + '. Para combinar a entrega, responda no WhatsApp (15) 98112-8309 ou veja a OS: ' + link + '.' + rodape
+      };
+    }
+    if (id === 'pos-google' || id === 'pos-agrade') {
+      var ate = o && o.entrega ? V.dataBR(V.somaDias(o.entrega, 30)) : '[data]';
+      var url = ctx.googleReviewUrl || 'https://g.page/r/CZQuYc9gn5lJECE/review';
+      return {
+        assunto: 'Obrigado, ' + nome + '! Como foi o atendimento?',
+        corpo: 'Olá, ' + nome + '!\nObrigado por confiar na ProFix. A garantia do serviço vai até **' + ate + '**. Se notar qualquer coisa, é só chamar no WhatsApp (15) 98112-8309.\nSe puder, conte como foi no Google. Leva 1 minuto: ' + url + '\nUm abraço,\nPedro · ProFix Computadores' + rodape
+      };
+    }
+    return null;
+  };
+
   return V;
 });

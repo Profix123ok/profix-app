@@ -19,7 +19,12 @@
   var $ = function (id) { return document.getElementById(id); }, e = V.esc;
   // v0.7.2: confirm/alert/prompt nativos podem ser bloqueados no celular -> modal na própria página (pergunta.js), sempre com Promise.
   var P = window.ProFixPergunta, perguntar = function (t, op) { return P.confirmar(t, op); };
-  var AJ = 'profix.ajustes', ajustes = (function () { try { return JSON.parse(localStorage.getItem(AJ)) || {}; } catch (x) { return {}; } })();
+  var AJ = 'profix.ajustes', ajustes = (function () {
+    try { return JSON.parse(localStorage.getItem(AJ)) || {}; } catch (x) { return {}; }
+  })();
+  if (ajustes.descontoPix == null) ajustes.descontoPix = V.DESCONTO_PIX;
+  if (ajustes.descontoAnual == null) ajustes.descontoAnual = V.DESCONTO_ANUAL;
+  function cfgPrecos() { return V.precosComerciais({ pix: ajustes.descontoPix, anual: ajustes.descontoAnual, extra: V.EXTRA_MAQUINA }); }
   var WAF = 'profix.waOp'; try { F.op.wa = localStorage.getItem(WAF) === '1'; } catch (x) { F.op.wa = false; }
   var CID = 'profix.cidadeOp'; try { F.op.cidade = localStorage.getItem(CID) || ''; } catch (x) { F.op.cidade = ''; }
   function salvarAjustes() { localStorage.setItem(AJ, JSON.stringify(ajustes)); }
@@ -286,15 +291,23 @@
       if (sub === 'catalogo') {
         var cats = V.catalogoComCombos(D.catalogo || []);
         return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' +
-          '<section id="combosOficiais"><h2>Combos oficiais</h2><p class="muted">Valores à vista do Financeiro (09/11). Desconto Pix: a definir.</p>' +
+          '<section id="combosOficiais"><h2>Combos oficiais</h2><p class="muted">Valores à vista do Financeiro (09/11). Cada combo já tem 5% próprio; <b>não soma</b> com o desconto Pix das Configurações (' + e(String(cfgPrecos().pix)) + '%).</p>' +
           lista(V.COMBOS_OFICIAIS, function (s) { return card(e(s.servico), V.brl(s.preco) + ' · ' + e(s.descricao), tag('Combo', 'ok'), ''); }, '') + '</section>' +
           lista(D.catalogo || [], function (s) { return card(e(s.servico), e(s.tipo || '') + ' · ' + V.brl(s.preco) + (s.sugerido ? '<br>Sugerido: ' + e(s.sugerido) : '') + (s.descricao ? '<br>' + e(s.descricao) : ''), tag(s.status || (s.ativo === 'Sim' ? 'Ativo' : 'Inativo')), botao('Editar', 'cat-editar', s._row)); }, 'Catálogo vazio.');
       }
       if (sub === 'modelos') return cab + '<div class="row">' + botao('+ Novo modelo', 'mod-novo', '', '') + '</div>' + lista(D.modelos || [], function (m) { return card(e(m.modelo), e(m.quando || '') + '<br><span class="pre">' + e(String(m.texto || '').slice(0, 160)) + (String(m.texto || '').length > 160 ? '…' : '') + '</span>', '', botao('Editar', 'mod-editar', m._row)); }, 'Nenhum modelo.') +
         '<p class="muted">Backup: continua pela planilha (menu ProFix CRM > Fazer backup agora / backup semanal).</p>';
-      if (sub === 'ajustes') return cab + '<div class="card"><label class="chk"><input type="checkbox" id="ajSenha"' + (ajustes.mostrarSenha ? ' checked' : '') + '> Mostrar senha do aparelho</label><div class="m">Desligado: a senha das OS fica oculta. Mesmo ligado, ela só aparece se o servidor enviar (no crm-v3 isso também vem desligado).</div></div>' +
-        '<div class="acoes"><button class="btn" id="bInstalar" hidden>📲 Instalar o app</button><button class="btn sec" id="bSync">🔄 Atualizar agora</button><button class="btn sec" id="bSair">Sair deste aparelho</button></div>' +
-        '<p class="muted" id="dicaIos"></p><p class="muted">Versão ' + e(CFG.VERSAO_APP || '') + ' · ' + (api.tipo === 'mock' ? 'modo demonstração' : 'conectado à planilha') + (api.ultimaAtualizacao() ? ' · dados de ' + new Date(api.ultimaAtualizacao()).toLocaleString('pt-BR') : '') + '</p>';
+      if (sub === 'ajustes') {
+        var pc = cfgPrecos();
+        return cab + '<div class="card"><label class="chk"><input type="checkbox" id="ajSenha"' + (ajustes.mostrarSenha ? ' checked' : '') + '> Mostrar senha do aparelho</label><div class="m">Desligado: a senha das OS fica oculta. Mesmo ligado, ela só aparece se o servidor enviar (no crm-v3 isso também vem desligado).</div></div>' +
+          '<div class="card" id="ajPrecos"><h3 style="margin:0 0 8px">Descontos comerciais</h3>' +
+          '<p class="muted">Máquina extra fixa: <b>' + e(V.brl(V.EXTRA_MAQUINA)) + '/PC/mês</b> (Pedro 09/11). Combos oficiais têm 5% próprio e <b>não somam</b> com o Pix abaixo.</p>' +
+          '<label for="ajPix">Desconto no Pix (%)</label><input id="ajPix" type="number" min="0" max="100" step="0.1" value="' + e(String(pc.pix)) + '">' +
+          '<label for="ajAnual">Desconto no contrato anual (%)</label><input id="ajAnual" type="number" min="0" max="100" step="0.1" value="' + e(String(pc.anual)) + '">' +
+          '<div class="acoes"><button type="button" class="btn" id="ajSalvarPrecos">Salvar descontos</button></div></div>' +
+          '<div class="acoes"><button class="btn" id="bInstalar" hidden>📲 Instalar o app</button><button class="btn sec" id="bSync">🔄 Atualizar agora</button><button class="btn sec" id="bSair">Sair deste aparelho</button></div>' +
+          '<p class="muted" id="dicaIos"></p><p class="muted">Versão ' + e(CFG.VERSAO_APP || '') + ' · ' + (api.tipo === 'mock' ? 'modo demonstração' : 'conectado à planilha') + (api.ultimaAtualizacao() ? ' · dados de ' + new Date(api.ultimaAtualizacao()).toLocaleString('pt-BR') : '') + '</p>';
+      }
       var ym = D.hoje.slice(0, 7), R = V.resumoMes(D, ym), l = (D.financeiro || []).slice().sort(function (a, b) { return String(b.data) < String(a.data) ? -1 : 1; });
       return cab + '<div' + (!sub ? ' class="mais-padrao"' : '') + '><div class="resumo"><div><b>' + V.brl(R.entradas) + '</b>entradas no mês</div><div><b>' + V.brl(R.saidas) + '</b>saídas no mês</div><div><b>' + V.brl(R.saldo) + '</b>saldo do mês</div><div><b>' + l.length + '</b>lançamentos</div></div>' +
         '<div class="row">' + botao('+ Novo lançamento', 'fin-novo', '', '') + '</div>' +
@@ -503,7 +516,7 @@
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
+        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('💬 Mensagens', 'os-msgs', row) + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div></details>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
       var principal = m.querySelector('#proximaOS [data-a]'); if (principal) m.querySelectorAll('#maisAcoesOS [data-a="' + principal.dataset.a + '"]').forEach(function (b) { b.remove(); });
@@ -547,8 +560,9 @@
     'cli-editar': function (row) {
       var c = row ? achar('clientes', row) : {};
       formulario(row ? e(c.nome) : 'Novo cliente', [{ k: 'nome', r: 'Nome', req: true }, { k: 'whatsapp', r: 'WhatsApp' }, { k: 'bairro', r: 'Bairro' }, { k: 'origem', r: 'Origem do contato', t: 'select', o: D.origens },
-        { k: 'indicadoPor', r: 'Indicado por' }, { k: 'consent', r: 'Consentimento de contato (LGPD)', t: 'select', o: ['Sim', 'Não'] },
-        { k: 'aniversario', r: 'Aniversário (dd/mm)', ajuda: 'Ex.: 25/12. Usado no chip “aniversariantes”.' }, { k: 'naoContatar', r: 'Não contatar', t: 'select', o: ['Não', 'Sim'], ajuda: '“Sim” bloqueia WhatsApp, ligação e marketing para este cliente.' }].concat(temCol('clientes', 'email') ? [{ k: 'email', r: 'E-mail', t: 'email' }] : [], temCol('clientes', 'endereco') ? [{ k: 'endereco', r: 'Endereço (para o Maps)' }] : [], [ { k: 'proximo', r: 'Próximo contato', t: 'date' }, { k: 'acao', r: 'Próxima ação' },
+        { k: 'indicadoPor', r: 'Indicado por' }, { k: 'email', r: 'E-mail (opcional)', t: 'email', ajuda: 'Para enviar mensagens do atendimento por e-mail.' },
+        { k: 'consent', r: 'Aceita receber mensagens e e-mails sobre o atendimento (LGPD)', t: 'select', o: ['Sim', 'Não'], ajuda: 'Sim = WhatsApp/e-mail de atendimento e marketing conforme as regras. Não = só OS com aviso no WhatsApp; e-mail bloqueado.' },
+        { k: 'aniversario', r: 'Aniversário (dd/mm)', ajuda: 'Ex.: 25/12. Usado no chip “aniversariantes”.' }, { k: 'naoContatar', r: 'Não contatar', t: 'select', o: ['Não', 'Sim'], ajuda: '“Sim” bloqueia WhatsApp, ligação, e-mail e marketing para este cliente.' }].concat(temCol('clientes', 'endereco') ? [{ k: 'endereco', r: 'Endereço (para o Maps)' }] : [], [ { k: 'proximo', r: 'Próximo contato', t: 'date' }, { k: 'acao', r: 'Próxima ação' },
         { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'obs', r: 'Observações', t: 'textarea' }]), c)
         .then(function (v) { if (!v) return; var an = window.ProFixDif.normalizarAniversario(v.aniversario); if (an === null) return aviso('Aniversário inválido: use dd/mm (ex.: 25/12).'); v.aniversario = an; if (!v.naoContatar) v.naoContatar = 'Não'; var d = Object.assign({}, v); if (v.consent === 'Sim' && c.consent !== 'Sim') d.dataConsent = D.hoje; if (row) { d._row = c._row; d._nomeOriginal = c.nome; } escrever('salvarCliente', [d], row ? aplicar('clientes', row, v) : null); });
     },
@@ -906,14 +920,66 @@
   /** Modal com o texto pronto e o botão wa.me (o envio é sempre manual, no WhatsApp). */
   function abrirMsg(p) {
     var m = $('modal');
-    m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(p.titulo) + '</h2>' + (p.aviso ? '<p class="alerta" id="msgAviso">' + e(p.aviso) + '</p>' : '') +
+    var emailOk = !!(p.emailOk && p.cliente && api.pode('enviarEmailCliente') && V.podeEmailCliente(p.cliente) && !Dif.naoContatar(p.cliente));
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fMsgPronta"><h2 style="margin:0">' + e(p.titulo) + '</h2>' + (p.aviso ? '<p class="alerta" id="msgAviso">' + e(p.aviso) + '</p>' : '') +
       (p.texto ? '<div class="pre msg-texto" id="msgTexto">' + e(p.texto) + '</div>' : '') +
       (p.link ? '<div><span class="muted">Link de acompanhamento:</span><br><a id="msgLink" href="' + e(p.link) + '" target="_blank" rel="noopener">' + e(p.link) + '</a></div><div class="grandes"><button type="button" class="btn sec" id="bCopiar">📋 Copiar link</button><a class="btn sec" target="_blank" rel="noopener" href="' + e(p.link) + '">🔗 Abrir</a></div>' : '') +
       '<div class="grandes">' + (p.waUrl ? '<a class="btn wa" id="msgWa" target="_blank" rel="noopener" href="' + e(p.waUrl) + '"' + attrReg(p.cliente, p.tipo, p.texto, p.os) + '>📲 Abrir no WhatsApp</a>' : '<span class="muted" id="msgSemWa">' + e(p.semWa || 'WhatsApp não pode ser aberto para este cliente.') + '</span>') +
-      '<button class="btn sec" value="fechar">Fechar</button></div><p class="muted">O app só abre o WhatsApp com o texto pronto: quem envia é você.</p></form>';
+      (p.texto ? '<button type="button" class="btn sec" id="bCopiarTxt">📋 Copiar</button>' : '') +
+      (emailOk ? '<button type="button" class="btn sec" id="bEmailMsg">✉️ Enviar por e-mail</button>' : '') +
+      '<button class="btn sec" value="fechar">Fechar</button></div><p class="muted">O app só abre o WhatsApp/e-mail com o texto pronto: quem envia é você. Nunca ofereça brinde ou desconto em troca de avaliação.</p></form>';
     m.onclose = null; m.showModal();
     if ($('msgWa')) $('msgWa').addEventListener('click', function () { registrarAberta(this); setTimeout(function () { m.close(''); }, 0); });
     if ($('bCopiar')) $('bCopiar').onclick = function () { var t = p.link; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Link copiado.'); }, function () { P.pedirTexto('Não deu para copiar sozinho. Toque e segure no link abaixo para copiar.', { titulo: 'Copiar link', valor: t, somenteLeitura: true, sim: 'Fechar', nao: false }); }); };
+    if ($('bCopiarTxt')) $('bCopiarTxt').onclick = function () {
+      var txt = p.texto || '';
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { aviso('Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto.'); });
+    };
+    if ($('bEmailMsg')) $('bEmailMsg').onclick = function () {
+      if (typeof p.onEmail === 'function') return p.onEmail(p.texto || '');
+      emailMsgLivre(p.cliente, p.osObj || null, p.assuntoEmail || ('ProFix — ' + (p.titulo || 'Mensagem')), p.texto || '');
+    };
+  }
+  /** E-mail API @109: { clienteId?, os?, assunto, corpo, refId? } + idOperacao (api.js). Confirmação + cota. */
+  function emailMsgLivre(c, o, assunto, corpo) {
+    if (!c) return aviso('Cliente não encontrado.');
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    if (!api.pode('enviarEmailCliente')) return aviso('Enviar e-mail ainda não foi liberado no servidor.');
+    if (!V.podeEmailCliente(c)) return aviso('Para enviar e-mail: cadastre o e-mail e marque o consentimento de atendimento.');
+    var cota = D.cotaEmail == null ? 'não informada' : String(D.cotaEmail);
+    var p = formulario('✉️ Enviar por e-mail', [{ k: 'assunto', r: 'Assunto', req: true }, { k: 'corpo', r: 'Texto (pode editar)', t: 'textarea', req: true }],
+      { assunto: assunto || 'ProFix Computadores', corpo: corpo || '' },
+      '<div class="muted">Para: <b>' + e(c.email) + '</b> · cota restante hoje: <b id="emCotaMsg">' + e(cota) + '</b><br>Confirme antes de enviar. Sem brinde/desconto por avaliação.</div>');
+    if ($('c_corpo')) $('c_corpo').rows = 12;
+    if ($('fSalvar')) $('fSalvar').textContent = 'Enviar e-mail';
+    p.then(function (v) {
+      if (!v) return;
+      perguntar('Enviar e-mail para ' + c.email + ' agora?', { titulo: 'Confirmar e-mail', sim: 'Enviar', nao: 'Cancelar' }).then(function (ok) {
+        if (!ok) return;
+        var args = { assunto: v.assunto, corpo: v.corpo, refId: o && o.num ? o.num : '' };
+        if (o && o.num) args.os = o.num;
+        if (c.id) args.clienteId = c.id;
+        api.escrever('enviarEmailCliente', [args]).then(function (r) {
+          var dados = (r && r.dados) || r || {};
+          if (dados.restanteCota != null && D) D.cotaEmail = dados.restanteCota;
+          aviso((dados.aviso ? dados.aviso + ' ' : 'E-mail enviado. ') + (dados.restanteCota != null ? 'Cota restante hoje: ' + dados.restanteCota + '.' : ''));
+          return iniciar();
+        }, function (er) {
+          aviso(amigavelEmailErro(er && er.message));
+        });
+      });
+    });
+  }
+  function amigavelEmailErro(msg) {
+    msg = String(msg || 'Não foi possível enviar.');
+    if (/Não contatar/i.test(msg)) return 'Este cliente pediu para não receber mensagens. E-mail não enviado.';
+    if (/consentimento/i.test(msg)) return 'Sem consentimento LGPD “Sim”: e-mail não enviado.';
+    if (/e-mail válido|sem e-mail/i.test(msg)) return 'Cadastre um e-mail válido na ficha do cliente.';
+    if (/Cota diária|esgotada/i.test(msg)) return 'Cota diária de e-mails esgotada. Tente amanhã.';
+    if (/outro cliente/i.test(msg)) return 'Esta OS é de outro cliente: e-mail não enviado.';
+    if (/OS não encontrada/i.test(msg)) return 'OS não encontrada. Atualize e tente de novo.';
+    if (/Informe o cliente|clienteId|OS/i.test(msg)) return 'Escolha o cliente ou a OS para enviar o e-mail.';
+    return 'Não deu para enviar o e-mail: ' + msg;
   }
   function lerOuAviso(acao, args) { if (!api.pode(acao)) { aviso('Esta função ainda não foi liberada no servidor (crm-v3).'); return Promise.reject(new Error('bloq')); } return api.ler(acao, args).catch(function (er) { aviso('Não deu: ' + er.message + (offline ? ' (sem internet)' : '')); throw er; }); }
   function escreverResp(acao, args) { if (!api.pode(acao)) { aviso('Esta função ainda não foi liberada no servidor (crm-v3).'); return Promise.reject(new Error('bloq')); } return api.escrever(acao, args).then(function (r) { return r.dados || r; }).catch(function (er) { aviso('Não deu: ' + er.message); throw er; }); }
@@ -956,8 +1022,8 @@
       '<div class="muted">' + [c.id, c.tipoCli, nu.situacao, f.origem || c.origem].filter(Boolean).map(e).join(' · ') + '</div>' +
       '<div><span class="tag ' + selo.cls + '" id="seloLgpd">' + e(selo.texto) + '</span>' + (gar.length ? tag('🛡 Garantia até ' + Dif.dataBR(gar[0].ate) + ' · faltam ' + Dif.diasRestantes(gar[0].ate, D.hoje) + ' dias', 'ok') : '') + (Dif.aniversariante(c, D.hoje) ? tag('🎂 Aniversário ' + c.aniversario, 'roxo') : '') + '</div></div></div>' +
       '<div class="grandes" id="acoesFicha">' + waCli(c, '', tipoWa).replace('btn wa peq', 'btn wa') + (tel ? '<a class="btn sec" id="bLigar" href="' + e(tel) + '">📞 Ligar</a>' : '<span class="muted">Sem telefone para ligar.</span>') +
-      botao('🧾 Nova OS', 'cli-os', c._row, 'primaria').replace(' peq', '') + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'cli-visita', c._row, 'sec').replace(' peq', '') : '') + (api.pode('salvarOSMulti') ? botao('💻 Usar equipamentos marcados', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
-      '<div class="acoes">' + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'cli-visita', c._row, '') : '') + botao('📅 Agendar retorno', 'cli-retorno', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Editar', 'cli-editar', c._row) +
+      botao('🧾 Nova OS', 'cli-os', c._row, 'primaria').replace(' peq', '') + botao('💬 Mensagens', 'cli-msgs', c._row, 'sec').replace(' peq', '') + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'cli-visita', c._row, 'sec').replace(' peq', '') : '') + (api.pode('salvarOSMulti') ? botao('💻 Usar equipamentos marcados', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
+      '<div class="acoes">' + botao('💬 Mensagens', 'cli-msgs', c._row, '') + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'cli-visita', c._row, '') : '') + botao('📅 Agendar retorno', 'cli-retorno', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Editar', 'cli-editar', c._row) +
       (selo.chave === 'sim' ? botao('🛡 Revogar consentimento', 'cli-lgpd', c._row) : selo.chave === 'nao' ? botao('🛡 Registrar consentimento', 'cli-lgpd', c._row, '') : '') + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'cli-excluir', c._row, 'perigo') : '') + '</div>' +
       (c.proximo ? '<p id="proxRetorno">⏰ Retorno: <b>' + V.dataBR(c.proximo) + '</b> ' + e(c.acao || '') + '</p>' : '') +
       '<div class="tiles">' + tile('Total gasto', V.brl(nu.totalGasto || 0), 'tTotal') + tile('Nº de OS', nu.nOS || 0) + tile('Ticket médio', V.brl(nu.ticketMedio || 0)) + tile('Lucro', V.brl(nu.lucro || 0)) +
@@ -1185,7 +1251,7 @@
 
   PRECISA['os-chk'] = 'salvarChecklistOS'; PRECISA['cli-maq'] = 'salvarMaquina';
 
-  // Planos B2B — Financeiro 09/11/2026. Máquina extra / Pix / fidelidade: a definir (Pedro).
+  // Planos B2B — Financeiro 09/11/2026. Extra R$35; Pix/anual editáveis (Pedro).
   var PLANOS = V.PLANOS_B2B;
   function planoOficial(nome) { return V.planoOficial(nome); }
   function frequenciaContrato(k) {
@@ -1204,7 +1270,7 @@
         '<li>' + e(p.suporte) + ' (sem promessa de prazo em horas)</li>' +
         '<li>Suporte por WhatsApp nos horários de atendimento</li><li>10% de desconto em serviços avulsos</li></ul>' +
         '<p class="plano-uso" data-plano-uso="' + e(p.nome) + '">' + c.ativos + ' empresa' + (c.ativos === 1 ? '' : 's') + ' ativa' + (c.ativos === 1 ? '' : 's') + '</p></article>';
-    }).join('') + '</div><p class="muted">Máquina extra: <b>a definir</b> (Pedro confirma). Desconto Pix e fidelidade anual: <b>a definir</b>. Peças sempre à parte.</p>' +
+    }).join('') + '</div><p class="muted">Máquina extra: <b>' + e(V.brl(cfgPrecos().extra)) + '/PC/mês</b>. Desconto Pix: <b>' + e(String(cfgPrecos().pix)) + '%</b> (editável em Mais › Ajustes; combos não somam). Contrato anual: <b>' + e(String(cfgPrecos().anual)) + '%</b>. Peças sempre à parte.</p>' +
       '<p class="muted">Pagamento mensal, por Pix e antecipado. Direito de arrependimento de 7 dias (CDC). Atendimento com hora marcada: seg a sex, das 19h às 22h; sáb e dom, das 9h às 17h. Sem promessa de prazo de resposta ou emergência.</p></section>';
   }
   // ---- Contratos e visitas técnicas (Mais > Visitas) ----
@@ -1229,7 +1295,7 @@
       cardsPlanos() + '<h2>📄 Contratos mensais</h2>' + lista(CT.contratos || [], function (k) { return card(e(k.id) + ' · ' + e(k.cliente), e(k.plano || '') + ' · ' + V.brl(k.valor) + '/mês · ' + e(frequenciaContrato(k)) + (/fictício/i.test(k.obs || '') ? ' · Exemplo fictício' : ''), tag(k.status, k.status === 'Ativo' ? 'ok' : 'cinza'), ''); }, 'Nenhum contrato.');
   }
   function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
-  // v0.8.2: marcar visita com seletor de horário (config) + atalhos na ficha/OS.
+  // v0.8.2+/0.8.3: marcar visita + msgs §9 (Remarcar cliente/Pedro).
   function precoVisitaCfg() { return (CFG && CFG.PRECO_VISITA_EMPRESA != null) ? CFG.PRECO_VISITA_EMPRESA : 179.9; }
   function garantirCT() { if (!CT) carregarCT(); return CT || { contratos: [], visitas: [] }; }
   function abrirMsgVisita(tipo, visita) {
@@ -1238,15 +1304,22 @@
     var ct = V.contratoAtivoCliente((CT && CT.contratos) || [], visita.cliente);
     var txt = tipo === 'lembrete' ? V.textoLembreteVisita(c, visita)
       : tipo === 'caminho' ? V.textoACaminhoVisita(c, visita)
-      : tipo === 'remarcar' ? V.textoRemarcarVisita(c, visita)
+      : tipo === 'remarcar-cliente' ? V.textoRemarcarClientePediu(c, visita)
+      : tipo === 'remarcar-pedro' ? V.textoRemarcarPedroPrecisa(c, visita)
       : tipo === 'feita' ? V.textoVisitaFeita(c, visita, ct)
       : V.textoConfirmarVisita(c, visita, ct, precoVisitaCfg());
-    var rot = { confirmar: 'Confirmar visita', lembrete: 'Lembrete do dia', caminho: 'A caminho', remarcar: 'Remarcar visita', feita: 'Visita feita' }[tipo] || 'Visita';
+    var rot = {
+      confirmar: 'Confirmar visita', lembrete: 'Lembrete do dia', caminho: 'A caminho',
+      'remarcar-cliente': 'Remarcar: cliente pediu', 'remarcar-pedro': 'Remarcar: eu preciso mudar',
+      feita: 'Visita feita'
+    }[tipo] || 'Visita';
     var b = V.botaoWaCliente(c, 'os', txt);
     abrirMsg({ titulo: '🚗 ' + rot + ' · ' + e(visita.cliente), texto: txt, aviso: Dif.naoContatar(c) ? V.AVISO_NAO_CONTATAR : '', waUrl: b ? b.href : '', semWa: Dif.naoContatar(c) ? V.AVISO_NAO_CONTATAR : (b ? '' : 'WhatsApp inválido.'), cliente: c, tipo: 'os' });
   }
   function botoesMsgVisita(v) {
-    return botao('Confirmar', 'vis-msg', v.id + '|confirmar') + botao('Lembrete', 'vis-msg', v.id + '|lembrete') + botao('A caminho', 'vis-msg', v.id + '|caminho') + botao('Remarcar', 'vis-msg', v.id + '|remarcar');
+    return botao('Confirmar', 'vis-msg', v.id + '|confirmar') + botao('Lembrete', 'vis-msg', v.id + '|lembrete') + botao('A caminho', 'vis-msg', v.id + '|caminho') +
+      botao('Remarcar: cliente pediu', 'vis-msg', v.id + '|remarcar-cliente') + botao('Remarcar: eu preciso mudar', 'vis-msg', v.id + '|remarcar-pedro') +
+      (v.status === 'Concluída' ? botao('Visita feita', 'vis-msg', v.id + '|feita') : '');
   }
   function acharVisita(id) {
     var lst = ((CT && CT.visitas) || []).concat((D.dif && D.dif.contratos && D.dif.contratos.visitas) || []);
@@ -1332,6 +1405,123 @@
       } else seguir();
     });
   }
+
+  // ---- v0.8.3: painel Mensagens (ficha/OS) — contextual + Ver todas ----
+  function ctxMensagens(c, o) {
+    garantirCT();
+    var visitas = ((CT && CT.visitas) || []).filter(function (v) { return v.cliente === c.nome && v.status !== 'Cancelada'; });
+    var visita = null;
+    if (o) visita = visitas.filter(function (v) { return v.os === o.num && v.status !== 'Concluída'; })[0] || null;
+    if (!visita) visita = visitas.filter(function (v) { return v.status === 'Agendada' || v.status === 'Em andamento'; }).sort(function (a, b) { return String(a.data).localeCompare(String(b.data)); })[0] || null;
+    var url = (Dif.padroes(D).googleReviewUrl) || 'https://g.page/r/CZQuYc9gn5lJECE/review';
+    var ct = V.contratoAtivoCliente(((CT && CT.contratos) || []), c.nome);
+    return {
+      cliente: c, os: o || null, visita: visita, D: D, googleReviewUrl: url, linkOS: '[link da OS]',
+      contrato: ct, precoVisita: precoVisitaCfg(), hoje: D.hoje, agendado: !!(visita || (o && o.agendadoPara))
+    };
+  }
+  function abrirPreviewMsg(id, ctx, dataIso, hora) {
+    var c = ctx.cliente;
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    var txt = V.montarMensagemPronta(id, ctx, dataIso, hora);
+    if (!txt) return aviso('Mensagem não disponível.');
+    var cat = (V.catalogoMensagensProntas(ctx).todas || []).filter(function (x) { return x.id === id; })[0];
+    var tipo = (cat && cat.marketing) ? 'marketing' : 'os';
+    if (tipo === 'marketing' && c.consent !== 'Sim') return aviso('Sem consentimento LGPD: mensagem de relacionamento não pode.');
+    if (id === 'pos-google' && c.consent !== 'Sim') return aviso('Sem consentimento LGPD: não envie pedido de avaliação.');
+    var b = V.botaoWaCliente(c, tipo, txt);
+    var rot = (cat && cat.rotulo) || 'Mensagem';
+    var em = (V.emailMensagemPronta && V.emailMensagemPronta(id, ctx, dataIso, hora)) || null;
+    abrirMsg({
+      titulo: '💬 ' + rot + (ctx.os ? ' · ' + ctx.os.num : ''),
+      texto: txt, waUrl: b ? b.href : '', aviso: b && b.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '',
+      semWa: Dif.naoContatar(c) ? V.AVISO_NAO_CONTATAR : (b ? '' : (tipo === 'marketing' && c.consent !== 'Sim' ? 'Sem consentimento LGPD.' : 'WhatsApp inválido.')),
+      cliente: c, os: ctx.os ? ctx.os.num : '', osObj: ctx.os, tipo: tipo, emailOk: true,
+      assuntoEmail: (em && em.assunto) || (V.ASSUNTOS_MSG_EMAIL && V.ASSUNTOS_MSG_EMAIL[id]) || ('ProFix — ' + rot),
+      onEmail: function () { emailMsgLivre(c, ctx.os, em ? em.assunto : ((V.ASSUNTOS_MSG_EMAIL && V.ASSUNTOS_MSG_EMAIL[id]) || rot), em ? em.corpo : txt); }
+    });
+  }
+  function pedirHorarioMsg(id, ctx) {
+    var m = $('modal');
+    var ag = V.parseAgendadoPara(ctx.os && ctx.os.agendadoPara);
+    var data0 = (ag && ag.data >= D.hoje) ? ag.data : D.hoje;
+    var slots = V.slotsVisita(data0, CFG);
+    var hora0 = (ag && slots.indexOf(ag.hora) >= 0) ? ag.hora : (slots[0] || '');
+    var optHora = function (lista, sel) {
+      return lista.map(function (h) {
+        return '<option value="' + e(h) + '"' + (h === sel ? ' selected' : '') + '>' + e(h) + (V.slotEhHoraCheia(h) ? ' ★' : '') + '</option>';
+      }).join('');
+    };
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fMsgHora"><h2 style="margin:0">📅 Horário da mensagem</h2>' +
+      '<p class="muted">Mesmo seletor das visitas (passo ' + e(String((CFG && CFG.PASSO_VISITA_MIN) || 30)) + ' min). Horas cheias ★ primeiro.</p>' +
+      '<div class="lin2"><div><label for="mhData">Data *</label><input id="mhData" type="date" required min="' + e(D.hoje) + '" value="' + e(data0) + '"></div>' +
+      '<div><label for="mhHora">Horário *</label><select id="mhHora" required>' + optHora(slots, hora0) + '</select></div></div>' +
+      '<div class="acoes"><button type="submit" class="btn" value="ok">Continuar</button><button type="submit" class="btn sec" value="cancel" formnovalidate>Cancelar</button></div></form>';
+    m.showModal();
+    $('mhData').onchange = function () {
+      var lista = V.slotsVisita($('mhData').value, CFG), atual = $('mhHora').value;
+      $('mhHora').innerHTML = lista.length ? optHora(lista, lista.indexOf(atual) >= 0 ? atual : lista[0]) : '<option value="">Sem horário</option>';
+    };
+    $('fMsgHora').addEventListener('submit', function (ev) {
+      if (ev.submitter && ev.submitter.value === 'cancel') return;
+      ev.preventDefault();
+      var data = $('mhData').value, hora = $('mhHora').value;
+      if (!data || !hora) return aviso('Escolha data e horário.');
+      m.close('');
+      // Grava "Agendado para" na OS quando houver (coluna no fim da aba / campo do getDados)
+      if (ctx.os && ctx.os._row && api.pode('salvarOS') && (id === 'ag-traz' || id === 'ag-entrega' || id === 'ag-lembrete')) {
+        var quando = data + ' ' + hora;
+        api.escrever('salvarOS', [{ _row: ctx.os._row, num: ctx.os.num, cliente: ctx.os.cliente, equipamento: ctx.os.equipamento, defeito: ctx.os.defeito, servico: ctx.os.servico, valor: ctx.os.valor, previsao: ctx.os.previsao, acessorios: ctx.os.acessorios, agendadoPara: quando }], function (cache) {
+          (cache.os || []).forEach(function (x) { if (x._row === ctx.os._row) x.agendadoPara = quando; });
+        }).then(function () { ctx.os.agendadoPara = quando; }, function () {});
+      }
+      abrirPreviewMsg(id, ctx, data, hora);
+    });
+  }
+  function renderListaMsgs(itens) {
+    var grupos = {}, ordem = ['Agendamento', 'OS', 'Pós-venda'];
+    itens.forEach(function (it) { (grupos[it.grupo] = grupos[it.grupo] || []).push(it); });
+    return ordem.map(function (g) {
+      if (!grupos[g] || !grupos[g].length) return '';
+      return '<h3 class="msg-grupo">' + e(g) + '</h3><div class="acoes msg-lista">' + grupos[g].map(function (it) {
+        return '<button type="button" class="btn sec" data-msg-id="' + e(it.id) + '">' + e(it.rotulo) + '</button>';
+      }).join('') + '</div>';
+    }).join('');
+  }
+  function abrirMensagensProntas(c, o) {
+    if (!c) return aviso('Cliente não encontrado.');
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    var ctx = ctxMensagens(c, o);
+    var cat = V.catalogoMensagensProntas(ctx);
+    var m = $('modal');
+    m.innerHTML = '<form method="dialog" class="detalhe sheet-msgs" id="fMsgs"><h2 style="margin:0">💬 Mensagens' + (o ? ' · ' + e(o.num) : '') + '</h2>' +
+      '<p class="muted">Primeiro o que serve agora. Toque para ver a prévia; quem envia é você (WhatsApp, copiar ou e-mail).</p>' +
+      '<div id="msgsMomento">' + (cat.momento.length ? renderListaMsgs(cat.momento) : '<p class="muted">Nada contextual no momento — abra Ver todas.</p>') + '</div>' +
+      '<details id="msgsTodas"><summary>Ver todas</summary>' + (cat.resto.length ? renderListaMsgs(cat.resto) : '<p class="muted">Nada mais além do que já aparece acima.</p>') + '</details>' +
+      '<div class="acoes"><button type="submit" class="btn sec" value="cancel">Fechar</button></div></form>';
+    m.showModal();
+    m.querySelectorAll('[data-msg-id]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-msg-id');
+        var meta = cat.todas.filter(function (x) { return x.id === id; })[0] || cat.resto.filter(function (x) { return x.id === id; })[0] || cat.momento.filter(function (x) { return x.id === id; })[0];
+        m.close('');
+        setTimeout(function () {
+          if (meta && meta.precisaHorario) pedirHorarioMsg(id, ctx);
+          else abrirPreviewMsg(id, ctx);
+        }, 0);
+      };
+    });
+  }
+  ACOES['cli-msgs'] = function (row) {
+    var c = achar('clientes', row); if (!c) return;
+    var ult = (D.os || []).filter(function (x) { return x.cliente === c.nome; }).slice(-1)[0] || null;
+    abrirMensagensProntas(c, ult);
+  };
+  ACOES['os-msgs'] = function (row) {
+    var o = achar('os', row); if (!o) return;
+    abrirMensagensProntas(V.clienteDaOS(D, o) || { nome: o.cliente }, o);
+  };
+
   ACOES['vis-nova'] = function () { abrirMarcarVisita({}); };
   ACOES['cli-visita'] = function (row) {
     var c = achar('clientes', row); if (!c) return;
@@ -1354,18 +1544,18 @@
     formulario('+ Contrato mensal', [{ k: 'cliente', r: 'Cliente', t: 'select', o: (D.clientes || []).map(function (c) { return c.nome; }), req: true },
       { k: 'plano', r: 'Plano', t: 'select', o: PLANOS.map(function (p) { return p.nome; }), req: true },
       { k: 'pcs', r: 'Nº de computadores', t: 'number', ajuda: 'Empresa+ começa em 11.' },
-      { k: 'extras', r: 'Máquinas extras (preço a definir)', t: 'number', ajuda: 'Não soma no total até o Pedro definir o valor da máquina extra.' },
+      { k: 'extras', r: 'Máquinas extras (R$ 35,00/PC/mês)', t: 'number', ajuda: 'Não soma no total até o Pedro definir o valor da máquina extra.' },
       { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
       { k: 'frequencia', r: 'Frequência da visita' }, { k: 'inicio', r: 'Início', t: 'date' }, { k: 'obs', r: 'Observações', t: 'textarea' }],
       { plano: 'Essencial', pcs: '5', extras: '0', valor: '359,50', frequencia: '1x por mês', inicio: D.hoje },
-      '<p class="muted">Preços do Financeiro (09/11). Máquina extra, desconto Pix e fidelidade: <b>a definir</b>.</p>')
+      '<p class="muted">Preços do Financeiro (09/11). Extra ' + e(V.brl(V.EXTRA_MAQUINA)) + '/PC · Pix ' + e(String(cfgPrecos().pix)) + '% · anual ' + e(String(cfgPrecos().anual)) + '% (Pix/anual em Mais › Ajustes).</p>')
       .then(function (v) {
         if (!v) return; var p = planoOficial(v.plano), n = Number(v.extras || 0), pcs = Number(v.pcs || 0);
         if (!p || !Number.isInteger(n) || n < 0) return aviso('Informe uma quantidade inteira de máquinas extras, maior ou igual a zero.');
         if (p.valorPorPc && (!Number.isInteger(pcs) || pcs < (p.pcsMin || 11))) return aviso('Empresa+ começa em 11 computadores.');
-        var valor = V.valorPlano(p.nome, pcs || p.pcs, 0); // extras não somam até Pedro definir o valor da máquina extra
+        var valor = V.valorPlano(p.nome, pcs || p.pcs, n, cfgPrecos());
         if (valor == null) return aviso('Valor do plano ainda não definido.');
-        var obs = 'Visita preventiva: ' + p.frequencia + '. Limpeza a cada ' + p.limpeza + ' meses. PCs: ' + (pcs || p.pcs || p.pcsTxt) + '. Máquinas extras: ' + n + ' (preço a definir).' +
+        var obs = 'Visita preventiva: ' + p.frequencia + '. Limpeza a cada ' + p.limpeza + ' meses. PCs: ' + (pcs || p.pcs || p.pcsTxt) + '. Máquinas extras: ' + n + ' × ' + V.brl(V.EXTRA_MAQUINA) + '/mês. Pix ' + cfgPrecos().pix + '% (não soma em combo). Anual ' + cfgPrecos().anual + '%.' +
           ' ' + p.suporte + ', sem promessa de prazo em horas.' + (v.obs ? '\n' + v.obs : '');
         depoisCT('salvarContrato', [{ cliente: v.cliente, plano: p.nome, valor: valor, visitas: p.visitas, inicio: v.inicio, obs: obs }]);
       });
@@ -1381,7 +1571,7 @@
         $('c_pcs').required = false; if (p && p.pcs) $('c_pcs').value = String(p.pcs);
         pcs = Number($('c_pcs').value || (p && p.pcs) || 0);
       }
-      var valor = p ? V.valorPlano(p.nome, pcs, 0) : null;
+      var valor = p ? V.valorPlano(p.nome, pcs, Number($('c_extras').value || 0), cfgPrecos()) : null;
       $('c_valor').value = valor != null ? valor.toFixed(2).replace('.', ',') : '';
       $('c_valor').readOnly = true;
       $('c_frequencia').value = p ? p.frequencia : '';
@@ -1487,11 +1677,13 @@
     return botao('⭐ Pedir avaliação no Google', 'os-avaliar', o._row, 'sec').replace(' peq', '');
   }
   ACOES['os-avaliar'] = function (row) {
-    var o = achar('os', row), c = V.clienteDaOS(D, o), url = Dif.padroes(D).googleReviewUrl;
-    if (!url || Dif.statusCanon(o.status) !== 'Entregue') return aviso('Pedir avaliação só depois da OS entregue.');
-    var texto = 'Oi, ' + String((c && c.nome) || o.cliente || '').split(' ')[0] + '! Obrigado por confiar na ProFix Computadores (' + o.num + '). Se puder, deixe sua avaliação no Google, leva 1 minutinho e ajuda muito: ' + url;
-    var b = c ? V.botaoWaCliente(c, 'os', texto) : null, r = Dif.regraContato(c, 'os');
-    abrirMsg({ titulo: '⭐ Avaliação no Google · ' + o.num, texto: texto, aviso: b && b.aviso ? r.aviso : '', waUrl: b ? b.href : '', semWa: Dif.naoContatar(c) ? 'Cliente marcado como “Não contatar”.' : 'WhatsApp inválido ou ausente.', cliente: c, os: o.num, tipo: 'avaliacao' });
+    var o = achar('os', row), c = V.clienteDaOS(D, o), url = Dif.padroes(D).googleReviewUrl || 'https://g.page/r/CZQuYc9gn5lJECE/review';
+    if (Dif.statusCanon(o.status) !== 'Entregue') return aviso('Pedir avaliação só depois da OS entregue.');
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    if (!c || c.consent !== 'Sim') return aviso('Sem consentimento LGPD: não envie pedido de avaliação.');
+    var texto = V.textoAvaliacaoGoogle(c, o, url);
+    var b = c ? V.botaoWaCliente(c, 'os', texto) : null;
+    abrirMsg({ titulo: '⭐ Avaliação no Google · ' + o.num, texto: texto, waUrl: b ? b.href : '', semWa: b ? '' : 'WhatsApp inválido ou ausente.', cliente: c, os: o.num, osObj: o, tipo: 'avaliacao', emailOk: true, assuntoEmail: V.ASSUNTOS_MSG_EMAIL['pos-google'] });
   };
 
   function ligarAcoes(raiz, dentroModal) {
@@ -1538,6 +1730,12 @@
       escrever('registrarContatoOp', [o.empresa, o._row, canal], function (cache) { var x = cache.oportunidades.filter(function (y) { return y._row === o._row; })[0]; if (x) V.aplicarContatoOp(x, D.hoje, canal); });
     }); });
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
+    if ($('ajSalvarPrecos')) $('ajSalvarPrecos').onclick = function () {
+      var pix = Number($('ajPix').value), anual = Number($('ajAnual').value);
+      if (!(pix >= 0 && pix <= 100) || !(anual >= 0 && anual <= 100)) return aviso('Informe percentuais entre 0 e 100.');
+      ajustes.descontoPix = pix; ajustes.descontoAnual = anual; salvarAjustes();
+      aviso('Descontos salvos neste aparelho: Pix ' + pix + '% · anual ' + anual + '%.');
+    };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };
     if ($('bSair')) $('bSair').onclick = function () { perguntar('Sair deste aparelho? Vai precisar digitar a senha (ou a chave) de novo.', { titulo: 'Sair', sim: 'Sair', perigo: true }).then(function (ok) { if (ok) { api.esquecerToken(); telaChave(); } }); };
     if ($('bInstalar')) { $('bInstalar').hidden = !instalar; $('bInstalar').onclick = function () { instalar.prompt(); instalar = null; }; }
