@@ -197,8 +197,10 @@
   // ---------- Telas ----------
   var TELAS = {
     hoje: function () {
+      if (!CT && api.pode('listaContratos')) carregarCT();
       var H = V.hoje(D), bancada = V.emBancada(D), entregas = V.entregasDoDia(D);
       var rev = V.revisoes30dias(D), fimG = V.fimGarantia(D, Dif.padroes(D).garantiaDias);
+      var visitasHoje = V.visitasDoDia((CT && CT.visitas) || [], D.hoje);
       var itemContato = function (x) {
         if (x.tipo === 'op') { var o = x.ref; return card(e(o.empresa), 'Empresa · ' + e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), tagPri(o.prioridade), waOp(o) + botao('Editar', 'op-editar', o._row) + botao('Reativar 1×', 'op-reativar', o._row)); }
         var c = x.ref; return card(e(c.nome), e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), x.data < D.hoje ? tag('atrasado', 'vencido') : '', waCli(c, '', '', x.acao) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Reativar 1×', 'cli-reativar', c._row));
@@ -209,6 +211,10 @@
         secaoLeadsLink() +
         '<section id="emBancada"><h2>🔧 Em bancada</h2>' + lista(bancada, function (o) { return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento || '') + (o.statusEm ? ' · desde ' + V.dataBR(o.statusEm) : ''), tagStatusOS(o.status) + badgeParada(o), acoesHojeOS(o) + botao('Msg serviço', 'os-msg-tipo', o._row)); }, 'Nada em bancada.') + '</section>' +
         '<section id="entregasDia"><h2>📦 Entregas do dia</h2>' + lista(entregas, function (o) { return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento || '') + (o.previsao ? ' · previsão ' + V.dataBR(o.previsao) : ''), tagStatusOS(o.status), acoesHojeOS(o)); }, 'Nenhuma entrega prevista para hoje.') + '</section>' +
+        '<section id="visitasHoje"><h2>🚗 Visitas de hoje</h2>' + (!CT && api.pode('listaContratos') ? '<div class="vazio">Carregando visitas…</div>' : lista(visitasHoje, function (v) {
+          var c = (D.clientes || []).filter(function (k) { return k.nome === v.cliente; })[0];
+          return card(e(v.id) + ' · ' + e(v.cliente), (V.horaVisita(v) ? e(V.horaVisita(v)) + ' · ' : '') + e(v.status) + (v.os ? ' · ' + e(v.os) : ''), tag(v.prioridade, V.norm(v.prioridade)), botao('Lembrete', 'vis-msg', v.id + '|lembrete') + botao('Confirmar', 'vis-msg', v.id + '|confirmar') + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-visita-hoje="' + e(v.id) + '"');
+        }, 'Nenhuma visita agendada para hoje.')) + '</section>' +
         '<section id="prontasAvisar"><h2>📲 Prontas para avisar o cliente</h2><p class="muted">OS com status Pronto. Abrir o WhatsApp não confirma envio nem leitura.</p>' + lista(V.prontasOS(D), cartaoHojeOS, 'Nenhuma OS pronta.') + '</section>' +
         '<section id="revisao30"><h2>🔁 Revisão 30 dias</h2><p class="muted">Só para quem aceitou lembretes. Uma mensagem; quem envia é você.</p>' + lista(rev, function (x) {
           var c = V.clienteDaOS(D, x.ref) || { nome: x.cliente }; var txt = V.textoRevisao30(c, x.ref);
@@ -497,7 +503,7 @@
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
+        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div></details>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
       var principal = m.querySelector('#proximaOS [data-a]'); if (principal) m.querySelectorAll('#maisAcoesOS [data-a="' + principal.dataset.a + '"]').forEach(function (b) { b.remove(); });
@@ -950,8 +956,8 @@
       '<div class="muted">' + [c.id, c.tipoCli, nu.situacao, f.origem || c.origem].filter(Boolean).map(e).join(' · ') + '</div>' +
       '<div><span class="tag ' + selo.cls + '" id="seloLgpd">' + e(selo.texto) + '</span>' + (gar.length ? tag('🛡 Garantia até ' + Dif.dataBR(gar[0].ate) + ' · faltam ' + Dif.diasRestantes(gar[0].ate, D.hoje) + ' dias', 'ok') : '') + (Dif.aniversariante(c, D.hoje) ? tag('🎂 Aniversário ' + c.aniversario, 'roxo') : '') + '</div></div></div>' +
       '<div class="grandes" id="acoesFicha">' + waCli(c, '', tipoWa).replace('btn wa peq', 'btn wa') + (tel ? '<a class="btn sec" id="bLigar" href="' + e(tel) + '">📞 Ligar</a>' : '<span class="muted">Sem telefone para ligar.</span>') +
-      botao('🧾 Nova OS', 'cli-os', c._row, 'primaria').replace(' peq', '') + (api.pode('salvarOSMulti') ? botao('💻 Usar equipamentos marcados', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
-      '<div class="acoes">' + botao('📅 Agendar retorno', 'cli-retorno', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Editar', 'cli-editar', c._row) +
+      botao('🧾 Nova OS', 'cli-os', c._row, 'primaria').replace(' peq', '') + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'cli-visita', c._row, 'sec').replace(' peq', '') : '') + (api.pode('salvarOSMulti') ? botao('💻 Usar equipamentos marcados', 'cli-osm', c._row, 'sec').replace(' peq', '') : '') + '</div>' +
+      '<div class="acoes">' + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'cli-visita', c._row, '') : '') + botao('📅 Agendar retorno', 'cli-retorno', c._row) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Editar', 'cli-editar', c._row) +
       (selo.chave === 'sim' ? botao('🛡 Revogar consentimento', 'cli-lgpd', c._row) : selo.chave === 'nao' ? botao('🛡 Registrar consentimento', 'cli-lgpd', c._row, '') : '') + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'cli-excluir', c._row, 'perigo') : '') + '</div>' +
       (c.proximo ? '<p id="proxRetorno">⏰ Retorno: <b>' + V.dataBR(c.proximo) + '</b> ' + e(c.acao || '') + '</p>' : '') +
       '<div class="tiles">' + tile('Total gasto', V.brl(nu.totalGasto || 0), 'tTotal') + tile('Nº de OS', nu.nOS || 0) + tile('Ticket médio', V.brl(nu.ticketMedio || 0)) + tile('Lucro', V.brl(nu.lucro || 0)) +
@@ -1205,8 +1211,8 @@
   function carregarCT() {
     if (carregarCT.indo) return; if (!api.pode('listaContratos')) { CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [] }; return; }
     carregarCT.indo = true;
-    api.ler('listaContratos', []).then(function (r) { carregarCT.indo = false; CT = r || { contratos: [], visitas: [] }; if (rota().tela === 'mais') render(); },
-      function () { carregarCT.indo = false; CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [], erro: true }; if (rota().tela === 'mais') render(); });
+    api.ler('listaContratos', []).then(function (r) { carregarCT.indo = false; CT = r || { contratos: [], visitas: [] }; if (['mais','hoje','cliente','servicos'].indexOf(rota().tela) >= 0) render(); },
+      function () { carregarCT.indo = false; CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [], erro: true }; if (['mais','hoje','cliente','servicos'].indexOf(rota().tela) >= 0) render(); });
   }
   function telaVisitas() {
     if (!CT) { carregarCT(); return '<div class="vazio">Carregando contratos e visitas…</div>'; }
@@ -1214,20 +1220,136 @@
     return '<div class="row">' + (api.pode('salvarVisita') ? botao('+ Visita', 'vis-nova', '', '') : '') + (api.pode('salvarContrato') ? botao('+ Contrato', 'ct-novo', '') : '') + '</div>' + (CT.erro ? '<p class="muted">Sem internet: mostrando a última cópia.</p>' : '') +
       '<h2>🚗 Visitas (' + abertas.length + ' abertas)</h2><p class="muted" id="visitaPreco">' + e(txtVisita()) + '</p>' + lista(vs, function (v) {
         var c = (D.clientes || []).filter(function (k) { return k.nome === v.cliente; })[0], end = c && c.endereco;
-        return card(e(v.id) + ' · ' + e(v.cliente), V.dataBR(v.data) + (v.contrato ? ' · ' + e(v.contrato) : '') + (v.inicio ? '<br>Início ' + e(String(v.inicio).slice(11, 16) || v.inicio) : '') + (v.status === 'Concluída' ? ' · ' + String(v.horas).replace('.', ',') + ' h · ' + e(v.km) + ' km' : ''),
+        var hora = V.horaVisita(v);
+        return card(e(v.id) + ' · ' + e(v.cliente), V.dataBR(v.data) + (hora ? ' · ' + e(hora) : '') + (v.contrato ? ' · ' + e(v.contrato) : '') + (v.os ? ' · ' + e(v.os) : '') + (v.inicio ? '<br>Início real ' + e(String(v.inicio).slice(11, 16) || v.inicio) : '') + (v.status === 'Concluída' ? ' · ' + String(v.horas).replace('.', ',') + ' h · ' + e(v.km) + ' km' : ''),
           tag(v.prioridade, V.norm(v.prioridade) === 'urgente' ? 'vencido' : V.norm(v.prioridade)) + tag(v.status, v.status === 'Concluída' ? 'ok' : v.status === 'Em andamento' ? 'azul' : 'cinza'),
           (v.status === 'Agendada' && api.pode('iniciarVisita') ? botao('▶️ Iniciar visita', 'vis-ini', v.id, '') : '') + (v.status === 'Em andamento' && api.pode('encerrarVisita') ? botao('⏹ Encerrar visita', 'vis-fim', v.id, '') : '') +
-          (end ? mapsBtn(end) : '') + (c && telLink(c) ? '<a class="btn sec peq" href="' + e(telLink(c)) + '">📞 Ligar</a>' : '') + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-visita="' + e(v.id) + '"');
+          botoesMsgVisita(v) + (end ? mapsBtn(end) : '') + (c && telLink(c) ? '<a class="btn sec peq" href="' + e(telLink(c)) + '">📞 Ligar</a>' : '') + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-visita="' + e(v.id) + '"');
       }, 'Nenhuma visita.') +
       cardsPlanos() + '<h2>📄 Contratos mensais</h2>' + lista(CT.contratos || [], function (k) { return card(e(k.id) + ' · ' + e(k.cliente), e(k.plano || '') + ' · ' + V.brl(k.valor) + '/mês · ' + e(frequenciaContrato(k)) + (/fictício/i.test(k.obs || '') ? ' · Exemplo fictício' : ''), tag(k.status, k.status === 'Ativo' ? 'ok' : 'cinza'), ''); }, 'Nenhum contrato.');
   }
   function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
-  ACOES['vis-nova'] = function () {
-    var nomes = (D.clientes || []).map(function (c) { return c.nome; }), cts = ((CT && CT.contratos) || []).map(function (k) { return k.id; });
-    formulario('+ Visita técnica', [{ k: 'cliente', r: 'Cliente', t: 'select', o: nomes, req: true }, { k: 'data', r: 'Data', t: 'date', req: true }, { k: 'prioridade', r: 'Prioridade', t: 'select', o: (CT && CT.prioridades) || ['Urgente', 'Alta', 'Normal', 'Baixa'] },
-      { k: 'contrato', r: 'Contrato (opcional)', t: 'select', o: cts }, { k: 'os', r: 'OS (opcional)' }, { k: 'obs', r: 'Observações', t: 'textarea' }], { data: D.hoje, prioridade: 'Normal' })
-      .then(function (v) { if (!v) return; depoisCT('salvarVisita', [Object.assign({ idOperacao: Dif.idOperacao('vis') }, v)]); });
+  // v0.8.2: marcar visita com seletor de horário (config) + atalhos na ficha/OS.
+  function precoVisitaCfg() { return (CFG && CFG.PRECO_VISITA_EMPRESA != null) ? CFG.PRECO_VISITA_EMPRESA : 179.9; }
+  function garantirCT() { if (!CT) carregarCT(); return CT || { contratos: [], visitas: [] }; }
+  function abrirMsgVisita(tipo, visita) {
+    var c = (D.clientes || []).filter(function (k) { return k.nome === visita.cliente; })[0] || { nome: visita.cliente };
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    var ct = V.contratoAtivoCliente((CT && CT.contratos) || [], visita.cliente);
+    var txt = tipo === 'lembrete' ? V.textoLembreteVisita(c, visita)
+      : tipo === 'caminho' ? V.textoACaminhoVisita(c, visita)
+      : tipo === 'remarcar' ? V.textoRemarcarVisita(c, visita)
+      : tipo === 'feita' ? V.textoVisitaFeita(c, visita, ct)
+      : V.textoConfirmarVisita(c, visita, ct, precoVisitaCfg());
+    var rot = { confirmar: 'Confirmar visita', lembrete: 'Lembrete do dia', caminho: 'A caminho', remarcar: 'Remarcar visita', feita: 'Visita feita' }[tipo] || 'Visita';
+    var b = V.botaoWaCliente(c, 'os', txt);
+    abrirMsg({ titulo: '🚗 ' + rot + ' · ' + e(visita.cliente), texto: txt, aviso: Dif.naoContatar(c) ? V.AVISO_NAO_CONTATAR : '', waUrl: b ? b.href : '', semWa: Dif.naoContatar(c) ? V.AVISO_NAO_CONTATAR : (b ? '' : 'WhatsApp inválido.'), cliente: c, tipo: 'os' });
+  }
+  function botoesMsgVisita(v) {
+    return botao('Confirmar', 'vis-msg', v.id + '|confirmar') + botao('Lembrete', 'vis-msg', v.id + '|lembrete') + botao('A caminho', 'vis-msg', v.id + '|caminho') + botao('Remarcar', 'vis-msg', v.id + '|remarcar');
+  }
+  function acharVisita(id) {
+    var lst = ((CT && CT.visitas) || []).concat((D.dif && D.dif.contratos && D.dif.contratos.visitas) || []);
+    return lst.filter(function (v) { return v.id === id; })[0] || null;
+  }
+  function abrirMarcarVisita(pre) {
+    pre = pre || {};
+    if (!api.pode('salvarVisita')) return aviso('Marcar visita ainda não foi liberado no servidor.');
+    garantirCT();
+    var nomes = (D.clientes || []).map(function (c) { return c.nome; });
+    var cts = ((CT && CT.contratos) || []).filter(function (k) { return k.status === 'Ativo'; });
+    var cliFixo = !!pre.cliente, osFixo = !!pre.os;
+    var data0 = pre.data || D.hoje;
+    if (data0 < D.hoje) data0 = D.hoje;
+    var slots = V.slotsVisita(data0, CFG);
+    var hora0 = pre.hora && slots.indexOf(pre.hora) >= 0 ? pre.hora : (slots[0] || '');
+    var ctPadrao = pre.contrato || (pre.cliente ? ((V.contratoAtivoCliente(cts, pre.cliente) || {}).id || '') : '');
+    var m = $('modal');
+    var optHora = function (lista, sel) {
+      return lista.map(function (h) {
+        return '<option value="' + e(h) + '"' + (h === sel ? ' selected' : '') + '>' + e(h) + (V.slotEhHoraCheia(h) ? ' ★' : '') + '</option>';
+      }).join('');
+    };
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fVisita"><h2 style="margin:0">🚗 Marcar visita técnica</h2>' +
+      '<p class="muted">Horários de atendimento (passo ' + e(String((CFG && CFG.PASSO_VISITA_MIN) || 30)) + ' min). Horas cheias (★) primeiro. Data não pode ser no passado.</p>' +
+      '<label for="vCliente">Cliente *</label>' + (cliFixo
+        ? '<input id="vCliente" value="' + e(pre.cliente) + '" readonly>'
+        : '<select id="vCliente" required><option value=""></option>' + nomes.map(function (n) { return '<option' + (n === pre.cliente ? ' selected' : '') + '>' + e(n) + '</option>'; }).join('') + '</select>') +
+      '<div class="lin2"><div><label for="vData">Data *</label><input id="vData" type="date" required min="' + e(D.hoje) + '" value="' + e(data0) + '"></div>' +
+      '<div><label for="vHora">Horário *</label><select id="vHora" required>' + optHora(slots, hora0) + '</select></div></div>' +
+      '<p class="alerta" id="vConflito" hidden></p>' +
+      '<label for="vPri">Prioridade</label><select id="vPri">' + ['Urgente','Alta','Normal','Baixa'].map(function (p) { return '<option' + (p === (pre.prioridade || 'Normal') ? ' selected' : '') + '>' + p + '</option>'; }).join('') + '</select>' +
+      '<label for="vContrato">Contrato (opcional)</label><select id="vContrato"><option value=""></option>' + cts.map(function (k) { return '<option value="' + e(k.id) + '"' + (k.id === ctPadrao ? ' selected' : '') + '>' + e(k.id + ' · ' + k.cliente + ' · ' + (k.plano || '')) + '</option>'; }).join('') + '</select>' +
+      '<label for="vOS">OS (opcional)</label>' + (osFixo
+        ? '<input id="vOS" value="' + e(pre.os) + '" readonly>'
+        : '<input id="vOS" value="' + e(pre.os || '') + '" placeholder="OS-00xx">') +
+      '<label for="vObs">Observações</label><textarea id="vObs" rows="2">' + e(pre.obs || '') + '</textarea>' +
+      '<div class="acoes"><button type="submit" class="btn" id="vSalvar" value="ok">Salvar visita</button><button type="submit" class="btn sec" value="cancel" formnovalidate>Cancelar</button></div></form>';
+    m.showModal();
+    var atualizarSlots = function () {
+      var d = $('vData').value, lista = V.slotsVisita(d, CFG), atual = $('vHora').value;
+      $('vHora').innerHTML = lista.length ? optHora(lista, lista.indexOf(atual) >= 0 ? atual : lista[0]) : '<option value="">Sem horário neste dia</option>';
+      checarConflito();
+    };
+    var checarConflito = function () {
+      var d = $('vData').value, h = $('vHora').value, el = $('vConflito');
+      if (!d || !h) { el.hidden = true; return; }
+      var conf = V.conflitoVisita((CT && CT.visitas) || [], d, h);
+      if (!conf.length) { el.hidden = true; el.textContent = ''; return; }
+      el.hidden = false;
+      el.textContent = 'Já existe visita neste horário: ' + conf.map(function (v) { return v.id + ' · ' + v.cliente; }).join('; ') + '. Você pode salvar mesmo assim.';
+    };
+    $('vData').onchange = atualizarSlots; $('vHora').onchange = checarConflito;
+    if (!cliFixo) $('vCliente').onchange = function () {
+      var nome = $('vCliente').value, ct = V.contratoAtivoCliente(cts, nome);
+      if (ct) $('vContrato').value = ct.id;
+    };
+    checarConflito();
+    $('fVisita').addEventListener('submit', function (ev) {
+      if (ev.submitter && ev.submitter.value === 'cancel') return;
+      ev.preventDefault();
+      var cliente = $('vCliente').value.trim(), data = $('vData').value, hora = $('vHora').value;
+      if (!cliente || !data || !hora) return aviso('Preencha cliente, data e horário.');
+      if (data < D.hoje) return aviso('A data não pode ser no passado.');
+      if (V.slotsVisita(data, CFG).indexOf(hora) < 0) return aviso('Horário fora do atendimento.');
+      var payload = {
+        cliente: cliente, data: data, hora: hora, prioridade: $('vPri').value || 'Normal',
+        contrato: $('vContrato').value || '', os: $('vOS').value.trim(),
+        obs: V.obsComHora(hora, $('vObs').value), idOperacao: Dif.idOperacao('vis')
+      };
+      var conf = V.conflitoVisita((CT && CT.visitas) || [], data, hora);
+      var seguir = function () {
+        m.close('');
+        depoisCT('salvarVisita', [payload]).then(function () {
+          var vFake = { id: '', cliente: cliente, data: data, hora: hora, os: payload.os, obs: payload.obs };
+          perguntar('Visita salva. Abrir a mensagem “Confirmar visita” no WhatsApp?', { titulo: 'Confirmar visita', sim: 'Abrir mensagem', nao: 'Agora não' }).then(function (ok) {
+            if (ok) abrirMsgVisita('confirmar', vFake);
+          });
+        });
+      };
+      if (conf.length) {
+        perguntar('Já existe visita em ' + V.dataBR(data) + ' às ' + hora + ' (' + conf.map(function (v) { return v.cliente; }).join(', ') + '). Salvar mesmo assim?', { titulo: 'Horário ocupado', sim: 'Salvar mesmo assim', perigo: true }).then(function (ok) { if (ok) seguir(); });
+      } else seguir();
+    });
+  }
+  ACOES['vis-nova'] = function () { abrirMarcarVisita({}); };
+  ACOES['cli-visita'] = function (row) {
+    var c = achar('clientes', row); if (!c) return;
+    var ct = V.contratoAtivoCliente(((CT && CT.contratos) || (garantirCT().contratos) || []), c.nome);
+    abrirMarcarVisita({ cliente: c.nome, contrato: ct ? ct.id : '' });
   };
+  ACOES['os-visita'] = function (row) {
+    var o = achar('os', row); if (!o) return;
+    var ct = V.contratoAtivoCliente(((CT && CT.contratos) || (garantirCT().contratos) || []), o.cliente);
+    abrirMarcarVisita({ cliente: o.cliente, os: o.num, contrato: ct ? ct.id : '' });
+  };
+  ACOES['vis-msg'] = function (k) {
+    var p = String(k).split('|'), v = acharVisita(p[0]);
+    if (!v) { garantirCT(); v = acharVisita(p[0]); }
+    if (!v) return aviso('Visita não encontrada. Atualize e tente de novo.');
+    abrirMsgVisita(p[1] || 'confirmar', v);
+  };
+
   ACOES['ct-novo'] = function () {
     formulario('+ Contrato mensal', [{ k: 'cliente', r: 'Cliente', t: 'select', o: (D.clientes || []).map(function (c) { return c.nome; }), req: true },
       { k: 'plano', r: 'Plano', t: 'select', o: PLANOS.map(function (p) { return p.nome; }), req: true },

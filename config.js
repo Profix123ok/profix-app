@@ -19,5 +19,12 @@ window.PROFIX_CONFIG = {
     'listarClientesResumo', 'listarLixeira', 'registrarConsentimento', 'definirStatusLead', 'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo'], // v0.7.1: API @43
   // v0.7.1: validade do orçamento, garantia e desconto de indicação NÃO ficam aqui: vêm do servidor (getDados().config: validadePadraoDias, garantiaDiasProfix, descontoIndicacaoPct).
   WHATSAPP_LOJA: '(15) 98112-8309',
-  VERSAO_APP: '0.8.1'
+  // Horários de visita técnica (último início = fim − passo). Ajuste aqui se o expediente mudar.
+  PASSO_VISITA_MIN: 30, // intervalo do seletor; horas cheias (19:00, 20:00…) vêm primeiro na lista
+  HORARIOS_VISITA: {
+    util: { inicio: '19:00', fim: '22:00' },
+    fimDeSemana: { inicio: '09:00', fim: '17:00' }
+  },
+  PRECO_VISITA_EMPRESA: 179.90, // tabela oficial 02/11/2026 (visita técnica a empresa)
+  VERSAO_APP: '0.8.2'
 };

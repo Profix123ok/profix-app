@@ -350,5 +350,120 @@
       '\nRecomendamos ter cópia dos seus arquivos. Se o serviço incluir backup, ele aparece no orçamento.' +
       '\n\nSeus dados (LGPD): usamos seu nome e telefone só para este atendimento e para avisos que você aceitar. Não passamos seus dados para ninguém. Você pode pedir para ver, corrigir ou apagar seus dados no WhatsApp (15) 98112-8309.';
   };
+
+  // v0.8.2: horários e textos de visita técnica (Atendimento §9 + config).
+  V.DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  V.horariosVisitaCfg = function (CFG) {
+    var h = (CFG && CFG.HORARIOS_VISITA) || {}, passo = Number((CFG && CFG.PASSO_VISITA_MIN) != null ? CFG.PASSO_VISITA_MIN : 30) || 30;
+    return {
+      passoMin: passo,
+      util: Object.assign({ inicio: '19:00', fim: '22:00', passoMin: passo }, h.util || {}, h.util && h.util.passoMin ? {} : { passoMin: passo }),
+      fimDeSemana: Object.assign({ inicio: '09:00', fim: '17:00', passoMin: passo }, h.fimDeSemana || {}, h.fimDeSemana && h.fimDeSemana.passoMin ? {} : { passoMin: passo })
+    };
+  };
+  V.minutosDeHora = function (hhmm) {
+    var p = String(hhmm || '').split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0);
+  };
+  V.horaDeMinutos = function (m) {
+    var h = Math.floor(m / 60), mi = m % 60;
+    return (h < 10 ? '0' : '') + h + ':' + (mi < 10 ? '0' : '') + mi;
+  };
+  V.diaSemanaISO = function (iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return null;
+    var p = iso.split('-').map(Number);
+    return new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay();
+  };
+  /** Slots do dia: horas cheias primeiro (destacadas), depois as de :30 etc. */
+  V.slotsVisita = function (iso, CFG) {
+    var dow = V.diaSemanaISO(iso); if (dow == null) return [];
+    var cfg = V.horariosVisitaCfg(CFG), reg = (dow === 0 || dow === 6) ? cfg.fimDeSemana : cfg.util;
+    var passo = Math.max(15, Number(reg.passoMin) || cfg.passoMin || 30);
+    var ini = V.minutosDeHora(reg.inicio), fim = V.minutosDeHora(reg.fim);
+    var ultimo = fim - passo, cheias = [], meias = [];
+    if (ultimo < ini) return [];
+    for (var m = ini; m <= ultimo; m += passo) {
+      var h = V.horaDeMinutos(m);
+      if (m % 60 === 0) cheias.push(h); else meias.push(h);
+    }
+    return cheias.concat(meias);
+  };
+  V.slotEhHoraCheia = function (hhmm) { return V.minutosDeHora(hhmm) % 60 === 0; };
+  V.horaVisita = function (v) {
+    if (!v) return '';
+    if (v.hora && /^\d{2}:\d{2}$/.test(v.hora)) return v.hora;
+    var m = String(v.obs || '').match(/Hor[aá]rio:\s*(\d{2}:\d{2})/i);
+    return m ? m[1] : '';
+  };
+  V.obsComHora = function (hora, obs) {
+    var base = String(obs || '').replace(/^Hor[aá]rio:\s*\d{2}:\d{2}\s*\n?/i, '').trim();
+    return 'Horário: ' + hora + (base ? '\n' + base : '');
+  };
+  V.visitasDoDia = function (visitas, hoje) {
+    return (visitas || []).filter(function (v) {
+      return v && v.data === hoje && v.status !== 'Concluída' && v.status !== 'Cancelada';
+    }).sort(function (a, b) { return String(V.horaVisita(a)).localeCompare(String(V.horaVisita(b))); });
+  };
+  V.conflitoVisita = function (visitas, data, hora, excetoId) {
+    return (visitas || []).filter(function (v) {
+      if (!v || v.id === excetoId) return false;
+      if (v.status === 'Concluída' || v.status === 'Cancelada') return false;
+      return v.data === data && V.horaVisita(v) === hora;
+    });
+  };
+  V.contratoAtivoCliente = function (contratos, nome) {
+    return (contratos || []).filter(function (k) { return k.cliente === nome && k.status === 'Ativo'; })[0] || null;
+  };
+  /** PJ = tem contrato OU tipoCli PJ/Empresa OU nome sugere empresa. PF = resto. */
+  V.clienteEhEmpresa = function (c) {
+    if (!c) return false;
+    if (/^(pj|empresa)/i.test(String(c.tipoCli || '').trim())) return true;
+    return /\b(ltda|eireli|me\b|mei\b|ss\b|sa\b|empresa|comércio|comercio|contabil|advocacia|clínica|clinica|escola|loja|imobili)/i.test(String(c.nome || ''));
+  };
+  /** Texto da linha de valor: plano → incluída; empresa sem plano → R$ 179,90; PF → '' (omitir). */
+  V.linhaValorVisita = function (c, contrato, preco) {
+    if (contrato) return 'Incluída no seu plano' + (contrato.plano ? ' (' + contrato.plano + ')' : '') + '.';
+    if (!V.clienteEhEmpresa(c)) return '';
+    if (preco != null && preco !== '') return 'Visita avulsa à empresa: ' + V.brl(preco) + ', cobrada à parte.';
+    return '';
+  };
+  V.dataExtensoVisita = function (iso) {
+    var dow = V.diaSemanaISO(iso); if (dow == null) return V.dataBR(iso);
+    return V.DIAS_SEMANA[dow] + ', ' + V.dataBR(iso);
+  };
+  V.primeiroNome = function (c, v) {
+    return String((c && c.nome) || (v && v.cliente) || '').split(' ')[0] || '';
+  };
+  // Textos oficiais Atendimento §9 (lista-melhorias 09/11).
+  V.textoConfirmarVisita = function (c, v, contrato, preco) {
+    var nome = V.primeiroNome(c, v), empresa = V.clienteEhEmpresa(c) ? String(c.nome || '') : '';
+    var linhaVal = V.linhaValorVisita(c, contrato, preco);
+    var oque = contrato ? ('visita do plano ' + (contrato.plano || '')) : '[o que será feito]';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Aqui é o Pedro, da ProFix. Sua visita técnica está marcada para **' +
+      V.dataExtensoVisita(v.data) + ', às ' + (V.horaVisita(v) || '[hora]') + '**' + (empresa ? ', na ' + empresa : '') + '.\n' +
+      '🛠️ O que vou fazer: ' + oque + '\n' +
+      (linhaVal ? linhaVal + '\n' : '') +
+      'Pode me confirmar com um "ok"? Se precisar mudar, é só me avisar.';
+  };
+  V.textoLembreteVisita = function (c, v) {
+    var nome = V.primeiroNome(c, v);
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Lembrando da nossa visita **hoje às ' + (V.horaVisita(v) || '[hora]') + '**. Se algo mudou, me avisa por aqui. 🙂';
+  };
+  V.textoACaminhoVisita = function (c, v) {
+    var nome = V.primeiroNome(c, v);
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Estou a caminho para a visita das ' + (V.horaVisita(v) || '[hora]') + '. Chego em cerca de [__] minutos.';
+  };
+  V.textoRemarcarVisita = function (c, v) {
+    var nome = V.primeiroNome(c, v);
+    // §9: [Você pediu para mudar / Preciso mudar] — deixa as duas opções editáveis no texto
+    return 'Oi' + (nome ? ', ' + nome : '') + '! [Você pediu para mudar / Preciso mudar] a visita de ' + V.dataBR(v.data) + ' às ' + (V.horaVisita(v) || '[hora]') +
+      '. Tenho estes horários: [opção 1] ou [opção 2]. Qual fica melhor pra você?';
+  };
+  V.textoVisitaFeita = function (c, v, contrato) {
+    var nome = V.primeiroNome(c, v);
+    var onde = v && v.os ? ('na OS ' + v.os) : (contrato ? 'no seu plano' : '[na OS / no seu plano]');
+    return 'Obrigado' + (nome ? ', ' + nome : '') + '! A visita de hoje está registrada ' + onde +
+      '. O que foi feito: [resumo].' + (contrato ? ' Próxima visita do plano: [data].' : '') +
+      ' Se notar qualquer coisa, me chama aqui.';
+  };
   return V;
 });

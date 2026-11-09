@@ -145,3 +145,10 @@ dialog form#fGen > .acoes{position:sticky;bottom:0;background:var(--card);paddin
 .plano-uso{margin:12px 0 0;font-size:13px;color:#86efac;font-weight:700}
 #combosOficiais .card{border-color:var(--neon)}
 .opcoes{display:grid;gap:8px;margin:8px 0}
+
+
+/* v0.8.2: formulário de visita + horas cheias */
+#fVisita .lin2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:359px){#fVisita .lin2{grid-template-columns:1fr}}
+#vHora option{font-weight:600}
+#visitasHoje .card .acoes{gap:6px}
