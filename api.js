@@ -13,7 +13,7 @@
 
   // Ações permitidas -> função do crm-v3/Code.gs. "escrita" = entra na fila offline.
   // Lista FECHADA de ações = funções que já existem no crm-v3/Code.gs (mesma lista que o doPost deve aceitar).
-  var LEITURA = ['getDados', 'listarAgenda', 'leadsLink', 'resumoOrigens',
+  var LEITURA = ['getDados', 'listarAgenda', 'leadsLink', 'resumoOrigens', 'planosPublicos',
     'lerOSMulti', 'catalogoOS', 'gerarOrcamentoOS', 'orcamentoOS', 'simularCondicaoOS',
     'fichaCliente', 'resumoMes', 'listaContratos', 'laudoTecnicoOS', 'extrasOS', 'textoMarketing',
     'listarClientesResumo', 'listarLixeira']; // v0.7.1: API @43. v0.7.0: diferenciais (crm-v3 API @41). v0.6.0: OS com vários equipamentos (crm-v3 API v32)
@@ -132,6 +132,13 @@
         if (d && !d.agenda && tipo === 'gas' && api.pode('listarAgenda')) tarefas.push(chamar('listarAgenda', [7]).then(function (a) { d.agenda = a; }, function () {}));
         if (d && !Array.isArray(d.leadsLink) && api.pode('leadsLink')) tarefas.push(chamar('leadsLink', []).then(function (l) { d.leadsLink = Array.isArray(l) ? l : []; }, function () {}));
         if (d && !Array.isArray(d.clientesResumo) && api.pode('listarClientesResumo')) tarefas.push(chamar('listarClientesResumo', []).then(function (r) { if (r && Array.isArray(r.clientes)) d.clientesResumo = r.clientes; }, function () {}));
+        // v0.8.4: Pix/anual do CRM (planosPublicos + getDados.config.pixPct). Falha silenciosa → fallback local.
+        if (d && api.pode('planosPublicos')) tarefas.push(chamar('planosPublicos', []).then(function (p) {
+          d.config = d.config || {};
+          if (p && p.pixPct != null && isFinite(Number(p.pixPct))) d.config.pixPct = Number(p.pixPct);
+          if (p && p.anualPct != null && isFinite(Number(p.anualPct))) d.config.anualPct = Number(p.anualPct);
+          d.planosPublicos = p;
+        }, function () {}));
         return Promise.all(tarefas).then(function () { return d; });
       }).then(function (d) { guardar(d); return { dados: d, offline: false }; },
         function (e) { if (e.doServidor || e.codigo === 'SEM_TOKEN') throw e; return { dados: cache, offline: true }; });

@@ -5,7 +5,7 @@ window.PROFIX_CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzcEhxoCV88_Kp-EjIYaSOhbpH1yrqDWs4iOB-Sn9L88aikPKzn2ZoNaB0M-yCepSQ/exec',
   // Ações que o doPost do crm-v3 já aceita. As outras aparecem no app com o aviso "ainda não liberado no servidor".
   // crm-v3 v13: as 24 ações do doPost (ROTAS_APP). API v32: + 5 leituras e 5 escritas da OS com vários equipamentos.
-  ACOES_SERVIDOR: ['getDados', 'listarAgenda', 'leadsLink', 'resumoOrigens', 'salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOportunidade', 'registrarContatoOp',
+  ACOES_SERVIDOR: ['getDados', 'listarAgenda', 'leadsLink', 'resumoOrigens', 'planosPublicos', 'salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOportunidade', 'registrarContatoOp',
     'virarLead', 'registrarFollowup', 'mudarStatusTarefa', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento', 'lancarRecebimento',
     'salvarPeca', 'salvarLancamento', 'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'criarEventoAgenda',
     'removerEventoAgenda', 'enviarEmailCliente',
@@ -26,5 +26,5 @@ window.PROFIX_CONFIG = {
     fimDeSemana: { inicio: '09:00', fim: '17:00' }
   },
   PRECO_VISITA_EMPRESA: 179.90, // tabela oficial 02/11/2026 (visita técnica a empresa)
-  VERSAO_APP: '0.8.3'
+  VERSAO_APP: '0.8.4'
 };

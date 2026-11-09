@@ -292,18 +292,18 @@
     return 'Oi' + (nome ? ', ' + nome : '') + '! Conversamos sobre o seu ' + ap + ' uns dias atrás. Se ainda precisar, posso marcar um horário. Se não for o momento, tudo bem também.';
   };
   V.AVISO_NAO_CONTATAR = 'Este cliente pediu para não receber mensagens. Fale com ele só se ele te procurar.';
-  /** Planos B2B — Financeiro 09/11. Pedro 09/11: extra R$35; Pix 5% e anual 10% (editáveis no App). */
+  /** Planos B2B — Financeiro 09/11. Extra R$35; Pix/anual % vêm do CRM (planosPublicos / getDados.config); fallback abaixo. */
   V.PLANOS_B2B = [
     { nome: 'Essencial', pcs: 5, pcsTxt: 'até 5', visitas: 1, frequencia: '1x por mês', valor: 359.50, limpeza: 6, suporte: 'Suporte remoto', para: 'Para quem está começando e quer um cuidado básico.' },
     { nome: 'Empresa', pcs: 10, pcsTxt: 'até 10', visitas: 2, frequencia: '2x por mês', valor: 719.00, limpeza: 6, suporte: 'Suporte remoto prioritário', para: 'Para empresas que dependem do computador o dia todo.', selo: true },
     { nome: 'Empresa+', pcsMin: 11, pcsTxt: '11 ou mais', visitas: 3, frequencia: '3x por mês', valorPorPc: 71.90, valorMin: 790.90, limpeza: 6, suporte: 'Atendimento prioritário', para: 'Para equipes maiores, com prioridade na agenda.' }
   ];
   V.EXTRA_MAQUINA = 35; // R$/PC/mês (Pedro 09/11)
-  V.DESCONTO_PIX = 5; // % padrão; editável em Mais › Ajustes
-  V.DESCONTO_ANUAL = 10; // % contrato anual; editável em Mais › Ajustes
+  V.DESCONTO_PIX = 5; // % fallback se CRM offline/ausente (fonte: getDados.config.pixPct / planosPublicos.pixPct)
+  V.DESCONTO_ANUAL = 10; // % fallback; fonte CRM: planosPublicos.anualPct
   V.DESCONTO_FIDELIDADE = V.DESCONTO_ANUAL; // alias legado
   V.planoOficial = function (nome) { return V.PLANOS_B2B.filter(function (p) { return p.nome === nome; })[0]; };
-  /** cfg opcional: { extra, pix, anual } vindos dos ajustes do aparelho. */
+  /** cfg opcional: { extra, pix, anual } — pix/anual preferencialmente do CRM (cache local). */
   V.precosComerciais = function (cfg) {
     cfg = cfg || {};
     return {
@@ -691,13 +691,13 @@
   };
 
 
+  // Texto do rodapé de atendimento (crm-v3 RODAPE_ATEND_EMAIL). O App NÃO anexa no corpo: passa rodape:'atendimento' e o servidor acrescenta.
   V.RODAPE_EMAIL_PARAR = "Recebeu este e-mail porque tem um atendimento com a ProFix. Para não receber mais, responda com 'parar'.";
-  /** Assunto+corpo de e-mail §12.3 quando há correspondente; senão null (usa texto da mensagem). */
+  /** Assunto+corpo de e-mail §12.3 quando há correspondente; senão null (usa texto da mensagem). Sem rodapé — servidor. */
   V.emailMensagemPronta = function (id, ctx, dataIso, hora) {
     ctx = ctx || {};
     var c = ctx.cliente || {}, o = ctx.os, nome = V.primeiroNome(c, o) || '[primeiro nome]';
     var ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]', link = ctx.linkOS || '[link da OS / Minha Área]';
-    var rodape = '\n\n' + V.RODAPE_EMAIL_PARAR;
     var dataExt = dataIso ? V.dataExtensoVisita(dataIso) : '[dia da semana], [data]';
     var hr = hora || '[hora]';
     if (id === 'ag-traz' || id === 'ag-entrega' || id === 'ag-lembrete' || id === 'vis-confirmar') {
@@ -705,14 +705,14 @@
       var dataBr = dataIso ? V.dataBR(dataIso) : '[data]';
       return {
         assunto: 'Seu atendimento na ProFix: ' + dataBr + ' às ' + hr,
-        corpo: 'Olá, ' + nome + '!\nSeu atendimento está marcado para **' + dataExt + ', às ' + hr + '** (' + oque + ').\nAcompanhe ou confirme por aqui: ' + link + '\nPrecisa mudar? Fale com o Pedro no WhatsApp (15) 98112-8309.\nProFix Computadores · Sorocaba' + rodape
+        corpo: 'Olá, ' + nome + '!\nSeu atendimento está marcado para **' + dataExt + ', às ' + hr + '** (' + oque + ').\nAcompanhe ou confirme por aqui: ' + link + '\nPrecisa mudar? Fale com o Pedro no WhatsApp (15) 98112-8309.\nProFix Computadores · Sorocaba'
       };
     }
     if (id === 'os-pronto') {
       var valor = (o && (o.valor || o.orcamento)) ? V.brl(o.valor || o.orcamento) : 'R$ [__]';
       return {
         assunto: 'Seu ' + ap + ' está pronto (OS ' + num + ')',
-        corpo: 'Olá, ' + nome + '! Seu ' + ap + ' está pronto e testado. Valor final: ' + valor + '. Para combinar a entrega, responda no WhatsApp (15) 98112-8309 ou veja a OS: ' + link + '.' + rodape
+        corpo: 'Olá, ' + nome + '! Seu ' + ap + ' está pronto e testado. Valor final: ' + valor + '. Para combinar a entrega, responda no WhatsApp (15) 98112-8309 ou veja a OS: ' + link + '.'
       };
     }
     if (id === 'pos-google' || id === 'pos-agrade') {
@@ -720,7 +720,7 @@
       var url = ctx.googleReviewUrl || 'https://g.page/r/CZQuYc9gn5lJECE/review';
       return {
         assunto: 'Obrigado, ' + nome + '! Como foi o atendimento?',
-        corpo: 'Olá, ' + nome + '!\nObrigado por confiar na ProFix. A garantia do serviço vai até **' + ate + '**. Se notar qualquer coisa, é só chamar no WhatsApp (15) 98112-8309.\nSe puder, conte como foi no Google. Leva 1 minuto: ' + url + '\nUm abraço,\nPedro · ProFix Computadores' + rodape
+        corpo: 'Olá, ' + nome + '!\nObrigado por confiar na ProFix. A garantia do serviço vai até **' + ate + '**. Se notar qualquer coisa, é só chamar no WhatsApp (15) 98112-8309.\nSe puder, conte como foi no Google. Leva 1 minuto: ' + url + '\nUm abraço,\nPedro · ProFix Computadores'
       };
     }
     return null;

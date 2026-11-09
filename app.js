@@ -22,12 +22,22 @@
   var AJ = 'profix.ajustes', ajustes = (function () {
     try { return JSON.parse(localStorage.getItem(AJ)) || {}; } catch (x) { return {}; }
   })();
+  // v0.8.4: Pix/anual vêm do CRM (cache local = fallback offline). Não são editáveis neste aparelho.
   if (ajustes.descontoPix == null) ajustes.descontoPix = V.DESCONTO_PIX;
   if (ajustes.descontoAnual == null) ajustes.descontoAnual = V.DESCONTO_ANUAL;
+  function salvarAjustes() { localStorage.setItem(AJ, JSON.stringify(ajustes)); }
   function cfgPrecos() { return V.precosComerciais({ pix: ajustes.descontoPix, anual: ajustes.descontoAnual, extra: V.EXTRA_MAQUINA }); }
+  /** Lê pixPct/anualPct do getDados.config (+ planosPublicos mesclado em api.js) e grava no cache local. */
+  function aplicarPrecosDoCrm(dados) {
+    var cfg = (dados && dados.config) || {}, mudou = false;
+    var pix = Number(cfg.pixPct);
+    if (isFinite(pix) && pix >= 0 && pix <= 20) { if (ajustes.descontoPix !== pix) { ajustes.descontoPix = pix; mudou = true; } ajustes.pixFonte = 'crm'; }
+    var an = Number(cfg.anualPct);
+    if (isFinite(an) && an >= 0 && an <= 100) { if (ajustes.descontoAnual !== an) { ajustes.descontoAnual = an; mudou = true; } ajustes.anualFonte = 'crm'; }
+    if (mudou) salvarAjustes();
+  }
   var WAF = 'profix.waOp'; try { F.op.wa = localStorage.getItem(WAF) === '1'; } catch (x) { F.op.wa = false; }
   var CID = 'profix.cidadeOp'; try { F.op.cidade = localStorage.getItem(CID) || ''; } catch (x) { F.op.cidade = ''; }
-  function salvarAjustes() { localStorage.setItem(AJ, JSON.stringify(ajustes)); }
 
   function aviso(t) { var a = $('aviso'); a.textContent = t; a.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(function () { a.classList.remove('on'); }, 3500); }
   function faixa() {
@@ -78,9 +88,9 @@
     if (!api.temToken()) return Promise.resolve(telaChave());
     $('tela-chave').hidden = true; $('app').hidden = false;
     carregando = true;
-    if (!D) { var c0 = api.cacheLocal(); if (c0) D = c0; } // mostra a última cópia enquanto atualiza
+    if (!D) { var c0 = api.cacheLocal(); if (c0) { D = c0; aplicarPrecosDoCrm(D); } } // mostra a última cópia enquanto atualiza
     render();
-    return api.carregar().then(function (r) { carregando = false; if (r.dados) D = r.dados; offline = r.offline; faixa(); render(); },
+    return api.carregar().then(function (r) { carregando = false; if (r.dados) { D = r.dados; aplicarPrecosDoCrm(D); } offline = r.offline; faixa(); render(); },
       function (er) { carregando = false; render(); if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave(MSG_EXPIROU); } else aviso(er.message); });
   }
   function rota() { var h = (location.hash || '#hoje').slice(1).split('/'); return { tela: h[0] || 'hoje', sub: h[1] || '' }; }
@@ -291,7 +301,7 @@
       if (sub === 'catalogo') {
         var cats = V.catalogoComCombos(D.catalogo || []);
         return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' +
-          '<section id="combosOficiais"><h2>Combos oficiais</h2><p class="muted">Valores à vista do Financeiro (09/11). Cada combo já tem 5% próprio; <b>não soma</b> com o desconto Pix das Configurações (' + e(String(cfgPrecos().pix)) + '%).</p>' +
+          '<section id="combosOficiais"><h2>Combos oficiais</h2><p class="muted">Valores à vista do Financeiro (09/11). Cada combo já tem 5% próprio; <b>não soma</b> com o desconto Pix do CRM (' + e(String(cfgPrecos().pix)) + '%).</p>' +
           lista(V.COMBOS_OFICIAIS, function (s) { return card(e(s.servico), V.brl(s.preco) + ' · ' + e(s.descricao), tag('Combo', 'ok'), ''); }, '') + '</section>' +
           lista(D.catalogo || [], function (s) { return card(e(s.servico), e(s.tipo || '') + ' · ' + V.brl(s.preco) + (s.sugerido ? '<br>Sugerido: ' + e(s.sugerido) : '') + (s.descricao ? '<br>' + e(s.descricao) : ''), tag(s.status || (s.ativo === 'Sim' ? 'Ativo' : 'Inativo')), botao('Editar', 'cat-editar', s._row)); }, 'Catálogo vazio.');
       }
@@ -299,12 +309,14 @@
         '<p class="muted">Backup: continua pela planilha (menu ProFix CRM > Fazer backup agora / backup semanal).</p>';
       if (sub === 'ajustes') {
         var pc = cfgPrecos();
+        var pixSrc = ajustes.pixFonte === 'crm' ? 'CRM (painel · Desconto no Pix)' : 'cache local / padrão ' + V.DESCONTO_PIX + '%';
+        var anSrc = ajustes.anualFonte === 'crm' ? 'CRM (planosPublicos.anualPct)' : 'cache local / padrão ' + V.DESCONTO_ANUAL + '%';
         return cab + '<div class="card"><label class="chk"><input type="checkbox" id="ajSenha"' + (ajustes.mostrarSenha ? ' checked' : '') + '> Mostrar senha do aparelho</label><div class="m">Desligado: a senha das OS fica oculta. Mesmo ligado, ela só aparece se o servidor enviar (no crm-v3 isso também vem desligado).</div></div>' +
           '<div class="card" id="ajPrecos"><h3 style="margin:0 0 8px">Descontos comerciais</h3>' +
-          '<p class="muted">Máquina extra fixa: <b>' + e(V.brl(V.EXTRA_MAQUINA)) + '/PC/mês</b> (Pedro 09/11). Combos oficiais têm 5% próprio e <b>não somam</b> com o Pix abaixo.</p>' +
-          '<label for="ajPix">Desconto no Pix (%)</label><input id="ajPix" type="number" min="0" max="100" step="0.1" value="' + e(String(pc.pix)) + '">' +
-          '<label for="ajAnual">Desconto no contrato anual (%)</label><input id="ajAnual" type="number" min="0" max="100" step="0.1" value="' + e(String(pc.anual)) + '">' +
-          '<div class="acoes"><button type="button" class="btn" id="ajSalvarPrecos">Salvar descontos</button></div></div>' +
+          '<p class="muted">Máquina extra fixa: <b>' + e(V.brl(V.EXTRA_MAQUINA)) + '/PC/mês</b>. Combos oficiais têm 5% próprio e <b>não somam</b> com o Pix.</p>' +
+          '<p><b>Desconto no Pix:</b> ' + e(String(pc.pix)) + '% <span class="muted">· ' + e(pixSrc) + '</span></p>' +
+          '<p><b>Contrato anual:</b> ' + e(String(pc.anual)) + '% <span class="muted">· ' + e(anSrc) + '</span></p>' +
+          '<p class="muted">O % do Pix é um lugar só no CRM (API planosPublicos / getDados.config.pixPct). Mude no <b>painel do CRM</b> (Mais · Desconto no Pix). Sem internet, vale o último valor guardado neste aparelho (padrão 5% / 10%).</p></div>' +
           '<div class="acoes"><button class="btn" id="bInstalar" hidden>📲 Instalar o app</button><button class="btn sec" id="bSync">🔄 Atualizar agora</button><button class="btn sec" id="bSair">Sair deste aparelho</button></div>' +
           '<p class="muted" id="dicaIos"></p><p class="muted">Versão ' + e(CFG.VERSAO_APP || '') + ' · ' + (api.tipo === 'mock' ? 'modo demonstração' : 'conectado à planilha') + (api.ultimaAtualizacao() ? ' · dados de ' + new Date(api.ultimaAtualizacao()).toLocaleString('pt-BR') : '') + '</p>';
       }
@@ -357,14 +369,14 @@
     var cota = D.cotaEmail == null ? 'não informada' : String(D.cotaEmail);
     var p = formulario('✉️ Enviar e-mail', (o ? [{ k: 'modelo', r: 'Modelo', t: 'select', o: [V.EMAILS.orcamento.rotulo, V.EMAILS.pronto.rotulo] }] : []).concat([{ k: 'assunto', r: 'Assunto', req: true }, { k: 'corpo', r: 'Texto (pode editar)', t: 'textarea', req: true }]),
       { modelo: V.EMAILS[tipo].rotulo, assunto: t.assunto, corpo: t.corpo },
-      '<div class="muted">Para: <b id="emPara">' + e(c.email) + '</b> · cota restante hoje: <b id="emCota">' + e(cota) + '</b><br>O rodapé LGPD (\u201c' + e(V.RODAPE_LGPD_SERVIDOR) + '\u201d) é colocado automaticamente.</div><p class="alerta" id="emPend"' + (V.temPendencia(t.corpo) ? '' : ' hidden') + '>Texto com [CONFIRMAR …]: troque pelo valor certo antes de enviar (validade/garantia ainda não confirmadas no config.js).</p>');
+      '<div class="muted">Para: <b id="emPara">' + e(c.email) + '</b> · cota restante hoje: <b id="emCota">' + e(cota) + '</b><br>O servidor acrescenta o rodapé de atendimento (opt-out \u201cparar\u201d).</div><p class="alerta" id="emPend"' + (V.temPendencia(t.corpo) ? '' : ' hidden') + '>Texto com [CONFIRMAR …]: troque pelo valor certo antes de enviar (validade/garantia ainda não confirmadas no config.js).</p>');
     $('c_corpo').rows = 12; $('fSalvar').textContent = 'Enviar e-mail';
     if ($('c_modelo')) $('c_modelo').onchange = function () { var k = this.value === V.EMAILS.pronto.rotulo ? 'pronto' : 'orcamento', n = V.montarEmail(k, o, c, cfgEmail()); $('c_assunto').value = n.assunto; $('c_corpo').value = n.corpo; $('c_corpo').oninput(); };
     $('c_corpo').oninput = function () { $('emPend').hidden = !V.temPendencia(this.value); };
     $('fSalvar').addEventListener('click', function (ev) { if (V.temPendencia($('c_corpo').value)) { ev.preventDefault(); $('fErro').textContent = 'Troque o [CONFIRMAR …] antes de enviar.'; } });
     p.then(function (v) {
       if (!v) return;
-      escrever('enviarEmailCliente', [{ clienteId: c.id, assunto: v.assunto, corpo: v.corpo, refId: o ? o.num : '' }], function (cache, r) { if (r && r.restanteCota != null) cache.cotaEmail = r.restanteCota; });
+      escrever('enviarEmailCliente', [{ clienteId: c.id, assunto: v.assunto, corpo: v.corpo, refId: o ? o.num : '', rodape: 'atendimento' }], function (cache, r) { if (r && r.restanteCota != null) cache.cotaEmail = r.restanteCota; });
     });
   }
   // v0.7.1: validade/garantia do e-mail vêm do servidor (getDados().config), nunca de valor fixo no app.
@@ -949,14 +961,14 @@
     var cota = D.cotaEmail == null ? 'não informada' : String(D.cotaEmail);
     var p = formulario('✉️ Enviar por e-mail', [{ k: 'assunto', r: 'Assunto', req: true }, { k: 'corpo', r: 'Texto (pode editar)', t: 'textarea', req: true }],
       { assunto: assunto || 'ProFix Computadores', corpo: corpo || '' },
-      '<div class="muted">Para: <b>' + e(c.email) + '</b> · cota restante hoje: <b id="emCotaMsg">' + e(cota) + '</b><br>Confirme antes de enviar. Sem brinde/desconto por avaliação.</div>');
+      '<div class="muted">Para: <b>' + e(c.email) + '</b> · cota restante hoje: <b id="emCotaMsg">' + e(cota) + '</b><br>Confirme antes de enviar. O servidor acrescenta o rodapé de atendimento (opt-out). Sem brinde/desconto por avaliação.</div>');
     if ($('c_corpo')) $('c_corpo').rows = 12;
     if ($('fSalvar')) $('fSalvar').textContent = 'Enviar e-mail';
     p.then(function (v) {
       if (!v) return;
       perguntar('Enviar e-mail para ' + c.email + ' agora?', { titulo: 'Confirmar e-mail', sim: 'Enviar', nao: 'Cancelar' }).then(function (ok) {
         if (!ok) return;
-        var args = { assunto: v.assunto, corpo: v.corpo, refId: o && o.num ? o.num : '' };
+        var args = { assunto: v.assunto, corpo: v.corpo, refId: o && o.num ? o.num : '', rodape: 'atendimento' };
         if (o && o.num) args.os = o.num;
         if (c.id) args.clienteId = c.id;
         api.escrever('enviarEmailCliente', [args]).then(function (r) {
@@ -1251,7 +1263,7 @@
 
   PRECISA['os-chk'] = 'salvarChecklistOS'; PRECISA['cli-maq'] = 'salvarMaquina';
 
-  // Planos B2B — Financeiro 09/11/2026. Extra R$35; Pix/anual editáveis (Pedro).
+  // Planos B2B — Financeiro 09/11/2026. Extra R$35; Pix/anual vêm do CRM (v0.8.4).
   var PLANOS = V.PLANOS_B2B;
   function planoOficial(nome) { return V.planoOficial(nome); }
   function frequenciaContrato(k) {
@@ -1270,7 +1282,7 @@
         '<li>' + e(p.suporte) + ' (sem promessa de prazo em horas)</li>' +
         '<li>Suporte por WhatsApp nos horários de atendimento</li><li>10% de desconto em serviços avulsos</li></ul>' +
         '<p class="plano-uso" data-plano-uso="' + e(p.nome) + '">' + c.ativos + ' empresa' + (c.ativos === 1 ? '' : 's') + ' ativa' + (c.ativos === 1 ? '' : 's') + '</p></article>';
-    }).join('') + '</div><p class="muted">Máquina extra: <b>' + e(V.brl(cfgPrecos().extra)) + '/PC/mês</b>. Desconto Pix: <b>' + e(String(cfgPrecos().pix)) + '%</b> (editável em Mais › Ajustes; combos não somam). Contrato anual: <b>' + e(String(cfgPrecos().anual)) + '%</b>. Peças sempre à parte.</p>' +
+    }).join('') + '</div><p class="muted">Máquina extra: <b>' + e(V.brl(cfgPrecos().extra)) + '/PC/mês</b>. Desconto Pix: <b>' + e(String(cfgPrecos().pix)) + '%</b> (CRM; combos não somam). Contrato anual: <b>' + e(String(cfgPrecos().anual)) + '%</b>. Peças sempre à parte.</p>' +
       '<p class="muted">Pagamento mensal, por Pix e antecipado. Direito de arrependimento de 7 dias (CDC). Atendimento com hora marcada: seg a sex, das 19h às 22h; sáb e dom, das 9h às 17h. Sem promessa de prazo de resposta ou emergência.</p></section>';
   }
   // ---- Contratos e visitas técnicas (Mais > Visitas) ----
@@ -1548,7 +1560,7 @@
       { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
       { k: 'frequencia', r: 'Frequência da visita' }, { k: 'inicio', r: 'Início', t: 'date' }, { k: 'obs', r: 'Observações', t: 'textarea' }],
       { plano: 'Essencial', pcs: '5', extras: '0', valor: '359,50', frequencia: '1x por mês', inicio: D.hoje },
-      '<p class="muted">Preços do Financeiro (09/11). Extra ' + e(V.brl(V.EXTRA_MAQUINA)) + '/PC · Pix ' + e(String(cfgPrecos().pix)) + '% · anual ' + e(String(cfgPrecos().anual)) + '% (Pix/anual em Mais › Ajustes).</p>')
+      '<p class="muted">Preços do Financeiro (09/11). Extra ' + e(V.brl(V.EXTRA_MAQUINA)) + '/PC · Pix ' + e(String(cfgPrecos().pix)) + '% · anual ' + e(String(cfgPrecos().anual)) + '% (Pix/anual vêm do CRM).</p>')
       .then(function (v) {
         if (!v) return; var p = planoOficial(v.plano), n = Number(v.extras || 0), pcs = Number(v.pcs || 0);
         if (!p || !Number.isInteger(n) || n < 0) return aviso('Informe uma quantidade inteira de máquinas extras, maior ou igual a zero.');
@@ -1730,12 +1742,6 @@
       escrever('registrarContatoOp', [o.empresa, o._row, canal], function (cache) { var x = cache.oportunidades.filter(function (y) { return y._row === o._row; })[0]; if (x) V.aplicarContatoOp(x, D.hoje, canal); });
     }); });
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
-    if ($('ajSalvarPrecos')) $('ajSalvarPrecos').onclick = function () {
-      var pix = Number($('ajPix').value), anual = Number($('ajAnual').value);
-      if (!(pix >= 0 && pix <= 100) || !(anual >= 0 && anual <= 100)) return aviso('Informe percentuais entre 0 e 100.');
-      ajustes.descontoPix = pix; ajustes.descontoAnual = anual; salvarAjustes();
-      aviso('Descontos salvos neste aparelho: Pix ' + pix + '% · anual ' + anual + '%.');
-    };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };
     if ($('bSair')) $('bSair').onclick = function () { perguntar('Sair deste aparelho? Vai precisar digitar a senha (ou a chave) de novo.', { titulo: 'Sair', sim: 'Sair', perigo: true }).then(function (ok) { if (ok) { api.esquecerToken(); telaChave(); } }); };
     if ($('bInstalar')) { $('bInstalar').hidden = !instalar; $('bInstalar').onclick = function () { instalar.prompt(); instalar = null; }; }
