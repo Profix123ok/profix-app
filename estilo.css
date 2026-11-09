@@ -1,4 +1,4 @@
-:root{color-scheme:dark;--azul:#22C55E;--verde-esc:#16a34a;--fundo:#0A0F0D;--card:#141c18;--card2:#1b2620;--txt:#e5e7eb;--cinza:#a3b3ab;--verde:#22C55E;--verm:#f87171;--amar:#facc15;--borda:#2a3a32;--blue:#3b82f6;--roxo:#a855f7;--lar:#f97316;--sobre-verde:#04110a}
+:root{color-scheme:dark;--azul:#00FF66;--verde-esc:#00cc52;--fundo:#0A0F0D;--card:#141c18;--card2:#1b2620;--txt:#e5e7eb;--cinza:#a3b3ab;--verde:#00FF66;--verm:#f87171;--amar:#facc15;--borda:#2a3a32;--blue:#3b82f6;--roxo:#a855f7;--lar:#f97316;--sobre-verde:#04110a;--neon:#00FF66}
 *{box-sizing:border-box}html,body{margin:0;background:var(--fundo);color:var(--txt);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 [hidden]{display:none!important}
 .btn{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:10px;background:var(--azul);color:var(--sobre-verde);padding:10px 14px;font:inherit;font-weight:600;text-decoration:none;cursor:pointer;min-height:44px}
@@ -87,10 +87,10 @@ dialog.cheia{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:
 /* Planos oficiais, 08/11/2026: identidade ProFix (guia-visual-planos.md). */
 .planos-grade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .plano-oficial{background:#141c18;color:#fff;border:1px solid #34483b;border-radius:16px;padding:18px}
-.plano-oficial[data-plano="Empresa"]{border-color:#22c55e}.plano-oficial h3{font-size:1.4rem;margin:0 0 8px}
-.plano-oficial p{color:#a3b3ab;line-height:1.5}.plano-preco{font-size:1.8rem;font-weight:800;color:#22c55e;white-space:nowrap;margin:16px 0}
-.plano-preco small{font-size:.9rem;color:#fff}.plano-destaque,.plano-oficial li strong{color:#22c55e}.plano-oficial ul{padding-left:20px;line-height:1.65}
-.plano-selo{color:#22c55e;border:1px solid #22c55e;border-radius:12px;padding:3px 8px;font-size:.8rem}
+.plano-oficial[data-plano="Empresa"]{border-color:#00FF66}.plano-oficial h3{font-size:1.4rem;margin:0 0 8px}
+.plano-oficial p{color:#a3b3ab;line-height:1.5}.plano-preco{font-size:1.8rem;font-weight:800;color:#00FF66;white-space:nowrap;margin:16px 0}
+.plano-preco small{font-size:.9rem;color:#fff}.plano-destaque,.plano-oficial li strong{color:#00FF66}.plano-oficial ul{padding-left:20px;line-height:1.65}
+.plano-selo{color:#00FF66;border:1px solid #00FF66;border-radius:12px;padding:3px 8px;font-size:.8rem}
 @media(max-width:760px){.planos-grade{grid-template-columns:1fr}}
 /* v0.7.6: toque e leitura em telas estreitas, sem bloquear o scroll. */
 .card,.lista2>*{min-width:0}.card .t,.card .m,.plano-oficial{overflow-wrap:anywhere}
@@ -123,3 +123,25 @@ dialog.cheia{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:
 #proximaOS{grid-template-columns:1fr}#fGen .acoes .btn{max-width:100%;overflow-wrap:anywhere}
 
 @media(max-width:899px){.btn.peq{min-height:44px;font-size:16px}}
+
+/* v0.7.9: Lista | Funil | Oportunidades em Clientes, sempre visíveis */
+.clientes-abas{flex-wrap:nowrap;gap:6px}.clientes-abas a{flex:1 1 0;min-width:0;min-height:44px;display:flex;align-items:center;justify-content:center;text-align:center;padding:8px 6px;white-space:nowrap;font-size:15px}
+@media (max-width:359px){.clientes-abas a{font-size:13px;padding:8px 4px}}
+@media (min-width:900px){.clientes-abas a{flex:0 0 auto;padding:8px 16px}}
+
+
+/* v0.8.0: neon, badge parada, FAB mobile */
+.tag.parada{background:#3a2f06;color:#fde047;border:1px solid #a16207}
+.fab{position:fixed;right:14px;bottom:calc(72px + env(safe-area-inset-bottom));z-index:15;display:flex;flex-direction:column;gap:8px}
+.fab-btn{min-width:56px;min-height:56px;border-radius:999px;border:0;background:var(--neon);color:var(--sobre-verde);font:inherit;font-weight:800;box-shadow:0 4px 16px #00ff6640;cursor:pointer;padding:0 16px}
+.fab-btn.sec{background:#1f2e26;color:var(--neon);border:1px solid var(--neon);box-shadow:none}
+.fab-btn:focus-visible{outline:2px solid #86efac;outline-offset:2px}
+@media(min-width:900px){.fab{display:none}}
+/* FAB não pode cobrir Salvar/Fechar do modal no celular */
+body:has(dialog[open]) .fab{display:none!important}
+/* Salvar/Cancelar sempre acessíveis em formulários longos no celular */
+dialog form#fGen{padding-bottom:8px}
+dialog form#fGen > .acoes{position:sticky;bottom:0;background:var(--card);padding:10px 0 4px;margin:0;border-top:1px solid var(--borda);z-index:3}
+.plano-uso{margin:12px 0 0;font-size:13px;color:#86efac;font-weight:700}
+#combosOficiais .card{border-color:var(--neon)}
+.opcoes{display:grid;gap:8px;margin:8px 0}

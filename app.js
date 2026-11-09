@@ -87,9 +87,16 @@
     var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela === 'cliente' ? 'clientes' : r.tela;
     document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === telaMenu; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var c = $('conteudo');
-    if (!D) { c.innerHTML = carregando ? '<div class="vazio">Carregando dados da planilha… (pode levar uns 20 segundos)</div>' : '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; return; }
+    if (!D) { c.innerHTML = carregando ? '<div class="vazio">Carregando dados da planilha… (pode levar uns 20 segundos)</div>' : '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; var fab0 = $('fab'); if (fab0) fab0.hidden = true; return; }
     c.innerHTML = (TELAS[r.tela] || TELAS.hoje)(r.sub);
     ligar(c);
+    var fab = $('fab');
+    if (fab) {
+      fab.hidden = false;
+      fab.innerHTML = '<button type="button" class="fab-btn" data-a="os-nova" aria-label="Nova OS">+ OS</button>' +
+        '<button type="button" class="fab-btn sec" data-a="cli-novo" aria-label="Novo cliente / lead">+ Lead</button>';
+      ligarAcoes(fab, false);
+    }
   }
 
   // ---------- Peças de tela ----------
@@ -123,6 +130,26 @@
     if (!b) return '<span class="muted" data-wa-tipo="' + tipo + '">' + (c && /^s/i.test(String(c.naoContatar || '').trim()) ? '⛔ Cliente marcado como “Não contatar”.' : c && c.consent !== 'Sim' ? (tipo === 'marketing' ? 'Sem consentimento LGPD: mensagem de marketing não pode. Ligue.' : 'Sem consentimento para WhatsApp: ligue.') : 'WhatsApp inválido: ligue.') + '</span>';
     return '<a class="btn wa peq" target="_blank" rel="noopener" data-wa-tipo="' + tipo + '" href="' + e(b.href) + '"' + attrReg(c, tipo === 'os' ? 'servico' : tipo, texto || motivo || '') + '>📲 WhatsApp</a>' +
       (b.aviso ? '<span class="muted aviso-lgpd">⚠️ Sem consentimento LGPD: só mensagem sobre a OS.</span>' : '');
+  }
+  // v0.7.9: corpo de Oportunidades reutilizado em #vendas e #clientes/oportunidades.
+  function corpoOportunidades() {
+      // Filtro por cidade (chips com contagem). Some se nenhuma oportunidade tem cidade.
+      var cids = V.cidadesOps(D.oportunidades), temCid = cids.some(function (c) { return c.chave !== V.SEM_CIDADE; });
+      var fOp = Object.assign({}, F.op);
+      if (!temCid || !cids.some(function (c) { return c.chave === fOp.cidade; })) fOp.cidade = '';
+      var chip = function (k, rot) { return '<button type="button" class="chip" data-cidade="' + e(k) + '" aria-pressed="' + (fOp.cidade === k) + '">' + e(rot) + '</button>'; };
+      var barraCid = temCid ? '<div class="chips" id="fCidade" role="group" aria-label="Filtrar por cidade">' + chip('', 'Todas (' + (D.oportunidades || []).length + ')') +
+        cids.map(function (c) { return chip(c.chave, c.nome + ' (' + c.n + ')'); }).join('') + '</div>' : '';
+      var nWa = (D.oportunidades || []).filter(V.temWaOp).length;
+      var barraWa = '<div class="chips" role="group" aria-label="Filtrar por WhatsApp"><button type="button" class="chip" id="fWa" aria-pressed="' + !!F.op.wa + '">📲 WhatsApp (' + nWa + ')</button></div>';
+      var ops = V.filtrarOps(D.oportunidades, fOp);
+      return barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
+        '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
+        (ops.length > LIMITE ? '<p class="muted">Mostrando as ' + LIMITE + ' primeiras. Use os filtros ou a busca para achar as outras.</p>' : '') +
+        lista(ops.slice(0, LIMITE), function (o) {
+          return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + (o.ultimoContato ? '<br>Último contato ' + V.dataBR(o.ultimoContato) : ''),
+            tagPri(o.prioridade) + tag(o.status), waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
+        }, 'Nenhuma empresa com esse filtro.');
   }
   function abas(base, itens, sub) { return '<div class="abas">' + itens.map(function (x, i) { var on = (sub || itens[0][0]) === x[0]; return '<a href="#' + base + (i ? '/' + x[0] : '') + '" class="' + (on ? 'ativo' : '') + '">' + x[1] + '</a>'; }).join('') + '</div>'; }
   function sel(id, lst, v, todos) { return '<select id="' + id + '" aria-label="' + todos + '"><option value="">' + todos + '</option>' + (lst || []).map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + e(x) + '</option>'; }).join('') + '</select>'; }
@@ -170,18 +197,31 @@
   // ---------- Telas ----------
   var TELAS = {
     hoje: function () {
-      var H = V.hoje(D);
+      var H = V.hoje(D), bancada = V.emBancada(D), entregas = V.entregasDoDia(D);
+      var rev = V.revisoes30dias(D), fimG = V.fimGarantia(D, Dif.padroes(D).garantiaDias);
       var itemContato = function (x) {
-        if (x.tipo === 'op') { var o = x.ref; return card(e(o.empresa), 'Empresa · ' + e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), tagPri(o.prioridade), waOp(o) + botao('Editar', 'op-editar', o._row)); }
-        var c = x.ref; return card(e(c.nome), e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), x.data < D.hoje ? tag('atrasado', 'vencido') : '', waCli(c, '', '', x.acao) + botao('Registrar conversa', 'cli-inter', c._row));
+        if (x.tipo === 'op') { var o = x.ref; return card(e(o.empresa), 'Empresa · ' + e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), tagPri(o.prioridade), waOp(o) + botao('Editar', 'op-editar', o._row) + botao('Reativar 1×', 'op-reativar', o._row)); }
+        var c = x.ref; return card(e(c.nome), e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), x.data < D.hoje ? tag('atrasado', 'vencido') : '', waCli(c, '', '', x.acao) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Reativar 1×', 'cli-reativar', c._row));
       };
+      var badgeParada = function (o) { var b = V.badgeParada3d(o, D.hoje); return b ? tag('🐢 ' + b.texto, 'parada') : ''; };
       return '<h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
-        '<div class="resumo"><div><b>' + H.chamar.length + '</b>para chamar</div><div><b>' + H.semResposta.length + '</b>sem resposta</div><div><b>' + H.cobrar.length + '</b>OS para cobrar</div><div><b>' + (H.agenda || []).length + '</b>na agenda (7 dias)</div></div>' +
-        secaoLeadsLink() + '<section id="prontasAvisar"><h2>📲 Prontas para avisar o cliente</h2><p class="muted">OS com status Pronto. Abrir o WhatsApp não confirma envio nem leitura.</p>' + lista(V.prontasOS(D), cartaoHojeOS, 'Nenhuma OS pronta.') + '</section>' +
+        '<div class="resumo"><div><b>' + H.chamar.length + '</b>para chamar</div><div><b>' + bancada.length + '</b>em bancada</div><div><b>' + entregas.length + '</b>entregas do dia</div><div><b>' + H.cobrar.length + '</b>OS para cobrar</div></div>' +
+        secaoLeadsLink() +
+        '<section id="emBancada"><h2>🔧 Em bancada</h2>' + lista(bancada, function (o) { return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento || '') + (o.statusEm ? ' · desde ' + V.dataBR(o.statusEm) : ''), tagStatusOS(o.status) + badgeParada(o), acoesHojeOS(o) + botao('Msg serviço', 'os-msg-tipo', o._row)); }, 'Nada em bancada.') + '</section>' +
+        '<section id="entregasDia"><h2>📦 Entregas do dia</h2>' + lista(entregas, function (o) { return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento || '') + (o.previsao ? ' · previsão ' + V.dataBR(o.previsao) : ''), tagStatusOS(o.status), acoesHojeOS(o)); }, 'Nenhuma entrega prevista para hoje.') + '</section>' +
+        '<section id="prontasAvisar"><h2>📲 Prontas para avisar o cliente</h2><p class="muted">OS com status Pronto. Abrir o WhatsApp não confirma envio nem leitura.</p>' + lista(V.prontasOS(D), cartaoHojeOS, 'Nenhuma OS pronta.') + '</section>' +
+        '<section id="revisao30"><h2>🔁 Revisão 30 dias</h2><p class="muted">Só para quem aceitou lembretes. Uma mensagem; quem envia é você.</p>' + lista(rev, function (x) {
+          var c = V.clienteDaOS(D, x.ref) || { nome: x.cliente }; var txt = V.textoRevisao30(c, x.ref);
+          return card(e(x.num) + ' · ' + e(x.cliente), 'Entregue há ' + x.dias + ' dias · ' + e(x.aparelho), tag('revisão', 'media'), waCli(c, txt, 'marketing') + botao('Abrir OS', 'os-abrir', x.ref._row));
+        }, 'Nenhuma revisão nesta janela.') + '</section>' +
+        '<section id="fimGarantia"><h2>🛡 Fim de garantia (até 5 dias)</h2>' + lista(fimG, function (x) {
+          var c = V.clienteDaOS(D, x.ref) || { nome: x.cliente }; var txt = V.textoFimGarantia(c, x.ref, x.ate);
+          return card(e(x.num) + ' · ' + e(x.cliente), 'Garantia até ' + V.dataBR(x.ate) + ' · restam ' + x.restam + ' dia(s)', tag('garantia', x.restam <= 1 ? 'vencido' : 'media'), waCli(c, txt, 'os') + botao('Abrir OS', 'os-abrir', x.ref._row));
+        }, 'Nenhuma garantia acabando agora.') + '</section>' +
         '<h2>📞 Quem chamar hoje</h2>' + lista(H.chamar, itemContato, 'Ninguém para chamar hoje 🎉') +
         '<h2>⏳ Sem resposta há 3 dias ou mais</h2>' + lista(H.semResposta, itemContato, 'Nenhum contato parado.') +
         '<h2>💰 OS para cobrar</h2>' + lista(H.cobrar, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), 'Saldo ' + V.brl(x.saldo), tagStatusOS(x.status), botao('Receber', 'os-receber', x.ref._row, '') + acoesHojeOS(x.ref)); }, 'Nenhuma OS para cobrar.') +
-        (H.paradas && H.paradas.length ? '<h2>🐢 OS paradas</h2>' + lista(H.paradas, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), e(x.status), '', acoesHojeOS(x.ref || achar('os', x.row))); }, '') : '') +
+        (H.paradas && H.paradas.length ? '<h2>🐢 OS paradas (3+ dias sem movimento)</h2>' + lista(H.paradas, function (x) { var o = x.ref || achar('os', x.row); return card(e(x.num) + ' · ' + e(x.cliente), e(x.status) + (o ? ' · ' + e((V.badgeParada3d(o, D.hoje) || {}).texto || '') : ''), tag('parada', 'parada'), acoesHojeOS(o)); }, '') : '') +
         '<h2>✅ Tarefas</h2>' + lista(H.tarefas || [], function (t) { return card(e(t.tarefa), e(t.cliente || '') + ' · ' + V.dataBR(t.data), t.data < D.hoje ? tag('atrasada', 'vencido') : '', botao('Marcar feita', 'tar-feita', t._row)); }, 'Sem tarefas para hoje.') +
         '<h2>📅 Agenda</h2>' + lista(H.agenda || [], function (a) { return card(e(a.titulo), V.dataBR(a.data) + ' · ' + e(a.inicio || '') + (a.local ? ' · ' + e(a.local) : ''), a.eventoId ? '<span class="tag ok">Na agenda ✓</span>' : '', mapsBtn(a.local && a.local.length > 12 ? a.local : '') + (a.eventoId && api.pode('criarEventoAgenda') ? botao('Remarcar', 'ag-ev', a.eventoId) : '') + (a.eventoId && api.pode('removerEventoAgenda') ? botao('Tirar da agenda', 'ag-rem', a.eventoId) : '')); }, 'Agenda livre nos próximos 7 dias.');
     },
@@ -191,10 +231,11 @@
       return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', 'primaria') + '</div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
-        lista(l, function (o) { var s = V.saldoOS(D, o); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status), botao('Abrir', 'os-abrir', o._row, '')); }, 'Nenhuma OS com esse filtro.');
+        lista(l, function (o) { var s = V.saldoOS(D, o), b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.');
     },
     clientes: function (sub) {
-      var cab = '<div class="row"><h1>Clientes</h1>' + botao('+ Novo cliente', 'cli-novo', '', '') + '</div>' + abas('clientes', [['lista', 'Lista'], ['funil', 'Funil']], sub);
+      var cab = '<div class="row"><h1>Clientes</h1>' + botao('+ Novo cliente', 'cli-novo', '', '') + '</div>' + abas('clientes', [['lista', 'Lista'], ['funil', 'Funil'], ['oportunidades', 'Oportunidades']], sub).replace('<div class="abas">', '<nav class="abas clientes-abas" aria-label="Seções de Clientes">').replace(/<\/div>$/, '</nav>');
+      if (sub === 'oportunidades') return cab + corpoOportunidades(); // v0.7.9: mesma visão de Vendas
       if (sub === 'funil') {
         var g = V.funil(D);
         return cab + '<div class="funil">' + Object.keys(g).map(function (et) {
@@ -217,23 +258,7 @@
         return card(e(r.id) + ' · ' + e(r.equipamento), e(r.config || '') + '<br>Custo ' + V.brl(V.custoRevenda(r)) + ' · ' + (r.status === 'Vendido' ? 'vendido por ' + V.brl(r.precoVenda) : 'anunciado ' + V.brl(r.anunciado)) + (lu != null ? ' · lucro ' + V.brl(lu) : ''),
           tag(r.status), botao('Editar', 'rv-editar', r._row) + (r.status !== 'Vendido' ? botao('Registrar venda', 'rv-vender', r._row, '') : ''));
       }, 'Nada na revenda.');
-      // Filtro por cidade (chips com contagem). Some se nenhuma oportunidade tem cidade.
-      var cids = V.cidadesOps(D.oportunidades), temCid = cids.some(function (c) { return c.chave !== V.SEM_CIDADE; });
-      var fOp = Object.assign({}, F.op);
-      if (!temCid || !cids.some(function (c) { return c.chave === fOp.cidade; })) fOp.cidade = '';
-      var chip = function (k, rot) { return '<button type="button" class="chip" data-cidade="' + e(k) + '" aria-pressed="' + (fOp.cidade === k) + '">' + e(rot) + '</button>'; };
-      var barraCid = temCid ? '<div class="chips" id="fCidade" role="group" aria-label="Filtrar por cidade">' + chip('', 'Todas (' + (D.oportunidades || []).length + ')') +
-        cids.map(function (c) { return chip(c.chave, c.nome + ' (' + c.n + ')'); }).join('') + '</div>' : '';
-      var nWa = (D.oportunidades || []).filter(V.temWaOp).length;
-      var barraWa = '<div class="chips" role="group" aria-label="Filtrar por WhatsApp"><button type="button" class="chip" id="fWa" aria-pressed="' + !!F.op.wa + '">📲 WhatsApp (' + nWa + ')</button></div>';
-      var ops = V.filtrarOps(D.oportunidades, fOp);
-      return cab + '<div' + (!sub ? ' class="mais-padrao"' : '') + '>' + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
-        '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
-        (ops.length > LIMITE ? '<p class="muted">Mostrando as ' + LIMITE + ' primeiras. Use os filtros ou a busca para achar as outras.</p>' : '') +
-        lista(ops.slice(0, LIMITE), function (o) {
-          return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + (o.ultimoContato ? '<br>Último contato ' + V.dataBR(o.ultimoContato) : ''),
-            tagPri(o.prioridade) + tag(o.status), waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
-        }, 'Nenhuma empresa com esse filtro.') + '</div>';
+      return cab + '<div' + (!sub ? ' class="mais-padrao"' : '') + '>' + corpoOportunidades() + '</div>';
     },
     mais: function (sub) {
       // v0.7.7: no celular, Mais é uma lista; dentro da seção só fica o caminho de volta.
@@ -252,7 +277,13 @@
       if (sub === 'visitas') return cab + telaVisitas();
       if (sub === 'mes') return cab + telaMes();
       if (sub === 'lixeira') return cab + telaLixeira();
-      if (sub === 'catalogo') return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' + lista(D.catalogo || [], function (s) { return card(e(s.servico), e(s.tipo || '') + ' · ' + V.brl(s.preco) + (s.sugerido ? '<br>Sugerido: ' + e(s.sugerido) : '') + (s.descricao ? '<br>' + e(s.descricao) : ''), tag(s.status || (s.ativo === 'Sim' ? 'Ativo' : 'Inativo')), botao('Editar', 'cat-editar', s._row)); }, 'Catálogo vazio.');
+      if (sub === 'catalogo') {
+        var cats = V.catalogoComCombos(D.catalogo || []);
+        return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' +
+          '<section id="combosOficiais"><h2>Combos oficiais</h2><p class="muted">Valores à vista do Financeiro (09/11). Desconto Pix: a definir.</p>' +
+          lista(V.COMBOS_OFICIAIS, function (s) { return card(e(s.servico), V.brl(s.preco) + ' · ' + e(s.descricao), tag('Combo', 'ok'), ''); }, '') + '</section>' +
+          lista(D.catalogo || [], function (s) { return card(e(s.servico), e(s.tipo || '') + ' · ' + V.brl(s.preco) + (s.sugerido ? '<br>Sugerido: ' + e(s.sugerido) : '') + (s.descricao ? '<br>' + e(s.descricao) : ''), tag(s.status || (s.ativo === 'Sim' ? 'Ativo' : 'Inativo')), botao('Editar', 'cat-editar', s._row)); }, 'Catálogo vazio.');
+      }
       if (sub === 'modelos') return cab + '<div class="row">' + botao('+ Novo modelo', 'mod-novo', '', '') + '</div>' + lista(D.modelos || [], function (m) { return card(e(m.modelo), e(m.quando || '') + '<br><span class="pre">' + e(String(m.texto || '').slice(0, 160)) + (String(m.texto || '').length > 160 ? '…' : '') + '</span>', '', botao('Editar', 'mod-editar', m._row)); }, 'Nenhum modelo.') +
         '<p class="muted">Backup: continua pela planilha (menu ProFix CRM > Fazer backup agora / backup semanal).</p>';
       if (sub === 'ajustes') return cab + '<div class="card"><label class="chk"><input type="checkbox" id="ajSenha"' + (ajustes.mostrarSenha ? ' checked' : '') + '> Mostrar senha do aparelho</label><div class="m">Desligado: a senha das OS fica oculta. Mesmo ligado, ela só aparece se o servidor enviar (no crm-v3 isso também vem desligado).</div></div>' +
@@ -328,7 +359,7 @@
   function abrirOSRapida(row, pre) {
     var o = row ? achar('os', row) : Object.assign({ cliente: '' }, pre), ocupada = false, clientePendente = false;
     var campos = [{ k: 'cliente', r: 'Cliente', t: 'select', req: true }, { k: 'equipamento', r: 'Equipamento', req: true }, { k: 'defeito', r: 'Defeito relatado' },
-      { k: 'servico', r: 'Serviço', t: 'select', o: (D.catalogo || []).filter(function (s) { return s.ativo !== 'Não' && s.status !== 'Inativo'; }).map(function (s) { return s.servico; }) },
+      { k: 'servico', r: 'Serviço', t: 'select', o: V.catalogoComCombos(D.catalogo || []).filter(function (s) { return s.ativo !== 'Não' && s.status !== 'Inativo'; }).map(function (s) { return s.servico; }) },
       { k: 'valor', r: 'Valor cobrado (R$)', t: 'number', ajuda: '<span id="precoAjuda">Preço do catálogo, editável. Peças à parte.</span>' },
       { k: 'previsao', r: 'Previsão de entrega', t: 'date' }, { k: 'acessorios', r: 'Acessórios deixados' }, { k: 'obsInt', r: 'Observações internas', t: 'textarea' }];
     formulario(row ? 'Editar ' + e(o.num) : 'Nova OS', campos, o,
@@ -344,7 +375,7 @@
     }
     opcoes(); $('osBuscaCli').oninput = opcoes; $('c_cliente').onchange = function () { selecao = this.value; };
     $('c_servico').onchange = function () {
-      var s = (D.catalogo || []).find(function (s) { return s.servico === $('c_servico').value; });
+      var s = V.catalogoComCombos(D.catalogo || []).find(function (s) { return s.servico === $('c_servico').value; });
       $('c_valor').value = V.precoServicoOS(s);
       $('precoAjuda').textContent = (!s ? 'Selecione um serviço.' : V.precoServicoOS(s) === '' ? 'Sob orçamento: informe o valor após avaliar.' : (s.tipo === 'A partir de' ? 'A partir de: ' : 'Preço do catálogo: ') + V.brl(Number(V.precoServicoOS(s))) + '. Valor editável.') + (s && s.descricao ? ' ' + s.descricao : '') + ' Peças à parte (peça não inclusa).';
     };
@@ -446,21 +477,27 @@
         { k: 'status', r: 'Status', t: 'select', o: D.statusOp }, { k: 'prioridade', r: 'Prioridade', t: 'select', o: V.PRI },
         { k: 'lembrete', r: 'Próximo contato', t: 'date' }, { k: 'proximoPasso', r: 'Próximo passo' },
         { k: 'canal', r: 'Melhor canal', t: 'select', o: D.canais }, { k: 'telefone', r: 'Telefone' }, { k: 'whatsapp', r: 'WhatsApp comercial (publicado pela empresa)' },
-        { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'motivoPerda', r: 'Motivo da perda', t: 'select', o: D.motivosPerda, ajuda: 'Use quando descartar.' }, { k: 'obs', r: 'Observações', t: 'textarea' }
+        { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'motivoPerda', r: 'Motivo da perda (obrigatório ao descartar)', t: 'select', o: V.motivosPerda(D), ajuda: 'Obrigatório se o status for Descartada.' }, { k: 'obs', r: 'Observações', t: 'textarea' }
       ].concat(temCol('oportunidades', 'origem') ? [{ k: 'origem', r: 'Origem', t: 'select', o: D.origens }] : [])
-       .concat(temCol('oportunidades', 'indicadoPor') ? [{ k: 'indicadoPor', r: 'Indicado por' }] : []), o).then(function (v) { if (!v) return; var mud = Object.assign({ _row: o._row, _empresaOriginal: o.empresa, empresa: o.empresa }, v); escrever('salvarOportunidade', [mud], aplicar('oportunidades', o._row, mud)); });
+       .concat(temCol('oportunidades', 'indicadoPor') ? [{ k: 'indicadoPor', r: 'Indicado por' }] : []), o).then(function (v) {
+        if (!v) return;
+        if (V.motivoPerdaObrigatorio(v.status) && !v.motivoPerda) return aviso('Escolha o motivo da perda para descartar.');
+        var mud = Object.assign({ _row: o._row, _empresaOriginal: o.empresa, empresa: o.empresa }, v);
+        escrever('salvarOportunidade', [mud], aplicar('oportunidades', o._row, mud));
+      });
     },
     'op-lead': function (row) { var o = achar('oportunidades', row); perguntar('Copiar "' + o.empresa + '" para Clientes como Lead (consentimento “Não” até a empresa autorizar)?', { titulo: 'Virar lead', sim: 'Copiar para Clientes' }).then(function (ok) { if (ok) escrever('virarLead', [o.empresa, o._row], aplicar('oportunidades', row, { status: 'Virou lead' })); }); },
     'os-abrir': function (row) {
       var o = achar('os', row), pecas = V.pecasOS(D, o.num), m = $('modal');
       var lin = function (r, v) { return v === '' || v == null ? '' : '<div><span class="muted">' + r + ':</span> ' + v + '</div>'; };
-      m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(o.num) + ' · ' + e(o.cliente) + '</h2><div>' + tagStatusOS(o.status) + '</div>' + blocoGarantiaOS(o) + proximaOS(o) +
+      var bPar = V.badgeParada3d(o, D.hoje);
+      m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">' + e(o.num) + ' · ' + e(o.cliente) + '</h2><div>' + tagStatusOS(o.status) + (bPar ? tag('🐢 ' + bPar.texto, 'parada') : '') + '</div>' + blocoGarantiaOS(o) + proximaOS(o) +
         lin('Equipamento', e(o.equipamento)) + lin('Defeito', e(o.defeito)) + lin('Serviço', e(o.servico)) + lin('Entrada', V.dataBR(o.entrada)) + lin('Previsão', V.dataBR(o.previsao)) +
         lin('Acessórios', e(o.acessorios)) + '<div><span class="muted">Senha do aparelho:</span> <span id="senhaOS">' + e(V.textoSenha(o, ajustes.mostrarSenha)) + '</span></div>' +
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
+        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div></details>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
       var principal = m.querySelector('#proximaOS [data-a]'); if (principal) m.querySelectorAll('#maisAcoesOS [data-a="' + principal.dataset.a + '"]').forEach(function (b) { b.remove(); });
@@ -517,7 +554,7 @@
     },
     'cli-etapa': function (row) {
       var c = achar('clientes', row);
-      formulario('Etapa de ' + e(c.nome), [{ k: 'etapa', r: 'Etapa do funil', t: 'select', o: D.etapas, req: true }, { k: 'motivo', r: 'Motivo da perda (se Perdido)', t: 'select', o: D.motivosPerda }], { etapa: c.etapa })
+      formulario('Etapa de ' + e(c.nome), [{ k: 'etapa', r: 'Etapa do funil', t: 'select', o: D.etapas, req: true }, { k: 'motivo', r: 'Motivo da perda (se Perdido)', t: 'select', o: V.motivosPerda(D) }], { etapa: c.etapa })
         .then(function (v) { if (!v) return; if (v.etapa === 'Perdido' && !v.motivo) return aviso('Escolha o motivo da perda.'); escrever('moverEtapa', [c.nome, c._row, v.etapa, v.etapa === 'Perdido' ? v.motivo : ''], aplicar('clientes', row, { etapa: v.etapa, motivoPerda: v.etapa === 'Perdido' ? v.motivo : c.motivoPerda })); });
     },
     'rv-editar': function (row) {
@@ -1042,28 +1079,126 @@
         semWa: Dif.naoContatar(c) ? 'Cliente marcado como “Não contatar”.' : (r.aviso || 'WhatsApp inválido.'), cliente: c, os: o.num, tipo: 'status' });
     }, function () {});
   };
+
+  // v0.8.0: templates por tipo de serviço + copiar texto/link (sempre wa.me manual; trava Não contatar).
+  function abrirMsgServico(o) {
+    var c = V.clienteDaOS(D, o) || { nome: o.cliente }, bloqNC = Dif.naoContatar(c);
+    var m = $('modal');
+    var ops = V.TIPOS_SERVICO_MSG.map(function (t) {
+      return '<label class="chk"><input type="radio" name="tipoMsg" value="' + t.id + '"' + (t.id === 'formatacao' ? ' checked' : '') + '> ' + e(t.rotulo) + '</label>';
+    }).join('');
+    var texto0 = V.textoMsgServico('formatacao', o, c);
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fMsgServ"><h2 style="margin:0">Mensagem por tipo de serviço · ' + e(o.num) + '</h2>' +
+      (bloqNC ? '<p class="alerta" id="msgNcBloq">' + e(V.AVISO_NAO_CONTATAR) + '</p>' : '') +
+      '<div class="opcoes" id="tiposMsg">' + ops + '</div>' +
+      '<label for="msgServTxt">Texto</label><textarea id="msgServTxt" rows="8">' + e(texto0) + '</textarea>' +
+      '<div class="acoes">' +
+      '<button type="button" class="btn sec" id="bCopiarTxt" ' + (bloqNC ? 'disabled' : '') + '>Copiar texto</button>' +
+      '<button type="button" class="btn sec" id="bCopiarLink" ' + (bloqNC ? 'disabled' : '') + '>Copiar link</button>' +
+      (bloqNC ? '' : '<a class="btn wa" id="bAbrirWa" target="_blank" rel="noopener" href="#">📲 Abrir WhatsApp</a>') +
+      '<button type="submit" class="btn sec" value="cancel">Fechar</button></div>' +
+      '<p class="muted">Só abre o WhatsApp com o texto pronto; quem envia é você. Não envia sozinho.</p></form>';
+    m.showModal();
+    var atualizar = function () {
+      var id = (m.querySelector('input[name=tipoMsg]:checked') || {}).value || 'formatacao';
+      var t = V.textoMsgServico(id, o, c); $('msgServTxt').value = t;
+      if (!bloqNC) {
+        var b = V.botaoWaCliente(c, 'os', t);
+        $('bAbrirWa').href = b ? b.href : '#';
+        $('bAbrirWa').toggleAttribute('hidden', !b);
+      }
+    };
+    m.querySelectorAll('input[name=tipoMsg]').forEach(function (r) { r.onchange = atualizar; });
+    $('msgServTxt').oninput = function () {
+      if (bloqNC) return;
+      var b = V.botaoWaCliente(c, 'os', $('msgServTxt').value);
+      $('bAbrirWa').href = b ? b.href : '#';
+    };
+    atualizar();
+    $('bCopiarTxt').onclick = function () {
+      if (bloqNC) return aviso(V.AVISO_NAO_CONTATAR);
+      var t = $('msgServTxt').value;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto.'); });
+    };
+    $('bCopiarLink').onclick = function () {
+      if (bloqNC) return aviso(V.AVISO_NAO_CONTATAR);
+      var b = V.botaoWaCliente(c, 'os', $('msgServTxt').value);
+      if (!b) return aviso('WhatsApp inválido ou bloqueado.');
+      (navigator.clipboard ? navigator.clipboard.writeText(b.href) : Promise.reject()).then(function () { aviso('Link copiado.'); }, function () { aviso('Não deu para copiar o link.'); });
+    };
+  }
+  ACOES['os-msg-tipo'] = function (row) { abrirMsgServico(achar('os', row)); };
+  ACOES['os-termo'] = function (row) {
+    var o = achar('os', row), c = V.clienteDaOS(D, o) || { nome: o.cliente }, t = V.textoTermoEntrada(o, c), m = $('modal');
+    m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">Termo de entrada · ' + e(o.num) + '</h2>' +
+      '<pre class="pre" id="termoTxt">' + e(t) + '</pre><div class="acoes">' +
+      '<button type="button" class="btn sec" id="bCopiarTermo">Copiar texto</button>' +
+      '<button type="submit" class="btn sec" value="cancel">Fechar</button></div>' +
+      '<p class="muted">Resumo para a tela/PDF. Senha do aparelho: peça na hora e apague na entrega — sem histórico no cliente.</p></form>';
+    m.showModal();
+    $('bCopiarTermo').onclick = function () {
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Termo copiado.'); }, function () { aviso('Não deu para copiar.'); });
+    };
+  };
+  function abrirReativacao(c, aparelho, tipo) {
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    var txt = V.textoReativacao(tipo || 'contato', c, aparelho);
+    var b = V.botaoWaCliente(c, 'marketing', txt);
+    abrirMsg({ titulo: 'Reativação (uma vez só) · ' + e(c.nome), texto: txt, aviso: 'Só uma vez. Se não responder, não mande de novo.', waUrl: b ? b.href : '', semWa: b ? '' : (c.consent !== 'Sim' ? 'Sem consentimento LGPD para marketing.' : 'WhatsApp inválido.'), cliente: c, tipo: 'marketing' });
+  }
+  ACOES['cli-reativar'] = function (row) {
+    var c = achar('clientes', row);
+    var tipo = (c.etapa === 'Orçamento enviado') ? 'orcamento' : 'contato';
+    abrirReativacao(c, '', tipo);
+  };
+  ACOES['op-reativar'] = function (row) {
+    var o = achar('oportunidades', row);
+    if (V.bloqueadaOp(o)) return aviso(V.AVISO_NAO_CONTATAR);
+    var txt = V.textoReativacao('contato', { nome: o.responsavel || o.empresa }, o.equipamento || 'equipamento');
+    var l = V.linkWaOp(D.modelos, o);
+    // Reativação usa texto próprio; se puder WA, monta wa.me direto.
+    var n = V.numeroWa(o.whatsapp);
+    var wa = (!V.bloqueadaOp(o) && n) ? ('https://wa.me/' + n + '?text=' + encodeURIComponent(txt)) : '';
+    var m = $('modal');
+    m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">Reativação 1× · ' + e(o.empresa) + '</h2>' +
+      '<p class="muted">Só uma vez. Se não responder, não mande de novo.</p>' +
+      '<textarea id="reativarTxt" rows="6">' + e(txt) + '</textarea><div class="acoes">' +
+      '<button type="button" class="btn sec" id="bCopiarReat">Copiar texto</button>' +
+      (wa ? '<a class="btn wa" target="_blank" rel="noopener" href="' + e(wa) + '" id="bWaReat">📲 Abrir WhatsApp</a>' : '<span class="muted">WhatsApp bloqueado ou inválido.</span>') +
+      '<button type="submit" class="btn sec" value="cancel">Fechar</button></div></form>';
+    m.showModal();
+    $('bCopiarReat').onclick = function () {
+      var t = $('reativarTxt').value;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Texto copiado.'); }, function () { aviso('Não deu para copiar.'); });
+    };
+    if ($('bWaReat')) $('reativarTxt').oninput = function () {
+      var n2 = V.numeroWa(o.whatsapp); if (!n2) return;
+      $('bWaReat').href = 'https://wa.me/' + n2 + '?text=' + encodeURIComponent($('reativarTxt').value);
+    };
+  };
+
   PRECISA['os-chk'] = 'salvarChecklistOS'; PRECISA['cli-maq'] = 'salvarMaquina';
 
-  // Planos oficiais aprovados pelo Pedro em 08/11/2026 (areas/planos-empresas.md).
-  var PLANOS = [
-    { nome: 'Essencial', valor: 143.80, pcs: 3, frequencia: 'a cada 2 meses', limpeza: 6, visitas: 0, para: 'Para quem está começando e quer um cuidado básico.' },
-    { nome: 'Empresa', valor: 431.40, pcs: 6, frequencia: 'mensal', limpeza: 6, visitas: 1, para: 'Para empresas que dependem do computador o dia todo.' },
-    { nome: 'Empresa+', valor: 719.00, pcs: 10, frequencia: 'mensal', limpeza: 4, visitas: 1, para: 'Para equipes maiores, com prioridade na agenda.' }
-  ];
-  function planoOficial(nome) { return PLANOS.filter(function (p) { return p.nome === nome; })[0]; }
+  // Planos B2B — Financeiro 09/11/2026. Máquina extra / Pix / fidelidade: a definir (Pedro).
+  var PLANOS = V.PLANOS_B2B;
+  function planoOficial(nome) { return V.planoOficial(nome); }
   function frequenciaContrato(k) {
-    var p = planoOficial(k.plano); if (p) return 'Visita ' + p.frequencia;
-    if (/a cada 2 meses|bimestral/i.test(k.obs || '') || Number(k.visitas) === 0.5) return 'Visita a cada 2 meses';
-    return Number(k.visitas) === 1 ? 'Visita mensal' : String(k.visitas || 0) + ' visita(s)/mês';
+    if (k && k.visitas != null && k.visitas !== '') return Number(k.visitas) + ' visita(s)/mês';
+    var p = planoOficial(k.plano); if (p) return p.visitas + ' visita(s)/mês';
+    if (/a cada 2 meses|bimestral/i.test(k.obs || '')) return 'Visita a cada 2 meses (legado)';
+    return 'Frequência a combinar';
   }
   function cardsPlanos() {
+    var cont = V.contadoresPlanos((CT && CT.contratos) || []);
     return '<section id="planosOficiais" aria-label="Planos oficiais"><h2>Planos para empresas</h2><div class="planos-grade">' + PLANOS.map(function (p) {
-      return '<article class="plano-oficial" data-plano="' + e(p.nome) + '"><h3>' + e(p.nome) + '</h3>' + (p.nome === 'Empresa' ? '<span class="plano-selo">Plano completo</span>' : '') +
-        '<p>' + e(p.para) + ' Até ' + p.pcs + ' computadores.</p><div class="plano-preco">' + V.brl(p.valor) + '<small>/mês</small></div><strong class="plano-destaque">Visita ' + p.frequencia + '</strong>' +
+      var c = cont[p.nome] || { ativos: 0, pcs: 0 };
+      return '<article class="plano-oficial" data-plano="' + e(p.nome) + '"><h3>' + e(p.nome) + '</h3>' + (p.selo ? '<span class="plano-selo">Plano completo</span>' : '') +
+        '<p>' + e(p.para) + ' ' + e(p.pcsTxt) + ' computadores.</p><div class="plano-preco">' + e(V.precoTxtPlano(p)) + '<small>/mês</small></div><strong class="plano-destaque">' + e(p.frequencia) + '</strong>' +
         '<ul><li>Visita preventiva no local, fora do horário comercial</li><li>Checagem de desempenho em cada visita</li><li><strong>Limpeza interna completa de cada máquina a cada ' + p.limpeza + ' meses</strong></li>' +
-        (p.nome === 'Empresa+' ? '<li><strong>Prioridade na agenda da semana (à noite ou no fim de semana)</strong></li>' : '') +
-        '<li>Suporte por WhatsApp nos horários de atendimento</li><li>10% de desconto em serviços avulsos</li></ul></article>';
-    }).join('') + '</div><p class="muted">Máquina extra: R$ 71,90/mês cada, somada ao plano atual. Acima de 10 computadores: orçamento sob medida, depois de uma avaliação. Peças sempre à parte.</p>' +
+        '<li>' + e(p.suporte) + ' (sem promessa de prazo em horas)</li>' +
+        '<li>Suporte por WhatsApp nos horários de atendimento</li><li>10% de desconto em serviços avulsos</li></ul>' +
+        '<p class="plano-uso" data-plano-uso="' + e(p.nome) + '">' + c.ativos + ' empresa' + (c.ativos === 1 ? '' : 's') + ' ativa' + (c.ativos === 1 ? '' : 's') + '</p></article>';
+    }).join('') + '</div><p class="muted">Máquina extra: <b>a definir</b> (Pedro confirma). Desconto Pix e fidelidade anual: <b>a definir</b>. Peças sempre à parte.</p>' +
       '<p class="muted">Pagamento mensal, por Pix e antecipado. Direito de arrependimento de 7 dias (CDC). Atendimento com hora marcada: seg a sex, das 19h às 22h; sáb e dom, das 9h às 17h. Sem promessa de prazo de resposta ou emergência.</p></section>';
   }
   // ---- Contratos e visitas técnicas (Mais > Visitas) ----
@@ -1096,26 +1231,40 @@
   ACOES['ct-novo'] = function () {
     formulario('+ Contrato mensal', [{ k: 'cliente', r: 'Cliente', t: 'select', o: (D.clientes || []).map(function (c) { return c.nome; }), req: true },
       { k: 'plano', r: 'Plano', t: 'select', o: PLANOS.map(function (p) { return p.nome; }), req: true },
-      { k: 'extras', r: 'Máquinas extras (R$ 71,90/mês cada)', t: 'number' }, { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
+      { k: 'pcs', r: 'Nº de computadores', t: 'number', ajuda: 'Empresa+ começa em 11.' },
+      { k: 'extras', r: 'Máquinas extras (preço a definir)', t: 'number', ajuda: 'Não soma no total até o Pedro definir o valor da máquina extra.' },
+      { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
       { k: 'frequencia', r: 'Frequência da visita' }, { k: 'inicio', r: 'Início', t: 'date' }, { k: 'obs', r: 'Observações', t: 'textarea' }],
-      { plano: 'Essencial', extras: '0', valor: '143,80', frequencia: 'a cada 2 meses', inicio: D.hoje })
+      { plano: 'Essencial', pcs: '5', extras: '0', valor: '359,50', frequencia: '1x por mês', inicio: D.hoje },
+      '<p class="muted">Preços do Financeiro (09/11). Máquina extra, desconto Pix e fidelidade: <b>a definir</b>.</p>')
       .then(function (v) {
-        if (!v) return; var p = planoOficial(v.plano), n = Number(v.extras || 0);
+        if (!v) return; var p = planoOficial(v.plano), n = Number(v.extras || 0), pcs = Number(v.pcs || 0);
         if (!p || !Number.isInteger(n) || n < 0) return aviso('Informe uma quantidade inteira de máquinas extras, maior ou igual a zero.');
-        // A API atual só tem visitas inteiras por mês. Não mandar 0,5 (seria arredondado para 1).
-        // Bimestral fica em obs e é exibido pelo plano oficial; não agenda visitas automaticamente.
-        var obs = 'Visita preventiva: ' + p.frequencia + '. Limpeza a cada ' + p.limpeza + ' meses. Máquinas extras: ' + n + '.' +
-          (p.nome === 'Empresa+' ? ' Prioridade na agenda (à noite ou no fim de semana), sem promessa de prazo ou emergência.' : '') + (v.obs ? '\n' + v.obs : '');
-        depoisCT('salvarContrato', [{ cliente: v.cliente, plano: p.nome, valor: Math.round((p.valor + n * 71.90) * 100) / 100, visitas: p.visitas, inicio: v.inicio, obs: obs }]);
+        if (p.valorPorPc && (!Number.isInteger(pcs) || pcs < (p.pcsMin || 11))) return aviso('Empresa+ começa em 11 computadores.');
+        var valor = V.valorPlano(p.nome, pcs || p.pcs, 0); // extras não somam até Pedro definir o valor da máquina extra
+        if (valor == null) return aviso('Valor do plano ainda não definido.');
+        var obs = 'Visita preventiva: ' + p.frequencia + '. Limpeza a cada ' + p.limpeza + ' meses. PCs: ' + (pcs || p.pcs || p.pcsTxt) + '. Máquinas extras: ' + n + ' (preço a definir).' +
+          ' ' + p.suporte + ', sem promessa de prazo em horas.' + (v.obs ? '\n' + v.obs : '');
+        depoisCT('salvarContrato', [{ cliente: v.cliente, plano: p.nome, valor: valor, visitas: p.visitas, inicio: v.inicio, obs: obs }]);
       });
-    $('c_valor').readOnly = true; $('c_frequencia').readOnly = true;
+    $('c_frequencia').readOnly = true;
     var preencher = function () {
-      var p = planoOficial($('c_plano').value), n = Number($('c_extras').value || 0), valido = Number.isInteger(n) && n >= 0;
-      $('c_extras').setCustomValidity(valido ? '' : 'Informe uma quantidade inteira maior ou igual a zero.');
-      $('c_valor').value = p && valido ? (p.valor + n * 71.90).toFixed(2).replace('.', ',') : '';
+      var p = planoOficial($('c_plano').value), n = Number($('c_extras').value || 0), pcs = Number($('c_pcs').value || 0);
+      var validoExt = Number.isInteger(n) && n >= 0;
+      $('c_extras').setCustomValidity(validoExt ? '' : 'Informe uma quantidade inteira maior ou igual a zero.');
+      if (p && p.valorPorPc) {
+        if (!pcs) { $('c_pcs').value = String(p.pcsMin || 11); pcs = p.pcsMin || 11; }
+        $('c_pcs').required = true;
+      } else {
+        $('c_pcs').required = false; if (p && p.pcs) $('c_pcs').value = String(p.pcs);
+        pcs = Number($('c_pcs').value || (p && p.pcs) || 0);
+      }
+      var valor = p ? V.valorPlano(p.nome, pcs, 0) : null;
+      $('c_valor').value = valor != null ? valor.toFixed(2).replace('.', ',') : '';
+      $('c_valor').readOnly = true;
       $('c_frequencia').value = p ? p.frequencia : '';
     };
-    $('c_plano').onchange = preencher; $('c_extras').oninput = preencher;
+    $('c_plano').onchange = preencher; $('c_extras').oninput = preencher; $('c_pcs').oninput = preencher; preencher();
   };
   ACOES['vis-ini'] = function (id) { depoisCT('iniciarVisita', [{ id: id }]); };
   ACOES['vis-fim'] = function (id) {

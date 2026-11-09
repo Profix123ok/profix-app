@@ -181,7 +181,7 @@
     (D.os || []).forEach(function (o) {
       var s = V.saldoOS(D, o);
       if (s > 0 && (o.status === 'Entregue' || o.status === 'Pronto')) cobrar.push({ ref: o, num: o.num, cliente: o.cliente, saldo: s, status: o.status });
-      else if (['Entregue', 'Cancelado', 'Pronto'].indexOf(o.status) < 0 && dias(o.statusEm, h) >= 5) paradas.push({ ref: o, num: o.num, cliente: o.cliente, status: o.status });
+      else if (['Entregue', 'Cancelado', 'Pronto'].indexOf(o.status) < 0 && dias(o.statusEm || o.entrada, h) >= 3) paradas.push({ ref: o, num: o.num, cliente: o.cliente, status: o.status });
     });
     var ord = function (a, b) { return String(a.data || '') < String(b.data || '') ? -1 : 1; };
     return { chamar: chamar.sort(ord), semResposta: semResposta.sort(ord), cobrar: cobrar, paradas: paradas,
@@ -212,5 +212,143 @@
       (o.previsao ? '\nPrevisão: ' + V.dataBR(o.previsao) : '') + '\nPodemos seguir com o serviço?';
   };
   V.prontasOS = function (D) { return (D.os || []).filter(function (o) { return o.status === 'Pronto'; }); };
+
+  // v0.8.0: helpers da especificação 09/11 (bancada, entregas, SLA 3d, revisão, garantia, templates, planos).
+  V.diasOS = function (a, b) { return /^\d{4}-/.test(a || '') && /^\d{4}-/.test(b || '') ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : null; };
+  V.diasSemMovOS = function (o, hoje) { return V.diasOS(o.statusEm || o.entrada, hoje); };
+  V.osAberta = function (o) { return ['Entregue', 'Cancelado'].indexOf(String(o.status || '')) < 0; };
+  V.emBancada = function (D) {
+    return (D.os || []).filter(function (o) {
+      return ['Recebido', 'Em diagnóstico', 'Aguardando aprovação', 'Aguardando peça', 'Em reparo'].indexOf(o.status) >= 0;
+    }).sort(function (a, b) { return String(b.statusEm || b.entrada) < String(a.statusEm || a.entrada) ? -1 : 1; });
+  };
+  V.entregasDoDia = function (D) {
+    var h = D.hoje;
+    return (D.os || []).filter(function (o) {
+      if (o.status === 'Cancelado' || o.status === 'Entregue') return false;
+      return o.status === 'Pronto' || o.previsao === h;
+    }).sort(function (a, b) { return String(a.num) < String(b.num) ? -1 : 1; });
+  };
+  V.badgeParada3d = function (o, hoje) {
+    if (!V.osAberta(o) || o.status === 'Pronto') return null;
+    var d = V.diasSemMovOS(o, hoje); if (d == null || d < 3) return null;
+    return { dias: d, texto: 'Sem movimento há ' + d + ' dias' };
+  };
+  V.revisoes30dias = function (D) {
+    var h = D.hoje, out = [];
+    (D.os || []).forEach(function (o) {
+      if (o.status !== 'Entregue' || !o.entrega) return;
+      var d = V.diasOS(o.entrega, h); if (d == null || d < 30 || d > 37) return;
+      out.push({ ref: o, num: o.num, cliente: o.cliente, entrega: o.entrega, dias: d, aparelho: o.equipamento || 'aparelho' });
+    });
+    return out.sort(function (a, b) { return a.dias - b.dias; });
+  };
+  V.fimGarantia = function (D, diasGar) {
+    diasGar = Number(diasGar) || 0; if (!diasGar) return [];
+    var h = D.hoje, out = [];
+    (D.os || []).forEach(function (o) {
+      if (o.status !== 'Entregue' || !o.entrega) return;
+      var ate = V.somaDias(o.entrega, diasGar), restam = V.diasOS(h, ate);
+      if (restam == null || restam < 0 || restam > 5) return;
+      out.push({ ref: o, num: o.num, cliente: o.cliente, aparelho: o.equipamento || 'aparelho', ate: ate, restam: restam });
+    });
+    return out.sort(function (a, b) { return a.restam - b.restam; });
+  };
+  /** Motivos curtos (Atendimento 09/11). Preferir esta lista no App; a planilha pode ainda ter a antiga. */
+  V.MOTIVOS_PERDA = ['Preço', 'Resolveu com outra pessoa', 'Desistiu do conserto', 'Comprou um aparelho novo', 'Não respondeu', 'Fora da região', 'Serviço que a ProFix não faz', 'Outro'];
+  V.motivoPerdaObrigatorio = function (status) { return status === 'Descartada' || status === 'Perdido'; };
+  V.motivosPerda = function (D) { return (D && D.motivosPerda && D.motivosPerda.length) ? D.motivosPerda : V.MOTIVOS_PERDA; };
+  /** Templates “pronto” por tipo de serviço (textos Atendimento). Placeholders entre [colchetes] o Pedro edita. */
+  V.TIPOS_SERVICO_MSG = [
+    { id: 'formatacao', rotulo: 'Formatação', linha: 'Instalei o sistema do zero[, com backup dos seus arquivos]. Os programas que você pediu já estão instalados: [lista].' },
+    { id: 'limpeza', rotulo: 'Limpeza preventiva', linha: 'Fiz a limpeza interna[ e troquei a pasta térmica]. A temperatura antes era [__] °C e agora está em [__] °C.' },
+    { id: 'upgrade', rotulo: 'Upgrade SSD/RAM', linha: 'Instalei [SSD de ___ GB / ___ GB de memória][ e passei o seu sistema para o novo SSD]. Testei e ele já liga [mais rápido / sem travar].' },
+    { id: 'diagnostico', rotulo: 'Diagnóstico/ajustes', linha: 'Descobri que o problema era [causa] e [resolvi assim / deixei para você decidir sobre o orçamento].' }
+  ];
+  V.textoMsgServico = function (tipoId, o, c) {
+    var t = V.TIPOS_SERVICO_MSG.filter(function (x) { return x.id === tipoId; })[0]; if (!t) return '';
+    var nome = String((c && c.nome) || (o && o.cliente) || '').split(' ')[0] || '';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Aqui é o Pedro, da ProFix.\n' +
+      'Sua OS ' + ((o && o.num) || '[____]') + ' (' + ((o && o.equipamento) || '[aparelho]') + ') está pronta.\n' +
+      'O que foi feito: ' + t.linha + '\n' +
+      'Valor: ' + (o && (o.valor || o.orcamento) ? V.brl(o.valor || o.orcamento) : '[R$ __]') +
+      '\nPagamento: [Pix / dinheiro / cartão]. Entrega: [combinar].';
+  };
+  V.textoRevisao30 = function (c, o) {
+    var nome = String((c && c.nome) || (o && o.cliente) || '').split(' ')[0] || '';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Aqui é o Pedro, da ProFix. Faz um mês que entregamos seu ' +
+      ((o && o.equipamento) || 'aparelho') + '. Ele continua funcionando bem? Se notou qualquer coisa, me chama que eu vejo. 🙂';
+  };
+  V.textoFimGarantia = function (c, o, ate) {
+    var nome = String((c && c.nome) || (o && o.cliente) || '').split(' ')[0] || '';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Só um aviso: a garantia do serviço no seu ' +
+      ((o && o.equipamento) || 'aparelho') + ' (OS ' + ((o && o.num) || '[____]') + ') vai até **' + V.dataBR(ate) +
+      '**. Se apareceu qualquer coisa ligada ao que foi feito, me chama até essa data que eu resolvo sem custo. Se está tudo certo, ótimo! *(Se não quiser mais esse tipo de aviso, é só me falar.)*';
+  };
+  V.textoReativacao = function (tipo, c, aparelho) {
+    var nome = String((c && c.nome) || '').split(' ')[0] || '';
+    var ap = aparelho || 'aparelho';
+    if (tipo === 'orcamento') return 'Oi' + (nome ? ', ' + nome : '') + '! Aqui é o Pedro, da ProFix. Ficou alguma dúvida sobre o orçamento do seu ' + ap + '? Se mudou de ideia ou já resolveu, sem problema nenhum. É só me avisar e eu fecho por aqui.';
+    return 'Oi' + (nome ? ', ' + nome : '') + '! Conversamos sobre o seu ' + ap + ' uns dias atrás. Se ainda precisar, posso marcar um horário. Se não for o momento, tudo bem também.';
+  };
+  V.AVISO_NAO_CONTATAR = 'Este cliente pediu para não receber mensagens. Fale com ele só se ele te procurar.';
+  /** Planos B2B — Financeiro 09/11. Máquina extra / Pix / fidelidade = a definir (null). */
+  V.PLANOS_B2B = [
+    { nome: 'Essencial', pcs: 5, pcsTxt: 'até 5', visitas: 1, frequencia: '1x por mês', valor: 359.50, limpeza: 6, suporte: 'Suporte remoto', para: 'Para quem está começando e quer um cuidado básico.' },
+    { nome: 'Empresa', pcs: 10, pcsTxt: 'até 10', visitas: 2, frequencia: '2x por mês', valor: 719.00, limpeza: 6, suporte: 'Suporte remoto prioritário', para: 'Para empresas que dependem do computador o dia todo.', selo: true },
+    { nome: 'Empresa+', pcsMin: 11, pcsTxt: '11 ou mais', visitas: 3, frequencia: '3x por mês', valorPorPc: 71.90, valorMin: 790.90, limpeza: 6, suporte: 'Atendimento prioritário', para: 'Para equipes maiores, com prioridade na agenda.' }
+  ];
+  V.EXTRA_MAQUINA = null; // a definir pelo Pedro
+  V.DESCONTO_PIX = null;
+  V.DESCONTO_FIDELIDADE = null;
+  V.planoOficial = function (nome) { return V.PLANOS_B2B.filter(function (p) { return p.nome === nome; })[0]; };
+  V.valorPlano = function (nome, pcs, extras) {
+    var p = V.planoOficial(nome); if (!p) return null;
+    extras = Number(extras) || 0;
+    if (p.valorPorPc) {
+      var n = Math.max(Number(pcs) || p.pcsMin || 11, p.pcsMin || 11);
+      var base = Math.round(n * p.valorPorPc * 100) / 100;
+      return Math.max(base, p.valorMin || 0);
+    }
+    var v = p.valor;
+    if (V.EXTRA_MAQUINA != null && extras > 0) v = Math.round((v + extras * V.EXTRA_MAQUINA) * 100) / 100;
+    return v;
+  };
+  V.precoTxtPlano = function (p) {
+    if (!p) return 'a definir';
+    if (p.valorPorPc) return V.brl(p.valorPorPc) + ' por PC' + (p.valorMin ? ' (a partir de ' + V.brl(p.valorMin) + ')' : '');
+    return p.valor != null ? V.brl(p.valor) : 'a definir';
+  };
+  V.contadoresPlanos = function (contratos) {
+    var out = {}; V.PLANOS_B2B.forEach(function (p) { out[p.nome] = { ativos: 0, pcs: 0 }; });
+    (contratos || []).forEach(function (k) {
+      if (k.status && k.status !== 'Ativo') return;
+      var p = V.planoOficial(k.plano); if (!p) return;
+      out[p.nome].ativos += 1;
+      if (p.pcs) out[p.nome].pcs += p.pcs; else if (p.pcsMin) out[p.nome].pcs += p.pcsMin;
+    });
+    return out;
+  };
+  /** Combos oficiais (Financeiro). Sem preço Pix até o Pedro confirmar. */
+  V.COMBOS_OFICIAIS = [
+    { servico: 'Combo PC Novo de Novo (sem backup)', preco: 165.80, tipo: 'Fixo', descricao: 'Formatação sem backup + limpeza interna de desktop. À vista. Desconto Pix a definir.', ativo: 'Sim', status: 'Ativo', combo: true },
+    { servico: 'Combo PC Novo de Novo (com backup)', preco: 246.80, tipo: 'Fixo', descricao: 'Formatação com backup + limpeza interna de desktop. À vista. Desconto Pix a definir.', ativo: 'Sim', status: 'Ativo', combo: true }
+  ];
+  V.catalogoComCombos = function (catalogo) {
+    var nomes = {}; (catalogo || []).forEach(function (s) { nomes[V.norm(s.servico)] = 1; });
+    var extra = V.COMBOS_OFICIAIS.filter(function (c) { return !nomes[V.norm(c.servico)]; });
+    return (catalogo || []).concat(extra);
+  };
+  V.textoTermoEntrada = function (o, c) {
+    return 'Recebimento do equipamento: OS ' + ((o && o.num) || '[____]') +
+      '\nCliente: ' + ((c && c.nome) || (o && o.cliente) || '[nome]') +
+      ' · Equipamento: ' + ((o && o.equipamento) || '[tipo, marca, modelo]') +
+      '\nComo chegou: [riscos, peças faltando, tela, teclado, carregador, bateria] · Liga? [sim/não]' +
+      '\nAcessórios entregues: ' + ((o && o.acessorios) || '[carregador, bolsa…]') +
+      '\nProblema relatado: ' + ((o && o.defeito) || '[texto do cliente]') +
+      '\n\nNenhum conserto é feito sem o seu ok. Primeiro fazemos o diagnóstico e passamos o valor. Você só aprova se quiser.' +
+      '\nRecomendamos ter cópia dos seus arquivos. Se o serviço incluir backup, ele aparece no orçamento.' +
+      '\n\nSeus dados (LGPD): usamos seu nome e telefone só para este atendimento e para avisos que você aceitar. Não passamos seus dados para ninguém. Você pode pedir para ver, corrigir ou apagar seus dados no WhatsApp (15) 98112-8309.';
+  };
   return V;
 });
