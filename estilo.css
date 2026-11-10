@@ -166,3 +166,16 @@ dialog:has(.sheet-msgs)::backdrop{background:rgba(0,0,0,.45)}
 .msg-lista .btn{min-height:44px}
 #msgsTodas{margin-top:10px}
 #msgsTodas > summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+/* v0.8.5: teto MEI, painel financeiro, calculadora */
+.mais-abas{flex-wrap:wrap}
+.barra{position:relative;height:16px;border-radius:999px;background:#232d28;overflow:hidden;margin:6px 0}.barra span{display:block;height:100%;background:var(--verde)}.barra i{position:absolute;top:0;bottom:0;width:2px;background:#fde68a}
+.mei-atencao .barra span{background:var(--amar)}.mei-perigo .barra span,.mei-estourou .barra span{background:var(--verm)}
+.fin-grade{display:grid;gap:12px}.fin-grade h3{margin:6px 0}
+.rosca{width:150px;height:150px;border-radius:50%;display:grid;place-items:center;margin:6px auto}.rosca span{width:96px;height:96px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-weight:700;font-size:14px;text-align:center}
+.legenda{list-style:none;padding:0;margin:6px 0;font-size:14px}.legenda i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.barras .bm{display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;font-size:14px;margin:4px 0}.bt{background:#232d28;border-radius:6px;height:12px;overflow:hidden}.bt b{display:block;height:100%;background:var(--verde)}.bt b.neg{background:var(--verm)}
+table.dre{width:100%;border-collapse:collapse;font-size:14px}table.dre caption{text-align:left;font-weight:700;padding:4px 0}table.dre td,table.dre th{padding:6px 4px;border-bottom:1px solid var(--borda);text-align:left}table.dre td:last-child{text-align:right}table.dre tr.sub td,table.dre tr.tot td{font-weight:700}
+.tabela-rolar{overflow-x:auto;max-width:100%}
+@media (min-width:900px){.fin-grade{grid-template-columns:1fr 1fr}}
+.laudo iframe.etq{height:40mm;min-height:160px}
+table.dre td:last-child{white-space:nowrap}

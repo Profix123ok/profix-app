@@ -284,7 +284,7 @@
     mais: function (sub) {
       // v0.7.7: no celular, Mais é uma lista; dentro da seção só fica o caminho de volta.
       // CSS acompanha o breakpoint da barra lateral, inclusive ao girar/redimensionar a tela.
-      var itens = [['financeiro', 'Financeiro'], ['visitas', 'Visitas'], ['mes', 'Mês'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['lixeira', 'Lixeira'], ['ajustes', 'Ajustes']];
+      var itens = [['financeiro', 'Financeiro'], ['visitas', 'Visitas'], ['mes', 'Mês'], ['suprimentos', 'Suprimentos'], ['calculadora', 'Calculadora PC'], ['catalogo', 'Catálogo'], ['precos', 'Preços OS'], ['modelos', 'Modelos'], ['lixeira', 'Lixeira'], ['ajustes', 'Ajustes']];
       var atual = itens.filter(function (x) { return x[0] === sub; })[0];
       var links = function (lista) { return itens.map(function (x) {
         var on = (sub || 'financeiro') === x[0];
@@ -298,6 +298,8 @@
       if (sub === 'visitas') return cab + telaVisitas();
       if (sub === 'mes') return cab + telaMes();
       if (sub === 'lixeira') return cab + telaLixeira();
+      if (sub === 'suprimentos') return cab + telaSuprimentos();
+      if (sub === 'calculadora') return cab + telaCalculadora();
       if (sub === 'catalogo') {
         var cats = V.catalogoComCombos(D.catalogo || []);
         return cab + '<div class="row">' + botao('+ Novo serviço', 'cat-novo', '', '') + '</div>' +
@@ -323,6 +325,7 @@
       var ym = D.hoje.slice(0, 7), R = V.resumoMes(D, ym), l = (D.financeiro || []).slice().sort(function (a, b) { return String(b.data) < String(a.data) ? -1 : 1; });
       return cab + '<div' + (!sub ? ' class="mais-padrao"' : '') + '><div class="resumo"><div><b>' + V.brl(R.entradas) + '</b>entradas no mês</div><div><b>' + V.brl(R.saidas) + '</b>saídas no mês</div><div><b>' + V.brl(R.saldo) + '</b>saldo do mês</div><div><b>' + l.length + '</b>lançamentos</div></div>' +
         '<div class="row">' + botao('+ Novo lançamento', 'fin-novo', '', '') + '</div>' +
+        blocoMEI() + blocoPainelFin() + blocoPrevisao() + '<h2>Lançamentos</h2>' +
         lista(l, function (f) { return card(e(f.descricao || f.categoria), V.dataBR(f.data) + ' · ' + e(f.categoria) + (f.os ? ' · ' + e(f.os) : '') + ' · ' + e(f.forma || ''), tag(f.tipo, f.tipo === 'Entrada' ? '' : 'alta') + ' <b>' + V.brl(f.tipo === 'Entrada' ? f.receita : f.custo) + '</b>'); }, 'Sem lançamentos.') + '</div>';
     }
   };
@@ -528,7 +531,7 @@
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('💬 Mensagens', 'os-msgs', row) + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
+        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('💬 Mensagens', 'os-msgs', row) + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('🧾 Cotações', 'os-cot', row) + botao('🏷 Etiqueta QR', 'os-qr', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div></details>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
       var principal = m.querySelector('#proximaOS [data-a]'); if (principal) m.querySelectorAll('#maisAcoesOS [data-a="' + principal.dataset.a + '"]').forEach(function (b) { b.remove(); });
@@ -1281,7 +1284,7 @@
         '<ul><li>Visita preventiva no local, fora do horário comercial</li><li>Checagem de desempenho em cada visita</li><li><strong>Limpeza interna completa de cada máquina a cada ' + p.limpeza + ' meses</strong></li>' +
         '<li>' + e(p.suporte) + ' (sem promessa de prazo em horas)</li>' +
         '<li>Suporte por WhatsApp nos horários de atendimento</li><li>10% de desconto em serviços avulsos</li></ul>' +
-        '<p class="plano-uso" data-plano-uso="' + e(p.nome) + '">' + c.ativos + ' empresa' + (c.ativos === 1 ? '' : 's') + ' ativa' + (c.ativos === 1 ? '' : 's') + '</p></article>';
+        '<p class="plano-uso" data-plano-uso="' + e(p.nome) + '">' + c.ativos + ' empresa' + (c.ativos === 1 ? '' : 's') + ' ativa' + (c.ativos === 1 ? '' : 's') + '</p>' + botao('📄 Gerar proposta', 'pl-proposta', p.nome, '') + '</article>';
     }).join('') + '</div><p class="muted">Máquina extra: <b>' + e(V.brl(cfgPrecos().extra)) + '/PC/mês</b>. Desconto Pix: <b>' + e(String(cfgPrecos().pix)) + '%</b> (CRM; combos não somam). Contrato anual: <b>' + e(String(cfgPrecos().anual)) + '%</b>. Peças sempre à parte.</p>' +
       '<p class="muted">Pagamento mensal, por Pix e antecipado. Direito de arrependimento de 7 dias (CDC). Atendimento com hora marcada: seg a sex, das 19h às 22h; sáb e dom, das 9h às 17h. Sem promessa de prazo de resposta ou emergência.</p></section>';
   }
@@ -1698,6 +1701,247 @@
     abrirMsg({ titulo: '⭐ Avaliação no Google · ' + o.num, texto: texto, waUrl: b ? b.href : '', semWa: b ? '' : 'WhatsApp inválido ou ausente.', cliente: c, os: o.num, osObj: o, tipo: 'avaliacao', emailOk: true, assuntoEmail: V.ASSUNTOS_MSG_EMAIL['pos-google'] });
   };
 
+  // ---------- v0.8.5: teto MEI, painel financeiro, previsão, etiqueta QR, proposta, Suprimentos (Módulo 9) e Calculadora de PCs ----------
+  var X = window.ProFix085, FINM = { mes: '' }, CMP = [];
+  var M9K = 'profix.m9', PCK = 'profix.pcs';
+  function lerJSON(k, pad) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? pad : v; } catch (x) { return pad; } }
+  function lerM9() { return X.normLoja(lerJSON(M9K, null)); }
+  function gravarM9(s) { localStorage.setItem(M9K, JSON.stringify(s)); }
+  function lerPCs() { var l = lerJSON(PCK, []); return Array.isArray(l) ? l : []; }
+  function gravarPCs(l) { localStorage.setItem(PCK, JSON.stringify(l)); }
+  /** Lista FN-xxxx do CRM, se um dia o getDados mandar (hoje só o painel lê a aba Fornecedores). */
+  function fornecedoresCRM() {
+    if (!Array.isArray(D.fornecedores) || !D.fornecedores.length) return null;
+    return D.fornecedores.map(function (f) { return { id: String(f.id || f.ID || ''), nome: f.nome || f.Nome || '', ativo: !/^n/i.test(String(f.ativo || f['Ativo?'] || 'Sim')) }; });
+  }
+  function nomeForn(id) { var l = fornecedoresCRM(), f = l && l.filter(function (x) { return x.id === id; })[0]; return f && f.nome ? id + ' · ' + f.nome : id; }
+  function copiar(t, ok) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso(ok || 'Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto.'); }); }
+  function cfgCalc() { return { pix: cfgPrecos().pix, taxas: (D.fin && D.fin.taxas) || [] }; }
+  function pctTxt(n) { return String(n).replace('.', ',') + '%'; }
+
+  // ---- 1) Teto MEI (Mais › Financeiro) ----
+  function blocoMEI() {
+    var t = X.tetoMEI(D, D.hoje), w = Math.min(100, t.pct);
+    return '<section id="tetoMEI" class="card mei mei-' + t.nivel + '"><h2 style="margin-top:0">Teto do MEI ' + e(t.ano) + '</h2>' +
+      '<div class="barra" role="progressbar" aria-label="Faturamento do ano em relação ao teto do MEI" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(w) + '"><span style="width:' + w + '%"></span><i style="left:' + t.alertaPct + '%" title="Alerta em ' + t.alertaPct + '%"></i></div>' +
+      '<p id="meiValores"><b>' + V.brl(t.faturado) + '</b> de ' + V.brl(t.teto) + ' (' + pctTxt(t.pct) + ') · ' + (t.restante >= 0 ? 'faltam ' + V.brl(t.restante) : 'passou ' + V.brl(-t.restante)) + '</p>' +
+      '<p class="muted" id="meiMedia">Média mensal: <b>' + V.brl(t.mediaMensal) + '</b> (o teto equivale a ' + V.brl(t.mensalRef) + '/mês).' + (t.restantePorMes != null && t.restante > 0 ? ' Para ficar dentro: até ' + V.brl(t.restantePorMes) + '/mês no resto do ano.' : '') +
+      ' No ritmo atual o ano fecharia perto de ' + V.brl(t.projecaoAno) + ' (projeção, não é faturamento).</p>' +
+      (t.nivel !== 'ok' ? '<p class="alerta" id="meiAviso">⚠️ ' + e(X.textoNivelMEI(t)) + '</p>' : '<p class="muted" id="meiAviso">' + e(X.textoNivelMEI(t)) + '</p>') +
+      (t.revendaSemLancamento.length ? '<p class="alerta" id="meiRevenda">Revenda vendida sem lançamento no Financeiro: ' + e(t.revendaSemLancamento.join(', ')) + ' (' + V.brl(t.revendaSemLancamentoValor) + '). Lance para o teto ficar certo.</p>' : '') +
+      (t.tetoPlanilha ? '<p class="muted" id="meiPlanilha">A planilha (Configurações) diz ' + V.brl(t.tetoPlanilha) + '. O App usa o teto oficial em vigor, ' + V.brl(t.teto) + '.</p>' : '') +
+      '<p class="muted">Conta todas as Entradas do Financeiro do ano, inclusive revenda de usados. Teto oficial: R$ 81.000/ano. O novo teto (PLP 186/2026) ainda não é lei.</p></section>';
+  }
+  // ---- 2) Previsão pelas OS + 4) Painel financeiro ----
+  function blocoPrevisao() {
+    var p = X.previsaoOS(D);
+    return '<section id="previsaoOS" class="card"><h2 style="margin-top:0">Previsão pelas OS abertas</h2><p class="muted">É previsão: só vira caixa quando o cliente paga.</p>' +
+      '<div class="tiles">' + tile('A receber de OS com valor', V.brl(p.aReceber), 'prevReceber') + tile('Orçamentos aguardando resposta', V.brl(p.orcamentosPendentes), 'prevPendentes') + '</div>' +
+      (p.confirmadas.length ? '<div class="m">' + p.confirmadas.map(function (o) { return e(o.num) + ' · ' + e(o.status) + ' · falta ' + V.brl(o.falta); }).join('<br>') + '</div>' : '<div class="m">Nenhuma OS aberta com valor a receber.</div>') + '</section>';
+  }
+  function linhaDRE(rot, v, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + rot + '</td><td>' + V.brl(v) + '</td></tr>'; }
+  function tabelaDRE(d, id, tit) {
+    return '<table class="dre" id="' + id + '"><caption>' + tit + '</caption>' + linhaDRE('Receita (entradas)', d.receita) + linhaDRE('(−) Custos diretos: peças e deslocamento', d.custos) +
+      linhaDRE('= Margem bruta', d.margemBruta, 'sub') + linhaDRE('(−) Despesas: ferramentas, DAS, marketing, outros', d.despesas) + (d.outras ? linhaDRE('(−) Outras saídas', d.outras) : '') +
+      linhaDRE('= Resultado', d.resultado, 'tot') + '</table>';
+  }
+  function blocoPainelFin() {
+    var ym = FINM.mes || D.hoje.slice(0, 7), ini = ym + '-01', fim = ym + '-31', ano = ym.slice(0, 4);
+    var dm = X.dre(D, ini, fim), da = X.dre(D, ano + '-01-01', ym === D.hoje.slice(0, 7) ? D.hoje : fim), ro = X.rosca(dm.saidasPorCat), ms = X.saldosMeses(D, ym, 6);
+    var maior = ms.reduce(function (a, m) { return Math.max(a, Math.abs(m.saldo)); }, 0) || 1, prev = X.previsaoOS(D), t = X.tetoMEI(D, D.hoje);
+    return '<section id="painelFin" class="card"><h2 style="margin-top:0">Painel financeiro</h2><div class="filtros"><input type="month" id="fFinMes" value="' + e(ym) + '" aria-label="Mês do painel"></div>' +
+      '<div class="fin-grade"><div><h3>Custos do mês</h3>' + (ro ? '<div class="rosca" id="roscaCustos" style="background:' + ro.css + '" role="img" aria-label="Custos do mês por categoria"><span>' + V.brl(ro.total) + '</span></div><ul class="legenda">' +
+        ro.partes.map(function (p) { return '<li><i style="background:' + p.cor + '"></i>' + e(p.cat) + ': ' + V.brl(p.valor) + ' (' + pctTxt(p.pct) + ')</li>'; }).join('') + '</ul>' : '<p class="muted" id="roscaCustos">Sem saídas lançadas neste mês.</p>') + '</div>' +
+      '<div><h3>Saldo por mês</h3><div class="barras" id="saldoMeses">' + ms.map(function (m) { return '<div class="bm"><span class="muted">' + e(m.mes.slice(5, 7) + '/' + m.mes.slice(2, 4)) + '</span><div class="bt"><b class="' + (m.saldo < 0 ? 'neg' : '') + '" style="width:' + Math.round(Math.abs(m.saldo) / maior * 100) + '%"></b></div><span>' + V.brl(m.saldo) + '</span></div>'; }).join('') + '</div></div></div>' +
+      '<h3>DRE MEI simples</h3><div class="fin-grade">' + tabelaDRE(dm, 'dreMes', 'Mês ' + ym.slice(5, 7) + '/' + ano) + tabelaDRE(da, 'dreAno', 'Ano até agora (' + ano + ')') + '</div>' +
+      '<p class="muted" id="dreTeto">Faturamento do ano × teto do MEI: ' + V.brl(t.faturado) + ' de ' + V.brl(t.teto) + ' (' + pctTxt(t.pct) + '). Pró-labore não entra aqui: lance como saída se quiser ver.</p>' +
+      '<p class="muted" id="caixaProj">Caixa projetado do mês: saldo ' + V.brl(V.resumoMes(D, ym).saldo) + ' + a receber de OS ' + V.brl(prev.aReceber) + ' = <b>' + V.brl(V.resumoMes(D, ym).saldo + prev.aReceber) + '</b> (previsão). Contas a pagar futuras não estão no App.</p>' +
+      '<p class="muted">Cartões PF/PJ: o Financeiro do App ainda não separa PF e PJ (relatórios ficam com Analista/Financeiro).</p></section>';
+  }
+
+  // ---- 3) Etiqueta QR ----
+  ACOES['os-qr'] = function (row) {
+    var o = achar('os', row);
+    formulario('🏷 Etiqueta QR · ' + e(o.num), [{ k: 'modo', r: 'O que o QR guarda', t: 'select', o: ['Só o número da OS', 'Link do WhatsApp da ProFix com o nº da OS'], req: true }], { modo: 'Só o número da OS' },
+      '<p class="muted">O QR não leva nome, telefone nem endereço do cliente (LGPD). Gerado no aparelho, sem serviço externo.</p>').then(function (v) {
+      if (!v) return; var modo = /WhatsApp/.test(v.modo) ? 'wa' : 'id', html = X.etiquetaHtml(o, modo, CFG.WHATSAPP_LOJA), svg = X.qrSvg(X.conteudoEtiqueta(o, modo, CFG.WHATSAPP_LOJA), 400);
+      var url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })), m = $('modal');
+      m.innerHTML = '<form method="dialog" class="detalhe laudo"><h2 style="margin:0">🏷 Etiqueta · ' + e(o.num) + '</h2><p class="muted" id="etqConteudo">QR: ' + e(X.conteudoEtiqueta(o, modo, CFG.WHATSAPP_LOJA)) + '</p>' +
+        '<div class="grandes"><button type="button" class="btn" id="bImprEtq">🖨️ Imprimir</button><a class="btn sec" id="bBaixarEtq" download="etiqueta-' + e(o.num) + '.svg" href="' + url + '">⬇️ Baixar QR (imagem)</a><button class="btn sec" value="fechar">Fechar</button></div><iframe id="etqFrame" class="etq" title="Etiqueta QR" sandbox="allow-same-origin allow-modals"></iframe></form>';
+      $('etqFrame').srcdoc = html; m.onclose = function () { URL.revokeObjectURL(url); m.onclose = null; }; m.returnValue = ''; m.showModal();
+      $('bImprEtq').onclick = function () { try { $('etqFrame').contentWindow.print(); } catch (x) { aviso('Não deu para imprimir neste aparelho.'); } };
+    });
+  };
+
+  // ---- 5) Proposta comercial ----
+  ACOES['pl-proposta'] = function (nome) {
+    var p = V.planoOficial(nome); if (!p) return;
+    formulario('📄 Proposta · Plano ' + e(p.nome), [{ k: 'cliente', r: 'Empresa / cliente', req: true }, { k: 'contato', r: 'Contato (opcional)' },
+      { k: 'maquinas', r: 'Computadores', t: 'number', ajuda: p.valorPorPc ? 'Mínimo ' + p.pcsMin + '. ' + e(V.brl(p.valorPorPc)) + ' por PC.' : 'Até ' + p.pcs + ' no plano; cada um a mais: ' + e(V.brl(cfgPrecos().extra)) + '/mês.' },
+      { k: 'anual', r: 'Contrato anual (' + e(String(cfgPrecos().anual)) + '% de desconto, do CRM)', t: 'checkbox' }, { k: 'validadeDias', r: 'Validade (dias)', t: 'number' }, { k: 'obs', r: 'Observações', t: 'textarea' }],
+      { maquinas: String(p.pcs || p.pcsMin), validadeDias: '7' }).then(function (v) {
+      if (!v) return; var r;
+      try { r = X.proposta(Object.assign({ plano: p.nome }, v), { pix: cfgPrecos().pix, anual: cfgPrecos().anual, extra: cfgPrecos().extra }, D.hoje); } catch (er) { return aviso(er.message); }
+      var m = $('modal');
+      m.innerHTML = '<form method="dialog" class="detalhe laudo" id="fProposta"><h2 style="margin:0">📄 Proposta · ' + e(r.plano) + '</h2><p class="muted" id="propResumo">' + e(V.brl(r.valor)) + '/mês' + (r.anual ? ' · anual ' + e(V.brl(r.mensalAnual)) + '/mês (12 meses ' + e(V.brl(r.total12)) + ')' : '') + ' · válida até ' + e(V.dataBR(r.validade)) + '</p>' +
+        '<div class="grandes"><button type="button" class="btn" id="bImprProp">🖨️ Imprimir / PDF</button><button type="button" class="btn sec" id="bCopProp">📋 Copiar texto</button><button class="btn sec" value="fechar">Fechar</button></div>' +
+        '<p class="muted">Para PDF: Imprimir › Salvar como PDF. Nada é enviado: você manda para o cliente.</p><iframe id="propFrame" title="Proposta comercial" sandbox="allow-same-origin allow-modals"></iframe></form>';
+      $('propFrame').srcdoc = r.html; m.onclose = null; m.returnValue = ''; m.showModal();
+      $('bImprProp').onclick = function () { try { $('propFrame').contentWindow.print(); } catch (x) { aviso('Não deu para imprimir neste aparelho.'); } };
+      $('bCopProp').onclick = function () { copiar(r.texto); };
+    });
+  };
+
+  // ---- 7) Suprimentos: cotações e insumos de bancada (só neste aparelho até o CRM liberar) ----
+  function osAbertasNums() { return (D.os || []).filter(function (o) { return ['Entregue', 'Cancelado'].indexOf(o.status) < 0; }).map(function (o) { return o.num; }); }
+  function cardCot(c, naOS) {
+    var ok = X.cotacaoValida(c, D.hoje), fonte = /^https?:\/\//i.test(c.fonte) ? '<a href="' + e(c.fonte) + '" target="_blank" rel="noopener noreferrer">fonte</a>' : 'fonte: ' + e(c.fonte);
+    return card(e(c.id) + ' · ' + e(c.peca) + (c.marca ? ' ' + e(c.marca) : ''), (naOS ? '' : e(c.os) + ' · ') + e(nomeForn(c.fornecedor)) + ' · ' + e(c.condicao) + ' · ' + c.qtd + '× ' + V.brl(c.unit) + ' + frete ' + V.brl(c.frete) +
+      '<br><b>Custo posto em Sorocaba: ' + V.brl(c.custoPosto) + '/un.</b>' + (c.prazo !== '' ? ' · prazo ' + e(c.prazo) + ' dia(s)' : '') + (c.forma ? ' · ' + e(c.forma) : '') + '<br>Vale até ' + V.dataBR(c.validade) + ' · ' + fonte + (c.garantia ? ' · garantia: ' + e(c.garantia) : ''),
+      tag(c.status, c.status === 'Escolhido' ? 'ok' : c.status === 'Descartado' ? 'cinza' : c.status === 'Comprado' || c.status === 'Recebido' ? 'azul' : '') + (ok ? '' : tag('Vencida', 'cinza')),
+      (naOS && ok && c.status === 'Cotado' ? botao('✅ Escolher', 'cot-esc', c.id, '') : '') + botao('Mudar status', 'cot-st', c.id), ' data-cot="' + e(c.id) + '"' + (ok ? '' : ' style="opacity:.55"'));
+  }
+  function telaSuprimentos() {
+    var s = lerM9(), fl = fornecedoresCRM();
+    var cots = s.cotacoes.slice().sort(function (a, b) { return String(b.data) < String(a.data) ? -1 : String(b.data) > String(a.data) ? 1 : (b.id < a.id ? -1 : 1); });
+    return '<p class="alerta" id="m9Local">Guardado só neste aparelho. O CRM ainda não tem ações de Cotações/Insumos para o App (pedido ao CRM ADM). Use “Exportar” para não perder.</p>' +
+      '<div class="row">' + botao('+ Nova cotação', 'cot-nova', '', '') + botao('+ Item de bancada', 'in-novo', '') + botao('📤 Exportar (JSON)', 'm9-exp', '') + '</div>' +
+      (fl ? '' : '<p class="muted" id="m9Forn">Fornecedor: digite o código da lista do CRM (FN-0001 a FN-0197). A lista com nomes ainda não chega ao App.</p>') +
+      '<h2>🧰 Insumos de bancada</h2>' + lista(s.insumos, function (i) {
+        var u = X.ultimoCustoInsumo(s.cotacoes, i.item);
+        return card(e(i.item), 'Qtd atual: <b>' + (i.qtd === '' ? '—' : e(i.qtd)) + '</b> · Mínimo: ' + (i.minimo === '' ? '—' : e(i.minimo)) + '<br>Último custo: ' + (u ? V.brl(u.custo) + ' (' + e(u.id) + ', ' + V.dataBR(u.data) + ')' : '—') +
+          ' · Fornecedor habitual: ' + (i.fornecedor ? e(nomeForn(i.fornecedor)) : '—') + ' · Última compra: ' + (i.ultimaCompra ? V.dataBR(i.ultimaCompra) : '—'),
+          X.repor(i) ? tag('Repor', 'alta') : '', botao('Editar', 'in-editar', i.id) + botao('Cotar', 'cot-nova', 'Insumo|' + i.item), ' data-insumo="' + e(i.id) + '"');
+      }, 'Nenhum item.') +
+      ((D.estoque || []).length ? '<h3>Estoque da planilha (só leitura)</h3>' + lista(D.estoque, function (i) { var mi = Number(i.minimo); return card(e(i.item), 'Qtd ' + e(i.qtd) + (i.minimo !== '' && i.minimo != null ? ' · mín. ' + e(i.minimo) : '') + (i.custo ? ' · custo ' + V.brl(i.custo) : ''), mi > 0 && Number(i.qtd) <= mi ? tag('Repor', 'alta') : '', ''); }, '') : '') +
+      '<h2>🧾 Cotações (' + cots.length + ')</h2><p class="muted">Cada cotação precisa de fonte e validade (padrão 3 dias para loja online). Vencida fica cinza e não entra na Calculadora.</p>' +
+      lista(cots, function (c) { return cardCot(c, false); }, 'Nenhuma cotação ainda. O histórico começa vazio: nenhum preço de fornecedor foi confirmado.');
+  }
+  function formCotacao(pre) {
+    var abertas = osAbertasNums();
+    formulario('🧾 Nova cotação', [{ k: 'os', r: 'OS vinculada', t: 'select', o: ['Insumo'].concat(abertas), req: true, ajuda: 'Peça só se compra depois do orçamento aprovado e pago (ou sinal).' },
+      { k: 'fornecedor', r: 'Fornecedor (código do CRM)', req: true, ajuda: 'Ex.: FN-0001. Não cadastre fornecedor solto.' }, { k: 'peca', r: 'Peça / item', req: true }, { k: 'marca', r: 'Marca / modelo' },
+      { k: 'condicao', r: 'Condição', t: 'select', o: X.CONDICOES, req: true }, { k: 'autorizadoUsado', r: 'Cliente autorizou peça usada/recondicionada', t: 'checkbox' },
+      { k: 'qtd', r: 'Qtd', t: 'number', req: true }, { k: 'unit', r: 'Preço unitário (R$)', t: 'number', req: true }, { k: 'frete', r: 'Frete (R$)', t: 'number', ajuda: '0 se for retirada.' },
+      { k: 'prazo', r: 'Prazo de entrega (dias)', t: 'number' }, { k: 'forma', r: 'Forma de pagamento', t: 'select', o: X.FORMAS_FORN }, { k: 'validade', r: 'Validade', t: 'date', req: true, ajuda: 'Padrão: 3 dias (loja online) ou a validade do fornecedor.' },
+      { k: 'fonte', r: 'Fonte (link, “e-mail de dd/mm” ou print)', req: true }, { k: 'garantia', r: 'Garantia do fornecedor' }],
+      Object.assign({ qtd: '1', frete: '0', condicao: 'Novo', validade: V.somaDias(D.hoje, X.VALIDADE_ONLINE_DIAS) }, pre)).then(function (v) {
+      if (!v) return; var s = lerM9(), c;
+      try { c = X.validarCotacao(Object.assign({ data: D.hoje }, v), { hoje: D.hoje, osNums: abertas, fornecedores: fornecedoresCRM() }); } catch (er) { aviso(er.message); return formCotacao(v); }
+      c.id = X.proxId(s.cotacoes, 'CT-'); s.cotacoes.push(c); gravarM9(s); aviso('Cotação ' + c.id + ' salva: ' + V.brl(c.custoPosto) + '/un. posto em Sorocaba.'); render();
+      if (c.os !== 'Insumo') { var o = (D.os || []).filter(function (x) { return x.num === c.os; })[0]; if (o) ACOES['os-cot'](o._row); }
+    });
+  }
+  ACOES['cot-nova'] = function (k) { k = String(k || ''); var pre = {}; if (/^Insumo\|/.test(k)) { pre.os = 'Insumo'; pre.peca = k.slice(7); } else if (k) pre.os = k; formCotacao(pre); };
+  ACOES['os-cot'] = function (row) {
+    var o = achar('os', row), s = lerM9(), cmp = X.compararOS(s.cotacoes, o.num, D.hoje), rec = V.recebidoOS(D, o.num), m = $('modal');
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fCotOS"><h2 style="margin:0">🧾 Cotações · ' + e(o.num) + '</h2>' +
+      (rec > 0 ? '<p class="muted" id="cotPago">Recebido do cliente: ' + V.brl(rec) + '.</p>' : '<p class="alerta" id="cotPago">OS sem pagamento registrado. Compre a peça só depois do orçamento aprovado e pago (ou sinal).</p>') +
+      '<p class="muted">Válidas, da mais barata para a mais cara (custo posto em Sorocaba).</p><div id="cotValidas">' + lista(cmp.validas, function (c) { return cardCot(c, true); }, 'Nenhuma cotação válida para esta OS.') + '</div>' +
+      (cmp.vencidas.length ? '<details id="cotVencidas"><summary>Vencidas / descartadas (' + cmp.vencidas.length + ')</summary>' + lista(cmp.vencidas, function (c) { return cardCot(c, true); }, '') + '</details>' : '') +
+      '<div class="grandes">' + botao('+ Cotação para esta OS', 'cot-nova', o.num, '').replace(' peq', '') + '<button class="btn sec" value="fechar">Fechar</button></div></form>';
+    m.onclose = null; m.returnValue = ''; m.showModal(); ligarAcoes(m, true);
+  };
+  ACOES['cot-esc'] = function (id) {
+    var s = lerM9(); try { var c = X.escolher(s.cotacoes, id, D.hoje); } catch (er) { return aviso(er.message); }
+    gravarM9(s); aviso(c.id + ' escolhida.'); render(); var o = (D.os || []).filter(function (x) { return x.num === c.os; })[0]; if (o) ACOES['os-cot'](o._row);
+  };
+  ACOES['cot-st'] = function (id) {
+    var s = lerM9(), c = s.cotacoes.filter(function (x) { return x.id === id; })[0]; if (!c) return;
+    formulario('Status da ' + e(c.id), [{ k: 'status', r: 'Novo status', t: 'select', o: X.STATUS_COT, req: true }], { status: c.status }).then(function (v) {
+      if (!v || v.status === c.status) return;
+      var seguir = v.status === 'Comprado' && X.avisoOSNaoPaga(c, V.recebidoOS(D, c.os))
+        ? perguntar('A ' + c.os + ' não tem pagamento do cliente registrado. A regra é pagar o fornecedor só depois de receber. Marcar como comprado mesmo assim?', { titulo: '⚠️ OS sem pagamento', sim: 'Marcar comprado', perigo: true })
+        : Promise.resolve(true);
+      seguir.then(function (ok) {
+        if (!ok) return aviso('Nada mudou.');
+        try { X.mudarStatus(s.cotacoes, id, v.status, D.hoje); } catch (er) { return aviso(er.message); }
+        if (v.status === 'Recebido') X.receberInsumo(s, c, D.hoje);
+        gravarM9(s); aviso(c.id + ': ' + v.status + '.'); render();
+        if (v.status !== 'Comprado') return;
+        var cats = D.categoriasFin || [], cat = cats.indexOf('Compra de peça') >= 0 ? 'Compra de peça' : (cats[0] || '');
+        if (!api.pode('salvarLancamento')) return aviso('Lance a saída de ' + V.brl(X.totalCompra(c)) + ' no Financeiro pela planilha.');
+        formulario('Lançar a compra no caixa?', [{ k: 'lancar', r: 'Lançar saída de ' + V.brl(X.totalCompra(c)) + ' no Financeiro', t: 'checkbox' }, { k: 'categoria', r: 'Categoria', t: 'select', o: cats, req: true }], { lancar: true, categoria: cat }).then(function (l) {
+          if (!l || !l.lancar) return aviso('Compra marcada sem lançamento no Financeiro.');
+          var n = X.lancamentoCompra(c, D.hoje, l.categoria);
+          escrever('salvarLancamento', [n], function (cache) { (cache.financeiro = cache.financeiro || []).push(Object.assign({ _row: 0 }, n)); }).then(function () { var s2 = lerM9(), c2 = s2.cotacoes.filter(function (x) { return x.id === id; })[0]; if (c2) { c2.lancadoCaixa = D.hoje; gravarM9(s2); } });
+        });
+      });
+    });
+  };
+  ACOES['in-editar'] = function (id) {
+    var s = lerM9(), i = s.insumos.filter(function (x) { return x.id === id; })[0] || {};
+    formulario(id ? 'Insumo · ' + e(i.item) : '+ Item de bancada', [{ k: 'item', r: 'Item', req: true }, { k: 'qtd', r: 'Qtd atual', t: 'number' }, { k: 'minimo', r: 'Mínimo (você define)', t: 'number', ajuda: 'Sem mínimo, não alerta “Repor”.' },
+      { k: 'fornecedor', r: 'Fornecedor habitual (código FN-xxxx)' }], i).then(function (v) {
+      if (!v) return; var fn = v.fornecedor.toUpperCase();
+      if (fn && !X.RE_FORN.test(fn)) { aviso('Fornecedor: use o código da lista do CRM (FN-xxxx).'); return; }
+      var q = v.qtd === '' ? '' : X.num(v.qtd), mi = v.minimo === '' ? '' : X.num(v.minimo);
+      if ((q !== '' && !(q >= 0)) || (mi !== '' && !(mi >= 0))) return aviso('Quantidade e mínimo devem ser números (0 ou mais).');
+      var alvo = id ? s.insumos.filter(function (x) { return x.id === id; })[0] : null;
+      if (!alvo) { alvo = { id: X.proxId(s.insumos, 'IN-'), ultimaCompra: '' }; s.insumos.push(alvo); }
+      Object.assign(alvo, { item: v.item, qtd: q, minimo: mi, fornecedor: fn }); gravarM9(s); aviso('Insumo salvo.'); render();
+    });
+  };
+  ACOES['in-novo'] = function () { ACOES['in-editar'](''); };
+  ACOES['m9-exp'] = function () { copiar(JSON.stringify(lerM9(), null, 1), 'Cotações e insumos copiados (JSON).'); };
+
+  // ---- 8) Calculadora de PCs ----
+  function montagens() { return (D.catalogo || []).filter(function (s) { return Number(s.preco) > 0 && s.ativo !== 'Não'; }); }
+  function calcDe(pc) { return X.calcPC(pc, lerM9().cotacoes, D.hoje, cfgCalc()); }
+  function resumoCalc(k) {
+    return (k.completo ? 'Custo das peças: <b>' + V.brl(k.custoPecas) + '</b>' : '<span class="alerta">Faltam cotações válidas: ' + e(k.faltam.join(', ') || 'nenhuma peça escolhida') + '</span>') +
+      (k.montagem ? ' · montagem ' + V.brl(k.montagem) : '') + (k.sugerido != null ? ' · sugerido ' + V.brl(k.sugerido) : '') +
+      '<br>Preço: <b>' + (k.preco ? V.brl(k.preco) : '—') + '</b>' + (k.manual ? ' (digitado)' : '') + (k.precoPix ? ' · Pix ' + pctTxt(k.pixPct) + ': ' + V.brl(k.precoPix) : '') +
+      (k.lucro != null ? ' · lucro ' + V.brl(k.lucro) + ' (' + pctTxt(k.margemReal) + ')' : '') + (k.prejuizo ? ' ' + tag('PREJUÍZO', 'alta') : '');
+  }
+  function telaCalculadora() {
+    var pcs = lerPCs(), s = lerM9(), val = s.cotacoes.filter(function (c) { return X.cotacaoValida(c, D.hoje); }).length;
+    CMP = CMP.filter(function (id) { return pcs.some(function (p) { return p.id === id; }); });
+    var cmp = X.compararPCs(pcs.filter(function (p) { return CMP.indexOf(p.id) >= 0; }), s.cotacoes, D.hoje, cfgCalc());
+    return '<p class="muted" id="calcRegra">Custo de peça vem <b>só</b> do custo posto em Sorocaba de cotação válida (Mais › Suprimentos). Sem cotação válida, a peça fica sem custo. Você digita só o preço de venda e a margem.</p>' +
+      '<p class="muted" id="calcCot">' + val + ' cotação(ões) válida(s) hoje.</p><div class="row">' + botao('+ Novo PC', 'pc-novo', '', '') + '</div>' +
+      lista(pcs, function (p) { var k = calcDe(p), on = CMP.indexOf(p.id) >= 0;
+        return card(e(p.nome), (p.itens || []).length + ' peça(s)<br>' + resumoCalc(k), '', botao('Abrir', 'pc-abrir', p.id, '') + botao(on ? '✓ Comparando' : 'Comparar', 'pc-cmp', p.id) + botao('📋 Anúncio', 'pc-anuncio', p.id), ' data-pc="' + e(p.id) + '"'); }, 'Nenhum PC na calculadora.') +
+      (cmp.length >= 2 ? '<h2>Comparar (' + cmp.length + ' de até ' + X.MAX_COMPARAR + ')</h2><div class="tabela-rolar"><table class="dre" id="pcComparar"><tr><th></th>' + cmp.map(function (x) { return '<th>' + e(x.pc.nome) + '</th>'; }).join('') + '</tr>' +
+        [['Custo das peças', function (k) { return k.completo ? V.brl(k.custoPecas) : 'falta cotação'; }], ['Preço', function (k) { return k.preco ? V.brl(k.preco) : '—'; }], ['Pix', function (k) { return k.precoPix ? V.brl(k.precoPix) : '—'; }],
+          ['Lucro', function (k) { return k.lucro != null ? V.brl(k.lucro) : '—'; }], ['Margem', function (k) { return k.margemReal != null ? pctTxt(k.margemReal) : '—'; }]]
+          .map(function (l) { return '<tr><td>' + l[0] + '</td>' + cmp.map(function (x) { return '<td>' + l[1](x.calc) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>' : (CMP.length ? '<p class="muted">Escolha pelo menos 2 PCs para comparar.</p>' : ''));
+  }
+  ACOES['pc-cmp'] = function (id) { var i = CMP.indexOf(id); if (i >= 0) CMP.splice(i, 1); else { if (CMP.length >= X.MAX_COMPARAR) return aviso('Compare até ' + X.MAX_COMPARAR + ' PCs.'); CMP.push(id); } render(); };
+  ACOES['pc-novo'] = function () { var l = lerPCs(), p = { id: X.proxId(l, 'PCL-'), nome: 'PC ' + (l.length + 1), itens: [], margem: '', preco: '', montagem: '' }; l.push(p); gravarPCs(l); render(); ACOES['pc-abrir'](p.id); };
+  ACOES['pc-anuncio'] = function (id) { var p = lerPCs().filter(function (x) { return x.id === id; })[0]; if (!p) return; var k = calcDe(p); if (!k.preco) return aviso('Defina o preço (ou complete as cotações) antes do anúncio.'); copiar(X.anuncioPC(p, k, CFG.WHATSAPP_LOJA), 'Texto do anúncio copiado.'); };
+  ACOES['pc-abrir'] = function (id) {
+    var l = lerPCs(), p = l.filter(function (x) { return x.id === id; })[0]; if (!p) return;
+    var cots = lerM9().cotacoes.filter(function (c) { return X.cotacaoValida(c, D.hoje); }), mts = montagens(), m = $('modal');
+    var itemDe = function (t) { return (p.itens || []).filter(function (i) { return i.tipo === t; })[0] || {}; };
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fPC"><h2 style="margin:0">🖥️ Calculadora</h2><div><label for="pcNome">Nome do PC</label><input id="pcNome" value="' + e(p.nome) + '"></div>' +
+      (cots.length ? '' : '<p class="alerta" id="pcSemCot">Nenhuma cotação válida. Cadastre em Mais › Suprimentos (com fonte) para a peça ter custo.</p>') +
+      X.COMPONENTES.map(function (t, i) { var it = itemDe(t);
+        return '<div class="lin"><div><label for="pcC' + i + '">' + e(t) + '</label><select id="pcC' + i + '" data-tipo="' + e(t) + '"><option value="">— sem peça —</option>' + cots.map(function (c) { return '<option value="' + e(c.id) + '"' + (c.id === it.cotacao ? ' selected' : '') + '>' + e(c.id + ' · ' + c.peca + ' · ' + V.brl(c.custoPosto)) + '</option>'; }).join('') +
+          (it.cotacao && !cots.some(function (c) { return c.id === it.cotacao; }) ? '<option value="' + e(it.cotacao) + '" selected>' + e(it.cotacao) + ' (vencida: sem custo)</option>' : '') + '</select></div>' +
+          '<div><label for="pcQ' + i + '">Qtd</label><input id="pcQ' + i + '" inputmode="numeric" value="' + e(it.qtd || 1) + '"></div></div>'; }).join('') +
+      '<div><label for="pcMont">Montagem (serviço do Catálogo)</label><select id="pcMont"><option value="">— sem montagem —</option>' + mts.map(function (s) { return '<option value="' + e(s.preco) + '"' + (String(s.preco) === String(p.montagem) ? ' selected' : '') + '>' + e(s.servico + ' · ' + V.brl(s.preco)) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="lin"><div><label for="pcMargem">Margem sobre as peças (%)</label><input id="pcMargem" inputmode="decimal" value="' + e(p.margem) + '"></div><div><label for="pcPreco">Preço de venda (R$, opcional)</label><input id="pcPreco" inputmode="decimal" value="' + e(p.preco) + '"></div></div>' +
+      '<div class="card" id="pcCalc" aria-live="polite"></div><div class="card" id="pcCartao"></div>' +
+      '<div class="grandes"><button type="button" class="btn" id="pcSalvar">Salvar</button><button type="button" class="btn sec" id="pcAnuncio">📋 Copiar anúncio</button><button type="button" class="btn perigo" id="pcExcluir">Excluir</button><button class="btn sec" value="fechar">Fechar</button></div></form>';
+    var ler = function () { return { id: p.id, nome: $('pcNome').value.trim() || p.nome, margem: $('pcMargem').value.trim(), preco: $('pcPreco').value.trim(), montagem: $('pcMont').value,
+      itens: X.COMPONENTES.map(function (t, i) { return { tipo: t, cotacao: $('pcC' + i).value, qtd: $('pcQ' + i).value.trim() || '1' }; }).filter(function (x) { return x.cotacao; }) }; };
+    var atual = function () {
+      var q = ler(), k = calcDe(q); $('pcCalc').innerHTML = resumoCalc(k);
+      $('pcCartao').innerHTML = '<b>Pix × cartão</b><br>' + (k.preco ? (k.precoPix ? 'Pix (' + pctTxt(k.pixPct) + ' do CRM): ' + V.brl(k.precoPix) + (k.lucroPix != null ? ' · lucro ' + V.brl(k.lucroPix) : '') + '<br>' : '') +
+        (k.cartoes.length ? k.cartoes.map(function (c) { return e(c.forma) + ': ' + (c.taxa == null ? 'taxa não cadastrada na planilha' : 'taxa ' + pctTxt(c.taxa) + ' · você recebe ' + V.brl(c.liquido) + (c.lucro != null ? ' (lucro ' + V.brl(c.lucro) + ')' : '') + ' · para receber o preço cheio, cobre ' + V.brl(c.precoParaReceber)); }).join('<br>') : 'Taxas da maquininha não cadastradas na planilha (Configurações).') : 'Defina o preço para simular.');
+      return q;
+    };
+    m.onclose = null; m.returnValue = ''; m.showModal(); atual();
+    m.querySelectorAll('#fPC input, #fPC select').forEach(function (el) { el.addEventListener('input', atual); el.addEventListener('change', atual); });
+    $('pcSalvar').onclick = function () { var q = atual(), l2 = lerPCs(), i = l2.findIndex(function (x) { return x.id === id; }); if (i < 0) l2.push(q); else l2[i] = q; gravarPCs(l2); aviso('PC salvo neste aparelho.'); m.close(''); render(); };
+    $('pcAnuncio').onclick = function () { var q = atual(), k = calcDe(q); if (!k.preco) return aviso('Defina o preço (ou complete as cotações) antes do anúncio.'); copiar(X.anuncioPC(q, k, CFG.WHATSAPP_LOJA), 'Texto do anúncio copiado.'); };
+    $('pcExcluir').onclick = function () { m.close(''); perguntar('Excluir “' + p.nome + '” da calculadora?', { titulo: 'Excluir PC', sim: 'Excluir', perigo: true }).then(function (ok) { if (!ok) return; gravarPCs(lerPCs().filter(function (x) { return x.id !== id; })); render(); }); };
+  };
+  function ligar085(c) {
+    if ($('fFinMes')) $('fFinMes').onchange = function () { FINM.mes = this.value || ''; render(); };
+  }
+
   function ligarAcoes(raiz, dentroModal) {
     raiz.querySelectorAll('[data-a]').forEach(function (b) {
       b.onclick = function (ev) {
@@ -1730,6 +1974,7 @@
     if ($('bLxAtualizar')) $('bLxAtualizar').onclick = function () { LX = null; render(); };
     if ($('fMes')) $('fMes').onchange = function () { RM.mesSel = this.value || ''; render(); };
     ligarAcoes(c);
+    ligar085(c);
     ligarOSM(c);
     c.querySelectorAll('[data-wa-mod]').forEach(function (sel) { sel.onchange = function () {
       var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
