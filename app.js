@@ -1701,7 +1701,7 @@
     abrirMsg({ titulo: '⭐ Avaliação no Google · ' + o.num, texto: texto, waUrl: b ? b.href : '', semWa: b ? '' : 'WhatsApp inválido ou ausente.', cliente: c, os: o.num, osObj: o, tipo: 'avaliacao', emailOk: true, assuntoEmail: V.ASSUNTOS_MSG_EMAIL['pos-google'] });
   };
 
-  // ---------- v0.8.5/0.8.6: teto MEI, painel financeiro, previsão, etiqueta QR, proposta, Suprimentos (Módulo 9) e Calculadora de PCs ----------
+  // ---------- v0.8.5/0.8.6/0.8.7: teto MEI, painel financeiro, previsão, etiqueta QR, proposta, Suprimentos (Módulo 9) e Calculadora de PCs ----------
   var X = window.ProFix085, FINM = { mes: '' }, CMP = [];
   var M9K = 'profix.m9', PCK = 'profix.pcs';
   function lerJSON(k, pad) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? pad : v; } catch (x) { return pad; } }
@@ -1787,7 +1787,7 @@
   };
 
   // ---- 7) Suprimentos: cotações e insumos de bancada ----
-  // v0.8.6: com o servidor aceitando as rotas do Módulo 9 (API @113), tudo fica NO CRM (planilha): celular e PC veem o mesmo.
+  // v0.8.6/0.8.7: com o servidor aceitando as rotas do Módulo 9 (API @113/@115), tudo fica NO CRM (planilha): celular e PC veem o mesmo.
   // Sem internet: última cópia do CRM (com aviso) e nada é gravado. Servidor sem as rotas: igual à 0.8.5 (só no aparelho, profix.m9).
   var M9C = 'profix.m9crm', M9ENV = 'profix.m9envio', M9BK = 'profix.m9.copia';
   var M9 = { pendente: true, carregando: null, cache: lerJSON(M9C, null), offline: false, erro: '' };

@@ -17,7 +17,7 @@ window.PROFIX_CONFIG = {
     'registrarMensagemAberta', 'agendarRetorno', 'salvarMaquina', 'vincularMaquinaOS', 'salvarChecklistOS', 'linkClienteOS', 'textoStatusOS',
     'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita',
     'listarClientesResumo', 'listarLixeira', 'registrarConsentimento', 'definirStatusLead', 'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo', // v0.7.1: API @43
-    // crm-v3 API @113 (10/11/2026): Módulo 9 (fornecedores só id/nome/ativo, cotações e insumos). lmSalvarFornecedor/lmSalvarPC NÃO existem no App.
+    // crm-v3 API @113/@115 (10/11/2026): Módulo 9 (fornecedores só id/nome/ativo, cotações e insumos; @115: fornecedorId no insumo e limpar com ''). lmSalvarFornecedor/lmSalvarPC NÃO existem no App.
     'listarFornecedores', 'listarCotacoes', 'listarInsumos', 'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo'],
   // v0.7.1: validade do orçamento, garantia e desconto de indicação NÃO ficam aqui: vêm do servidor (getDados().config: validadePadraoDias, garantiaDiasProfix, descontoIndicacaoPct).
   WHATSAPP_LOJA: '(15) 98112-8309',
@@ -28,5 +28,5 @@ window.PROFIX_CONFIG = {
     fimDeSemana: { inicio: '09:00', fim: '17:00' }
   },
   PRECO_VISITA_EMPRESA: 179.90, // tabela oficial 02/11/2026 (visita técnica a empresa)
-  VERSAO_APP: '0.8.6'
+  VERSAO_APP: '0.8.7'
 };

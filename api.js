@@ -17,7 +17,7 @@
     'lerOSMulti', 'catalogoOS', 'gerarOrcamentoOS', 'orcamentoOS', 'simularCondicaoOS',
     'fichaCliente', 'resumoMes', 'listaContratos', 'laudoTecnicoOS', 'extrasOS', 'textoMarketing',
     'listarClientesResumo', 'listarLixeira',
-    'listarFornecedores', 'listarCotacoes', 'listarInsumos']; // v0.8.6: Módulo 9 no CRM (API @113). v0.7.1: API @43. v0.7.0: diferenciais (crm-v3 API @41). v0.6.0: OS com vários equipamentos (crm-v3 API v32)
+    'listarFornecedores', 'listarCotacoes', 'listarInsumos']; // v0.8.6/0.8.7: Módulo 9 no CRM (API @113/@115). v0.7.1: API @43. v0.7.0: diferenciais (crm-v3 API @41). v0.6.0: OS com vários equipamentos (crm-v3 API v32)
   var ESCRITA = ['salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento',
     'lancarRecebimento', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
     'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'registrarFollowup',
@@ -26,8 +26,8 @@
     'registrarMensagemAberta', 'agendarRetorno', 'salvarMaquina', 'vincularMaquinaOS', 'salvarChecklistOS', 'linkClienteOS', 'textoStatusOS',
     'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita',
     'registrarConsentimento', 'definirStatusLead', 'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo',
-    'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo']; // v0.8.6: Módulo 9 (API @113). v0.7.1 (API @43). v0.7.0 diferenciais; crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
-  var SO_ONLINE = ['salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo', // v0.8.6: precisam da resposta (id, custo posto do servidor, avisos, Saída no caixa na mesma trava): nunca vão para a fila
+    'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo']; // v0.8.6/0.8.7: Módulo 9 (API @113/@115). v0.7.1 (API @43). v0.7.0 diferenciais; crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
+  var SO_ONLINE = ['salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo', // v0.8.6/0.8.7: precisam da resposta (id, custo posto do servidor, avisos, Saída no caixa na mesma trava): nunca vão para a fila
     'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo', // v0.7.1: Lixeira só com internet (precisa da resposta: impacto/confirmação)
     'linkClienteOS', 'textoStatusOS', 'iniciarVisita', // v0.7.0: precisam da resposta na hora (link/texto); início da visita usa a hora do servidor
     'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS']; // nunca vão para a fila offline (e-mail não sai "depois" sem o Pedro ver; aprovação e condição especial são feitas na frente do cliente, com o servidor)

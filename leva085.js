@@ -321,7 +321,7 @@
   };
   L.compararPCs = function (pcs, cotacoes, hoje, cfg) { return (pcs || []).slice(0, L.MAX_COMPARAR).map(function (p) { return { pc: p, calc: L.calcPC(p, cotacoes, hoje, cfg) }; }); };
 
-  // ================= 9) v0.8.6: Módulo 9 ligado ao CRM (API @113) =================
+  // ================= 9) v0.8.6/0.8.7: Módulo 9 ligado ao CRM (API @113/@115) =================
   // Contrato (crm-v3/ListaMestra.gs, só leitura): listarFornecedores / listarCotacoes({os?}) / listarInsumos (leitura);
   // salvarCotacao / mudarStatusCotacao / salvarInsumo (escrita, idOperacao). NÃO existem: lmSalvarFornecedor, lmSalvarPC.
   L.ACOES_M9 = { leitura: ['listarFornecedores', 'listarCotacoes', 'listarInsumos'], escrita: ['salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo'] };
@@ -366,27 +366,30 @@
     if (c.id && c.origem === 'crm') o.id = c.id;
     return o;
   };
-  /** Insumo do CRM (aba Estoque) → App. O CRM devolve o NOME do fornecedor: tenta achar o FN pela lista. Mínimo 0 = "sem mínimo" (mesma regra do repor do servidor). */
+  /** Insumo do CRM (aba Estoque) → App. fornecedorId é a fonte da verdade (não adivinha pelo nome: dois FN podem ter o mesmo). fornecedor = nome para exibir. Mínimo 0 = "sem mínimo". */
   L.insumoDoCRM = function (x, forns) {
-    x = x || {}; var q = num(x.qtd), mi = num(x.minimo), nome = String(x.fornecedor || '').trim(), fn = '';
-    if (RE_FN_CRM.test(nome.toUpperCase())) fn = nome.toUpperCase();
-    else if (nome && forns) { var f = forns.filter(function (k) { return V.norm(k.nome) === V.norm(nome); })[0]; if (f) fn = f.id; }
+    x = x || {}; var q = num(x.qtd), mi = num(x.minimo), nome = String(x.fornecedor || '').trim();
+    var fn = String(x.fornecedorId || '').trim().toUpperCase();
+    if (!RE_FN_CRM.test(fn)) fn = '';
+    else if (forns) { var f = forns.filter(function (k) { return k.id === fn; })[0]; if (f) nome = f.nome; }
     return { id: String(x.id || ''), item: String(x.item || ''), categoria: String(x.categoria || ''), qtd: isFinite(q) ? q : '', minimo: mi > 0 ? mi : '', fornecedor: fn, fornecedorNome: nome,
       link: /^https?:\/\//i.test(String(x.link || '')) ? String(x.link) : '', ultimaCompra: '', repor: x.repor === true, origem: 'crm' };
   };
-  /** Formulário de insumo → args do salvarInsumo. O CRM exige a quantidade atual. fornecedor sem mudança vai vazio (o servidor mantém o que já está). */
+  /** Formulário de insumo → args do salvarInsumo (API @115). O CRM exige a quantidade atual.
+   *  Manda fornecedorId: 'FN-xxxx' ao escolher; '' ao limpar; omite o campo se não mudou (edição mantém) ou se o novo insumo fica sem fornecedor. */
   L.insumoParaCRM = function (v, antes, forns) {
     v = v || {}; antes = antes || {};
     var item = String(v.item || '').trim(); if (!item) throw new Error('Informe o item.');
     var qs = String(v.qtd == null ? '' : v.qtd).trim(), q = num(qs); if (qs === '' || !(q >= 0)) throw new Error('Informe a quantidade atual (0 se acabou). O CRM não grava insumo sem quantidade.');
     var ms = String(v.minimo == null ? '' : v.minimo).trim(), mi = ms === '' ? '' : num(ms); if (mi !== '' && !(mi >= 0)) throw new Error('Estoque mínimo inválido.');
-    var fn = L.idDoRotulo(v.fornecedor);
-    if (fn && fn === String(antes.fornecedor || '').toUpperCase()) fn = '';
-    else if (fn) {
-      if (!RE_FN_CRM.test(fn)) throw new Error('Fornecedor: use o código da lista do CRM (FN-xxxx).');
-      if (forns && forns.length) { var f = forns.filter(function (k) { return k.id === fn; })[0]; if (!f) throw new Error('Fornecedor "' + fn + '" não está na lista de fornecedores.'); if (!f.ativo) throw new Error('Fornecedor ' + f.nome + ' (' + f.id + ') está desativado.'); }
-    }
-    var o = { item: item, qtd: q, minimo: mi, fornecedor: fn }; if (antes.id && antes.origem === 'crm') o.id = antes.id; return o;
+    var fn = L.idDoRotulo(v.fornecedor), antesFn = String(antes.fornecedor || '').trim().toUpperCase();
+    if (fn && !RE_FN_CRM.test(fn)) throw new Error('Fornecedor: use o código da lista do CRM (FN-xxxx).');
+    if (fn && forns && forns.length) { var f = forns.filter(function (k) { return k.id === fn; })[0]; if (!f) throw new Error('Fornecedor "' + fn + '" não está na lista de fornecedores.'); if (!f.ativo) throw new Error('Fornecedor ' + f.nome + ' (' + f.id + ') está desativado.'); }
+    var o = { item: item, qtd: q, minimo: mi }; if (antes.id && antes.origem === 'crm') o.id = antes.id;
+    if (fn && fn === antesFn) return o;
+    if (fn) o.fornecedorId = fn;
+    else if (antesFn) o.fornecedorId = '';
+    return o;
   };
   /** Há algo no aparelho (0.8.5) que vale a pena levar ao CRM? Os 7 itens-modelo vazios não contam. */
   L.temDadosLocais = function (loja) {
@@ -420,7 +423,8 @@
       if (crmIns) return pul.push({ id: i.id, motivo: 'o CRM já tem insumos (vale o CRM)' });
       if (i.qtd === '' || !(num(i.qtd) >= 0)) return pul.push({ id: i.id, motivo: i.item + ': sem quantidade atual (o CRM exige)' });
       var fn = String(i.fornecedor || '').toUpperCase(), m = fn ? fOk(fn) : '', nota = m ? 'sem fornecedor: ' + m : '';
-      ins.push({ local: i.id, args: { item: i.item, qtd: num(i.qtd), minimo: i.minimo === '' ? '' : num(i.minimo), fornecedor: m ? '' : fn }, nota: nota });
+      var args = { item: i.item, qtd: num(i.qtd), minimo: i.minimo === '' ? '' : num(i.minimo) }; if (fn && !m) args.fornecedorId = fn;
+      ins.push({ local: i.id, args: args, nota: nota });
     });
     return { cotacoes: cots, insumos: ins, pulados: pul, crmTemCotacoes: crmCot, crmTemInsumos: crmIns };
   };
