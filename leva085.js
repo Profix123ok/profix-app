@@ -1,4 +1,4 @@
-/* ProFix App 0.8.5 – lógica pura (sem tela): teto MEI, previsão das OS, DRE MEI simples, etiqueta QR (gerador local),
+/* ProFix App 0.8.5/0.8.6 – lógica pura (sem tela): teto MEI, previsão das OS, DRE MEI simples, etiqueta QR (gerador local),
  * proposta comercial (HTML para imprimir/PDF), Módulo 9 (cotações e insumos de bancada) e Calculadora de PCs.
  * Nada aqui inventa preço: valores vêm do Financeiro/OS do CRM, das cotações com fonte, ou do que o Pedro digita (só preço de VENDA). */
 (function (raiz, fabrica) {
@@ -244,7 +244,8 @@
     return { id: c.id || '', data: data, os: os, fornecedor: fn, peca: peca, marca: String(c.marca || '').trim(), condicao: cond, autorizadoUsado: !!c.autorizadoUsado, qtd: qtd, unit: r2(unit), frete: r2(frete),
       custoPosto: L.custoPosto(unit, qtd, frete), prazo: prazo, forma: forma, validade: validade, fonte: fonte, status: st, garantia: String(c.garantia || '').trim() };
   };
-  L.cotacaoValida = function (c, hoje) { return !!c && c.status !== 'Descartado' && String(c.validade || '') >= hoje; };
+  // 0.8.6: o servidor também diz "vencida"; qualquer um dos dois tira a cotação da Calculadora.
+  L.cotacaoValida = function (c, hoje) { return !!c && c.status !== 'Descartado' && c.vencida !== true && String(c.validade || '') >= hoje; };
   L.compararOS = function (lista, numOS, hoje) {
     var da = (lista || []).filter(function (c) { return c.os === numOS; }), ord = function (a, b) { return (a.custoPosto - b.custoPosto) || ((Number(a.prazo) || 99) - (Number(b.prazo) || 99)); };
     return { validas: da.filter(function (c) { return L.cotacaoValida(c, hoje); }).sort(ord), vencidas: da.filter(function (c) { return !L.cotacaoValida(c, hoje); }).sort(ord) };
@@ -275,7 +276,7 @@
   };
   L.repor = function (i) { var mi = num(i.minimo), q = num(i.qtd); return isFinite(mi) && i.minimo !== '' && isFinite(q) && i.qtd !== '' && q <= mi; };
   L.ultimoCustoInsumo = function (lista, item) {
-    var l = (lista || []).filter(function (c) { return c.os === 'Insumo' && (c.status === 'Comprado' || c.status === 'Recebido') && V.norm(c.peca) === V.norm(item); })
+    var l = (lista || []).filter(function (c) { return (c.os === 'Insumo' || c.insumo === true) && (c.status === 'Comprado' || c.status === 'Recebido') && V.norm(c.peca) === V.norm(item); })
       .sort(function (a, b) { return String(b.compradoEm || b.data) < String(a.compradoEm || a.data) ? -1 : 1; });
     return l[0] ? { custo: l[0].custoPosto, fornecedor: l[0].fornecedor, data: l[0].compradoEm || l[0].data, id: l[0].id } : null;
   };
@@ -295,7 +296,7 @@
     cfg = cfg || {}; var faltam = [], custo = 0, linhas = [];
     (pc.itens || []).forEach(function (it) {
       var c = (cotacoes || []).filter(function (x) { return x.id === it.cotacao; })[0], q = Math.max(1, Math.round(num(it.qtd) || 1));
-      if (!c || !L.cotacaoValida(c, hoje)) { faltam.push(it.tipo); linhas.push({ tipo: it.tipo, qtd: q, cot: c || null, custo: null, vencida: !!c }); return; }
+      if (!c || !L.cotacaoValida(c, hoje) || !(Number(c.custoPosto) > 0)) { faltam.push(it.tipo); linhas.push({ tipo: it.tipo, qtd: q, cot: c || null, custo: null, vencida: !!c }); return; }
       var v = r2(c.custoPosto * q); custo += v; linhas.push({ tipo: it.tipo, qtd: q, cot: c, custo: v });
     });
     custo = r2(custo); var completo = linhas.length > 0 && !faltam.length, m = num(pc.margem), mont = num(pc.montagem) > 0 ? num(pc.montagem) : 0;
@@ -319,6 +320,116 @@
     return l.join('\n');
   };
   L.compararPCs = function (pcs, cotacoes, hoje, cfg) { return (pcs || []).slice(0, L.MAX_COMPARAR).map(function (p) { return { pc: p, calc: L.calcPC(p, cotacoes, hoje, cfg) }; }); };
+
+  // ================= 9) v0.8.6: Módulo 9 ligado ao CRM (API @113) =================
+  // Contrato (crm-v3/ListaMestra.gs, só leitura): listarFornecedores / listarCotacoes({os?}) / listarInsumos (leitura);
+  // salvarCotacao / mudarStatusCotacao / salvarInsumo (escrita, idOperacao). NÃO existem: lmSalvarFornecedor, lmSalvarPC.
+  L.ACOES_M9 = { leitura: ['listarFornecedores', 'listarCotacoes', 'listarInsumos'], escrita: ['salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo'] };
+  L.STATUS_COT_CRM = ['Cotado', 'Escolhido', 'Comprado', 'Descartado']; // o CRM não tem "Recebido"
+  L.CAT_SAIDA = ['Compra de peça', 'Deslocamento', 'Ferramentas', 'DAS-MEI', 'Marketing', 'Outros']; // CATEGORIAS_SAIDA do crm-v3
+  var RE_FN_CRM = /^FN-\d+$/;
+  var simNao = function (v) { return v === true || /^(s|sim|true|1|x)$/i.test(String(v == null ? '' : v).trim()); };
+  /** listarFornecedores → [{id, nome, ativo}] (sem contatos). null = lista não veio. */
+  L.normFornecedores = function (l) {
+    if (!Array.isArray(l)) return null;
+    return l.map(function (f) { f = f || {}; var a = f.ativo; return { id: String(f.id || '').trim().toUpperCase(), nome: String(f.nome || '').trim(), ativo: !(a === false || /^(n|nao|não|false|0)$/i.test(String(a == null ? '' : a).trim())) }; })
+      .filter(function (f) { return RE_FN_CRM.test(f.id); });
+  };
+  L.rotuloForn = function (f) { return f.id + (f.nome ? ' · ' + f.nome : '') + (f.ativo === false ? ' (desativado)' : ''); };
+  /** Opções do seletor: só ativos; um desativado só aparece se já estava escolhido. */
+  L.opcoesFornecedor = function (lista, atual) {
+    atual = String(atual || '').trim().toUpperCase();
+    return (lista || []).filter(function (f) { return f.ativo !== false || f.id === atual; }).map(function (f) { return { id: f.id, nome: f.nome, ativo: f.ativo !== false, rotulo: L.rotuloForn(f) }; });
+  };
+  /** "FN-0001 · Nome" → "FN-0001". Texto que não começa com FN-xxxx volta como foi digitado (a validação recusa). */
+  L.idDoRotulo = function (s) { var m = String(s || '').trim().toUpperCase().match(/^(FN-\d+)/); return m ? m[1] : String(s || '').trim(); };
+  /** Cotação do CRM → formato do App. Custo da Calculadora = SÓ custoPosto (do servidor; se faltar, mesma conta com unit/qtd/frete). custoFinal (preço+frete) nunca vira custo unitário. */
+  L.cotDoCRM = function (x, hoje) {
+    x = x || {}; var ins = simNao(x.insumo), os = String(x.os || '').trim(); if (ins && !os) os = 'Insumo';
+    var q = num(x.qtd), qtd = q > 0 ? q : 1, unit = num(x.precoUnit), frete = num(x.frete); if (!(frete >= 0)) frete = 0;
+    var cp = num(x.custoPosto), custoPosto = cp > 0 ? r2(cp) : L.custoPosto(unit, qtd, frete);
+    var tot = num(x.total), validade = String(x.validade || '').slice(0, 10), st = L.STATUS_COT_CRM.indexOf(x.status) >= 0 ? x.status : 'Cotado';
+    return { id: String(x.id || ''), data: String(x.data || '').slice(0, 10), os: os, insumo: ins, fornecedor: String(x.fornecedorId || '').trim().toUpperCase(), fornecedorNome: String(x.fornecedor || ''),
+      peca: String(x.componente || x.peca || ''), marca: String(x.marcaModelo || ''), condicao: String(x.condicao || ''), qtd: qtd, unit: isFinite(unit) ? r2(unit) : NaN, frete: r2(frete),
+      custoPosto: custoPosto, total: isFinite(tot) ? r2(tot) : r2(unit * qtd + frete), custoFinal: isFinite(num(x.custoFinal)) ? r2(num(x.custoFinal)) : null,
+      prazo: x.prazoDias === '' || x.prazoDias == null ? '' : String(x.prazoDias), forma: String(x.formaPagamento || ''), validade: validade,
+      vencida: x.vencida === true || (!!validade && !!hoje && validade < hoje) || !validade, fonte: String(x.fonte || ''), status: st, escolhida: x.escolhida === true,
+      garantia: String(x.garantiaFornecedor || ''), obs: String(x.obs || ''), origem: 'crm' };
+  };
+  /** Cotação validada (validarCotacao) → args do salvarCotacao. Não manda custo: o servidor recalcula custoPosto e total. */
+  L.cotParaCRM = function (c, obsExtra) {
+    var ins = c.os === 'Insumo', obs = [];
+    if (c.autorizadoUsado && c.condicao && c.condicao !== 'Novo' && !/CDC art\. 21/.test(c.obs || '')) obs.push('Cliente autorizou peça ' + c.condicao.toLowerCase() + ' (CDC art. 21).');
+    if (obsExtra) obs.push(obsExtra); if (c.obs) obs.push(String(c.obs));
+    var o = { os: ins ? '' : c.os, insumo: ins, componente: c.peca, fornecedorId: c.fornecedor, marcaModelo: c.marca || '', condicao: c.condicao || '', qtd: c.qtd, precoUnit: c.unit, frete: c.frete || 0,
+      prazoDias: c.prazo === '' || c.prazo == null ? '' : c.prazo, formaPagamento: c.forma || '', validade: c.validade, fonte: c.fonte, garantiaFornecedor: c.garantia || '', obs: obs.join(' ') };
+    if (c.id && c.origem === 'crm') o.id = c.id;
+    return o;
+  };
+  /** Insumo do CRM (aba Estoque) → App. O CRM devolve o NOME do fornecedor: tenta achar o FN pela lista. Mínimo 0 = "sem mínimo" (mesma regra do repor do servidor). */
+  L.insumoDoCRM = function (x, forns) {
+    x = x || {}; var q = num(x.qtd), mi = num(x.minimo), nome = String(x.fornecedor || '').trim(), fn = '';
+    if (RE_FN_CRM.test(nome.toUpperCase())) fn = nome.toUpperCase();
+    else if (nome && forns) { var f = forns.filter(function (k) { return V.norm(k.nome) === V.norm(nome); })[0]; if (f) fn = f.id; }
+    return { id: String(x.id || ''), item: String(x.item || ''), categoria: String(x.categoria || ''), qtd: isFinite(q) ? q : '', minimo: mi > 0 ? mi : '', fornecedor: fn, fornecedorNome: nome,
+      link: /^https?:\/\//i.test(String(x.link || '')) ? String(x.link) : '', ultimaCompra: '', repor: x.repor === true, origem: 'crm' };
+  };
+  /** Formulário de insumo → args do salvarInsumo. O CRM exige a quantidade atual. fornecedor sem mudança vai vazio (o servidor mantém o que já está). */
+  L.insumoParaCRM = function (v, antes, forns) {
+    v = v || {}; antes = antes || {};
+    var item = String(v.item || '').trim(); if (!item) throw new Error('Informe o item.');
+    var qs = String(v.qtd == null ? '' : v.qtd).trim(), q = num(qs); if (qs === '' || !(q >= 0)) throw new Error('Informe a quantidade atual (0 se acabou). O CRM não grava insumo sem quantidade.');
+    var ms = String(v.minimo == null ? '' : v.minimo).trim(), mi = ms === '' ? '' : num(ms); if (mi !== '' && !(mi >= 0)) throw new Error('Estoque mínimo inválido.');
+    var fn = L.idDoRotulo(v.fornecedor);
+    if (fn && fn === String(antes.fornecedor || '').toUpperCase()) fn = '';
+    else if (fn) {
+      if (!RE_FN_CRM.test(fn)) throw new Error('Fornecedor: use o código da lista do CRM (FN-xxxx).');
+      if (forns && forns.length) { var f = forns.filter(function (k) { return k.id === fn; })[0]; if (!f) throw new Error('Fornecedor "' + fn + '" não está na lista de fornecedores.'); if (!f.ativo) throw new Error('Fornecedor ' + f.nome + ' (' + f.id + ') está desativado.'); }
+    }
+    var o = { item: item, qtd: q, minimo: mi, fornecedor: fn }; if (antes.id && antes.origem === 'crm') o.id = antes.id; return o;
+  };
+  /** Há algo no aparelho (0.8.5) que vale a pena levar ao CRM? Os 7 itens-modelo vazios não contam. */
+  L.temDadosLocais = function (loja) {
+    loja = L.normLoja(loja);
+    return loja.cotacoes.length > 0 || loja.insumos.some(function (i) { return i.qtd !== '' || i.minimo !== '' || !!i.fornecedor || L.INSUMOS_INICIAIS.indexOf(i.item) < 0; });
+  };
+  /**
+   * Plano do envio único (aparelho → CRM). Lista do CRM vazia → envia; CRM já tem dados → vale o CRM (aparelho fica só como cópia/Exportar).
+   * Comprado/Recebido do aparelho: entra Comprado SEM lançar caixa (evita lançamento em dobro); vencida fica Cotado (o CRM não aceita Comprado vencida).
+   */
+  L.planoEnvioCRM = function (loja, crm, forns, hoje, env) {
+    loja = L.normLoja(loja); crm = crm || {}; env = env || {}; var pul = [], cots = [], ins = [], mc = env.mapa || {}, mi = env.insumos || {};
+    // Envio interrompido: o que ESTE aparelho já mandou não conta como "o CRM já tem dados" e não vai de novo.
+    var meus = function (m) { return Object.keys(m).map(function (k) { return m[k]; }); }, jaC = meus(mc), jaI = meus(mi);
+    var crmCot = (crm.cotacoes || []).some(function (c) { return jaC.indexOf(c.id) < 0; }), crmIns = (crm.insumos || []).some(function (i) { return jaI.indexOf(i.id) < 0; });
+    var fOk = function (id) { if (!forns || !forns.length) return ''; var f = forns.filter(function (k) { return k.id === String(id || '').toUpperCase(); })[0]; return !f ? 'fornecedor ' + id + ' não está na lista do CRM' : !f.ativo ? 'fornecedor ' + f.nome + ' (' + f.id + ') está desativado' : ''; };
+    loja.cotacoes.forEach(function (c) {
+      if (mc[c.id]) return;
+      if (crmCot) return pul.push({ id: c.id, motivo: 'o CRM já tem cotações (vale o CRM)' });
+      var m = fOk(c.fornecedor); if (m) return pul.push({ id: c.id, motivo: m });
+      if (!String(c.fonte || '').trim()) return pul.push({ id: c.id, motivo: 'sem fonte' });
+      var depois = null, nota = '';
+      if (c.status === 'Escolhido') depois = L.cotacaoValida(c, hoje) ? 'Escolhido' : null;
+      else if (c.status === 'Descartado') depois = 'Descartado';
+      else if (c.status === 'Comprado' || c.status === 'Recebido') { if (L.cotacaoValida(Object.assign({}, c, { status: 'Cotado' }), hoje)) depois = 'Comprado'; else nota = 'estava ' + c.status + ' no aparelho, mas venceu: entra como Cotado'; }
+      var extra = 'Veio do aparelho: ' + c.id + ' de ' + V.dataBR(c.data) + (c.status !== 'Cotado' ? ', status ' + c.status : '') + (c.lancadoCaixa ? ', saída já lançada no caixa em ' + V.dataBR(c.lancadoCaixa) : '') + '.';
+      cots.push({ local: c.id, args: L.cotParaCRM(c, extra), depois: depois, nota: nota });
+    });
+    loja.insumos.forEach(function (i) {
+      var vazio = i.qtd === '' && i.minimo === '' && !i.fornecedor; if ((vazio && L.INSUMOS_INICIAIS.indexOf(i.item) >= 0) || mi[i.id]) return;
+      if (crmIns) return pul.push({ id: i.id, motivo: 'o CRM já tem insumos (vale o CRM)' });
+      if (i.qtd === '' || !(num(i.qtd) >= 0)) return pul.push({ id: i.id, motivo: i.item + ': sem quantidade atual (o CRM exige)' });
+      var fn = String(i.fornecedor || '').toUpperCase(), m = fn ? fOk(fn) : '', nota = m ? 'sem fornecedor: ' + m : '';
+      ins.push({ local: i.id, args: { item: i.item, qtd: num(i.qtd), minimo: i.minimo === '' ? '' : num(i.minimo), fornecedor: m ? '' : fn }, nota: nota });
+    });
+    return { cotacoes: cots, insumos: ins, pulados: pul, crmTemCotacoes: crmCot, crmTemInsumos: crmIns };
+  };
+  /** PCs salvos (ficam no aparelho) apontam para ids de cotação: troca os ids do aparelho pelos do CRM depois do envio. */
+  L.remapPCs = function (pcs, mapa) {
+    var n = 0; (pcs || []).forEach(function (p) { (p.itens || []).forEach(function (it) { if (mapa[it.cotacao]) { it.cotacao = mapa[it.cotacao]; n++; } }); }); return n;
+  };
+  /** Mesma lista de categorias de Saída do CRM, filtrada pelo que a planilha tem. */
+  L.categoriasSaida = function (cats) { var l = (cats || []).filter(function (c) { return L.CAT_SAIDA.indexOf(c) >= 0; }); return l.length ? l : L.CAT_SAIDA.slice(); };
 
   return L;
 });

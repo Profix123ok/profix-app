@@ -1,7 +1,7 @@
 /* Service worker da ProFix: guarda a "casca" do app para abrir sem internet.
  * Os DADOS não passam por aqui: ficam no aparelho (localStorage) e a fila de envio é do api.js.
  * Ao publicar versão nova, troque o número abaixo. */
-var VERSAO = 'profix-casca-v29';
+var VERSAO = 'profix-casca-v30';
 var CASCA = ['./', './index.html', './estilo.css', './config.js', './api.js', './vista.js', './os_multi.js', './diferenciais.js', './pergunta.js', './leva085.js', './app.js', './cadastro/index.html',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(VERSAO).then(function (c) { return c.addAll(CASCA.map(function (p) { return new Request(p, { cache: 'reload' }); })); }).then(function () { return self.skipWaiting(); })); });

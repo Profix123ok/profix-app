@@ -90,7 +90,7 @@
     carregando = true;
     if (!D) { var c0 = api.cacheLocal(); if (c0) { D = c0; aplicarPrecosDoCrm(D); } } // mostra a última cópia enquanto atualiza
     render();
-    return api.carregar().then(function (r) { carregando = false; if (r.dados) { D = r.dados; aplicarPrecosDoCrm(D); } offline = r.offline; faixa(); render(); },
+    return api.carregar().then(function (r) { carregando = false; if (r.dados) { D = r.dados; aplicarPrecosDoCrm(D); } offline = r.offline; if (typeof M9 !== 'undefined') M9.pendente = true; faixa(); render(); },
       function (er) { carregando = false; render(); if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave(MSG_EXPIROU); } else aviso(er.message); });
   }
   function rota() { var h = (location.hash || '#hoje').slice(1).split('/'); return { tela: h[0] || 'hoje', sub: h[1] || '' }; }
@@ -1701,7 +1701,7 @@
     abrirMsg({ titulo: '⭐ Avaliação no Google · ' + o.num, texto: texto, waUrl: b ? b.href : '', semWa: b ? '' : 'WhatsApp inválido ou ausente.', cliente: c, os: o.num, osObj: o, tipo: 'avaliacao', emailOk: true, assuntoEmail: V.ASSUNTOS_MSG_EMAIL['pos-google'] });
   };
 
-  // ---------- v0.8.5: teto MEI, painel financeiro, previsão, etiqueta QR, proposta, Suprimentos (Módulo 9) e Calculadora de PCs ----------
+  // ---------- v0.8.5/0.8.6: teto MEI, painel financeiro, previsão, etiqueta QR, proposta, Suprimentos (Módulo 9) e Calculadora de PCs ----------
   var X = window.ProFix085, FINM = { mes: '' }, CMP = [];
   var M9K = 'profix.m9', PCK = 'profix.pcs';
   function lerJSON(k, pad) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? pad : v; } catch (x) { return pad; } }
@@ -1709,12 +1709,6 @@
   function gravarM9(s) { localStorage.setItem(M9K, JSON.stringify(s)); }
   function lerPCs() { var l = lerJSON(PCK, []); return Array.isArray(l) ? l : []; }
   function gravarPCs(l) { localStorage.setItem(PCK, JSON.stringify(l)); }
-  /** Lista FN-xxxx do CRM, se um dia o getDados mandar (hoje só o painel lê a aba Fornecedores). */
-  function fornecedoresCRM() {
-    if (!Array.isArray(D.fornecedores) || !D.fornecedores.length) return null;
-    return D.fornecedores.map(function (f) { return { id: String(f.id || f.ID || ''), nome: f.nome || f.Nome || '', ativo: !/^n/i.test(String(f.ativo || f['Ativo?'] || 'Sim')) }; });
-  }
-  function nomeForn(id) { var l = fornecedoresCRM(), f = l && l.filter(function (x) { return x.id === id; })[0]; return f && f.nome ? id + ' · ' + f.nome : id; }
   function copiar(t, ok) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso(ok || 'Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto.'); }); }
   function cfgCalc() { return { pix: cfgPrecos().pix, taxas: (D.fin && D.fin.taxas) || [] }; }
   function pctTxt(n) { return String(n).replace('.', ',') + '%'; }
@@ -1792,102 +1786,269 @@
     });
   };
 
-  // ---- 7) Suprimentos: cotações e insumos de bancada (só neste aparelho até o CRM liberar) ----
+  // ---- 7) Suprimentos: cotações e insumos de bancada ----
+  // v0.8.6: com o servidor aceitando as rotas do Módulo 9 (API @113), tudo fica NO CRM (planilha): celular e PC veem o mesmo.
+  // Sem internet: última cópia do CRM (com aviso) e nada é gravado. Servidor sem as rotas: igual à 0.8.5 (só no aparelho, profix.m9).
+  var M9C = 'profix.m9crm', M9ENV = 'profix.m9envio', M9BK = 'profix.m9.copia';
+  var M9 = { pendente: true, carregando: null, cache: lerJSON(M9C, null), offline: false, erro: '' };
+  var M9_CRM = ['listarCotacoes', 'listarInsumos', 'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo'];
+  function m9UsaCRM() { return M9_CRM.every(function (a) { return api.pode(a); }); }
+  function m9Rota() { var r = rota(); return r.tela === 'mais' && (r.sub === 'suprimentos' || r.sub === 'calculadora'); }
+  function gravarM9C() { try { localStorage.setItem(M9C, JSON.stringify(M9.cache)); } catch (x) {} }
+  function semRede() { return typeof navigator !== 'undefined' && navigator.onLine === false; }
+  /** Lê fornecedores, cotações e insumos do CRM e guarda a cópia (para abrir sem internet). */
+  function carregarM9(forcar) {
+    if (!m9UsaCRM()) { M9.pendente = false; return Promise.resolve(); }
+    if (M9.carregando && !forcar) return M9.carregando;
+    if (semRede()) { M9.pendente = false; M9.offline = true; return Promise.resolve(); }
+    var forn = api.pode('listarFornecedores') ? api.ler('listarFornecedores', []).catch(function () { return M9.cache ? M9.cache.fornecedores : null; }) : Promise.resolve(null);
+    var p = M9.carregando = Promise.all([forn, api.ler('listarCotacoes', [{}]), api.ler('listarInsumos', [])]).then(function (r) {
+      M9.cache = { quando: new Date().toISOString(), fornecedores: Array.isArray(r[0]) ? r[0] : null, cotacoes: Array.isArray(r[1]) ? r[1] : [], insumos: Array.isArray(r[2]) ? r[2] : [] };
+      gravarM9C(); M9.offline = false; M9.erro = '';
+    }, function (er) { M9.offline = true; M9.erro = er && er.doServidor ? er.message : 'Sem conexão com o CRM.'; })
+      .then(function () { if (M9.carregando === p) M9.carregando = null; M9.pendente = false; if (m9Rota() && D) render(); });
+    return p;
+  }
+  /** O que a tela mostra. modo: 'crm' (dados do CRM, talvez da cópia offline) | 'espera' (CRM ligado, ainda sem cópia) | 'local' (0.8.5). */
+  function m9Dados() {
+    var usa = m9UsaCRM();
+    if (usa && M9.cache) {
+      var fl = X.normFornecedores(M9.cache.fornecedores); if (fl && !fl.length) fl = null;
+      return { modo: 'crm', fornecedores: fl, cotacoes: (M9.cache.cotacoes || []).map(function (c) { return X.cotDoCRM(c, D.hoje); }),
+        insumos: (M9.cache.insumos || []).map(function (i) { return X.insumoDoCRM(i, fl); }), offline: M9.offline || semRede(), quando: M9.cache.quando };
+    }
+    var s = lerM9(); return { modo: usa ? 'espera' : 'local', fornecedores: fornecedoresCRM(), cotacoes: s.cotacoes, insumos: s.insumos, offline: M9.offline || semRede() };
+  }
+  function m9PodeGravar(s) {
+    if (s.modo === 'local') return true;
+    if (s.modo === 'espera') { aviso(M9.carregando ? 'Buscando os dados no CRM… tente de novo em instantes.' : 'Ainda sem resposta do CRM. Conecte à internet e abra de novo. Nada foi salvo.'); if (!M9.carregando) carregarM9(); return false; }
+    if (semRede()) { aviso('Sem internet: nada foi salvo. Cotações e insumos ficam no CRM; conecte e tente de novo.'); return false; }
+    return true;
+  }
+  /** Escrita no CRM (sempre online, com idOperacao do api.js). Erro do servidor: a mensagem dele aparece igual. */
+  function m9Gravar(acao, obj) {
+    return api.escrever(acao, [obj]).then(function (r) { return (r && r.dados) || {}; }, function (er) {
+      if (!er.doServidor && er.codigo !== 'TOKEN_INVALIDO' && er.codigo !== 'SEM_TOKEN' && !/Sem internet|liberada/.test(er.message || '')) { var n = new Error('Sem conexão com o CRM: nada foi salvo. Tente de novo com internet.'); n.rede = true; throw n; }
+      throw er;
+    });
+  }
+  function m9Upsert(lista, obj) {
+    if (!M9.cache || !obj || !obj.id) return; var l = M9.cache[lista] = M9.cache[lista] || [], i = l.findIndex(function (x) { return x.id === obj.id; });
+    if (i < 0) l.push(obj); else l[i] = obj; gravarM9C();
+  }
+  /** Lista de fornecedores (id + nome) que veio do CRM; em 'local', só se um dia o getDados mandar. */
+  function fornecedoresCRM() { return X.normFornecedores(Array.isArray(D.fornecedores) && D.fornecedores.length ? D.fornecedores.map(function (f) { return { id: f.id || f.ID, nome: f.nome || f.Nome, ativo: f.ativo != null ? f.ativo : f['Ativo?'] }; }) : null); }
+  function nomeForn(id, fl, alt) { var f = fl && fl.filter(function (x) { return x.id === id; })[0]; return f ? X.rotuloForn(f) : id ? id + (alt ? ' · ' + alt : '') : (alt || '—'); }
   function osAbertasNums() { return (D.os || []).filter(function (o) { return ['Entregue', 'Cancelado'].indexOf(o.status) < 0; }).map(function (o) { return o.num; }); }
-  function cardCot(c, naOS) {
-    var ok = X.cotacaoValida(c, D.hoje), fonte = /^https?:\/\//i.test(c.fonte) ? '<a href="' + e(c.fonte) + '" target="_blank" rel="noopener noreferrer">fonte</a>' : 'fonte: ' + e(c.fonte);
-    return card(e(c.id) + ' · ' + e(c.peca) + (c.marca ? ' ' + e(c.marca) : ''), (naOS ? '' : e(c.os) + ' · ') + e(nomeForn(c.fornecedor)) + ' · ' + e(c.condicao) + ' · ' + c.qtd + '× ' + V.brl(c.unit) + ' + frete ' + V.brl(c.frete) +
-      '<br><b>Custo posto em Sorocaba: ' + V.brl(c.custoPosto) + '/un.</b>' + (c.prazo !== '' ? ' · prazo ' + e(c.prazo) + ' dia(s)' : '') + (c.forma ? ' · ' + e(c.forma) : '') + '<br>Vale até ' + V.dataBR(c.validade) + ' · ' + fonte + (c.garantia ? ' · garantia: ' + e(c.garantia) : ''),
+  function brlOu(v) { return isFinite(v) && v !== null && v !== '' ? V.brl(v) : '—'; }
+  function cardCot(c, naOS, s) {
+    var ok = X.cotacaoValida(c, D.hoje), crm = s.modo === 'crm', fonte = /^https?:\/\//i.test(c.fonte) ? '<a href="' + e(c.fonte) + '" target="_blank" rel="noopener noreferrer">fonte</a>' : 'fonte: ' + e(c.fonte || '—');
+    var acoes = (naOS && ok && c.status === 'Cotado' ? botao('✅ Escolher', 'cot-esc', c.id, '') : '') + (crm && c.status === 'Comprado' ? '' : botao('Mudar status', 'cot-st', c.id)) +
+      (crm && (c.status === 'Cotado' || c.status === 'Escolhido') ? botao('Editar', 'cot-editar', c.id) : '');
+    return card(e(c.id) + ' · ' + e(c.peca) + (c.marca ? ' ' + e(c.marca) : ''), (naOS ? '' : e(c.os) + ' · ') + e(nomeForn(c.fornecedor, s.fornecedores, c.fornecedorNome)) + (c.condicao ? ' · ' + e(c.condicao) : '') + ' · ' + c.qtd + '× ' + brlOu(c.unit) + ' + frete ' + V.brl(c.frete) +
+      '<br><b>Custo posto em Sorocaba: ' + brlOu(c.custoPosto) + '/un.</b>' + (c.prazo !== '' ? ' · prazo ' + e(c.prazo) + ' dia(s)' : '') + (c.forma ? ' · ' + e(c.forma) : '') + '<br>Vale até ' + (c.validade ? V.dataBR(c.validade) : '—') + ' · ' + fonte + (c.garantia ? ' · garantia: ' + e(c.garantia) : '') + (crm && c.obs ? '<br><span class="muted">' + e(c.obs) + '</span>' : ''),
       tag(c.status, c.status === 'Escolhido' ? 'ok' : c.status === 'Descartado' ? 'cinza' : c.status === 'Comprado' || c.status === 'Recebido' ? 'azul' : '') + (ok ? '' : tag('Vencida', 'cinza')),
-      (naOS && ok && c.status === 'Cotado' ? botao('✅ Escolher', 'cot-esc', c.id, '') : '') + botao('Mudar status', 'cot-st', c.id), ' data-cot="' + e(c.id) + '"' + (ok ? '' : ' style="opacity:.55"'));
+      acoes, ' data-cot="' + e(c.id) + '"' + (ok ? '' : ' style="opacity:.55"'));
+  }
+  function quandoTxt(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+  function m9Topo(s) {
+    if (s.modo === 'crm') return s.offline
+      ? '<p class="alerta" id="m9Sync">Sem conexão com o CRM: mostrando a última cópia (' + e(quandoTxt(s.quando)) + '). Pode estar desatualizada e nada é salvo até voltar a internet.</p>'
+      : '<p class="muted" id="m9Sync">Salvo no CRM (planilha): o celular e o PC veem as mesmas cotações e insumos. Atualizado ' + e(quandoTxt(s.quando)) + '.</p>';
+    if (s.modo === 'espera') return M9.carregando ? '<p class="muted" id="m9Sync">Buscando cotações e insumos no CRM…</p>'
+      : '<p class="alerta" id="m9Sync">Sem conexão com o CRM e ainda sem cópia neste aparelho. Abaixo, só o que estava guardado aqui (não enviado). Conecte para ver o CRM.</p>';
+    return '<p class="alerta" id="m9Local">Guardado só neste aparelho. O servidor ainda não aceita Cotações/Insumos do App. Use “Exportar” para não perder.</p>';
+  }
+  function m9BlocoEnvio(s) {
+    if (s.modo !== 'crm') return '';
+    var bruto = lerJSON(M9K, null); if (!bruto || !X.temDadosLocais(bruto)) return '';
+    var env = lerJSON(M9ENV, null) || {}, copia = botao('📦 Cópia do aparelho (JSON)', 'm9-exp-local', '');
+    if (env.concluido) return '<div class="card" id="m9Enviado"><div class="m">Os dados antigos deste aparelho foram enviados ao CRM em ' + e(quandoTxt(env.concluido)) + (env.resumo ? ' (' + e(env.resumo) + ')' : '') + '.' +
+      ((env.avisos || []).length ? '<br>Atenção: ' + env.avisos.map(e).join('; ') + '.' : '') + ' A cópia continua guardada aqui.</div><div class="acoes">' + copia + '</div></div>';
+    var pl = X.planoEnvioCRM(bruto, M9.cache, s.fornecedores, D.hoje, env), pul = pl.pulados.length ? '<br>Não vão: ' + pl.pulados.map(function (p) { return e(p.id + ' (' + p.motivo + ')'); }).join('; ') + '.' : '';
+    if (!pl.cotacoes.length && !pl.insumos.length) return '<div class="card" id="m9Envio"><b>Dados antigos deste aparelho</b><div class="m">Este aparelho ainda tem cotações/insumos da versão anterior. O CRM já tem dados, então vale o CRM (nada é misturado). Guarde a cópia, se quiser conferir.' + pul + '</div><div class="acoes">' + copia + '</div></div>';
+    return '<div class="card" id="m9Envio"><b>Dados antigos deste aparelho</b><div class="m">' + pl.cotacoes.length + ' cotação(ões) e ' + pl.insumos.length + ' insumo(s) estavam só neste aparelho. Toque em “Enviar ao CRM” (uma vez) para levar à planilha.' + pul + '</div><div class="acoes">' + botao('📤 Enviar ao CRM', 'm9-enviar', '', '') + copia + '</div></div>';
   }
   function telaSuprimentos() {
-    var s = lerM9(), fl = fornecedoresCRM();
+    if (M9.pendente && m9UsaCRM()) carregarM9();
+    var s = m9Dados(), fl = s.fornecedores, crm = s.modo === 'crm';
     var cots = s.cotacoes.slice().sort(function (a, b) { return String(b.data) < String(a.data) ? -1 : String(b.data) > String(a.data) ? 1 : (b.id < a.id ? -1 : 1); });
-    return '<p class="alerta" id="m9Local">Guardado só neste aparelho. O CRM ainda não tem ações de Cotações/Insumos para o App (pedido ao CRM ADM). Use “Exportar” para não perder.</p>' +
+    return m9Topo(s) + m9BlocoEnvio(s) +
       '<div class="row">' + botao('+ Nova cotação', 'cot-nova', '', '') + botao('+ Item de bancada', 'in-novo', '') + botao('📤 Exportar (JSON)', 'm9-exp', '') + '</div>' +
-      (fl ? '' : '<p class="muted" id="m9Forn">Fornecedor: digite o código da lista do CRM (FN-0001 a FN-0197). A lista com nomes ainda não chega ao App.</p>') +
+      (fl ? '' : '<p class="muted" id="m9Forn">Fornecedor: digite o código da lista do CRM (FN-0001 a FN-0197). ' + (crm ? 'A lista com nomes não chegou do CRM agora.' : 'A lista com nomes ainda não chega ao App.') + '</p>') +
       '<h2>🧰 Insumos de bancada</h2>' + lista(s.insumos, function (i) {
         var u = X.ultimoCustoInsumo(s.cotacoes, i.item);
         return card(e(i.item), 'Qtd atual: <b>' + (i.qtd === '' ? '—' : e(i.qtd)) + '</b> · Mínimo: ' + (i.minimo === '' ? '—' : e(i.minimo)) + '<br>Último custo: ' + (u ? V.brl(u.custo) + ' (' + e(u.id) + ', ' + V.dataBR(u.data) + ')' : '—') +
-          ' · Fornecedor habitual: ' + (i.fornecedor ? e(nomeForn(i.fornecedor)) : '—') + ' · Última compra: ' + (i.ultimaCompra ? V.dataBR(i.ultimaCompra) : '—'),
+          ' · Fornecedor habitual: ' + (i.fornecedor || i.fornecedorNome ? e(nomeForn(i.fornecedor, fl, i.fornecedorNome)) : '—') + (crm ? '' : ' · Última compra: ' + (i.ultimaCompra ? V.dataBR(i.ultimaCompra) : '—')),
           X.repor(i) ? tag('Repor', 'alta') : '', botao('Editar', 'in-editar', i.id) + botao('Cotar', 'cot-nova', 'Insumo|' + i.item), ' data-insumo="' + e(i.id) + '"');
-      }, 'Nenhum item.') +
-      ((D.estoque || []).length ? '<h3>Estoque da planilha (só leitura)</h3>' + lista(D.estoque, function (i) { var mi = Number(i.minimo); return card(e(i.item), 'Qtd ' + e(i.qtd) + (i.minimo !== '' && i.minimo != null ? ' · mín. ' + e(i.minimo) : '') + (i.custo ? ' · custo ' + V.brl(i.custo) : ''), mi > 0 && Number(i.qtd) <= mi ? tag('Repor', 'alta') : '', ''); }, '') : '') +
+      }, crm ? 'Nenhum insumo no CRM ainda. Toque em “+ Item de bancada” (com a quantidade atual) para começar.' : 'Nenhum item.') +
+      (!crm && (D.estoque || []).length ? '<h3>Estoque da planilha (só leitura)</h3>' + lista(D.estoque, function (i) { var mi = Number(i.minimo); return card(e(i.item), 'Qtd ' + e(i.qtd) + (i.minimo !== '' && i.minimo != null ? ' · mín. ' + e(i.minimo) : '') + (i.custo ? ' · custo ' + V.brl(i.custo) : ''), mi > 0 && Number(i.qtd) <= mi ? tag('Repor', 'alta') : '', ''); }, '') : '') +
       '<h2>🧾 Cotações (' + cots.length + ')</h2><p class="muted">Cada cotação precisa de fonte e validade (padrão 3 dias para loja online). Vencida fica cinza e não entra na Calculadora.</p>' +
-      lista(cots, function (c) { return cardCot(c, false); }, 'Nenhuma cotação ainda. O histórico começa vazio: nenhum preço de fornecedor foi confirmado.');
+      lista(cots, function (c) { return cardCot(c, false, s); }, 'Nenhuma cotação ainda. O histórico começa vazio: nenhum preço de fornecedor foi confirmado.');
   }
-  function formCotacao(pre) {
-    var abertas = osAbertasNums();
-    formulario('🧾 Nova cotação', [{ k: 'os', r: 'OS vinculada', t: 'select', o: ['Insumo'].concat(abertas), req: true, ajuda: 'Peça só se compra depois do orçamento aprovado e pago (ou sinal).' },
-      { k: 'fornecedor', r: 'Fornecedor (código do CRM)', req: true, ajuda: 'Ex.: FN-0001. Não cadastre fornecedor solto.' }, { k: 'peca', r: 'Peça / item', req: true }, { k: 'marca', r: 'Marca / modelo' },
+  function campoFornecedor(fl, atual, insumo) {
+    return fl ? { k: 'fornecedor', r: insumo ? 'Fornecedor habitual (lista do CRM)' : 'Fornecedor (lista do CRM)', t: 'select', o: X.opcoesFornecedor(fl, atual).map(function (f) { return f.rotulo; }), req: !insumo, ajuda: 'Só fornecedores ativos. Fornecedor novo: cadastre no painel do CRM.' }
+      : { k: 'fornecedor', r: insumo ? 'Fornecedor habitual (código FN-xxxx)' : 'Fornecedor (código do CRM)', req: !insumo, ajuda: insumo ? '' : 'Ex.: FN-0001. Não cadastre fornecedor solto.' };
+  }
+  function rotuloAtual(fl, id) { var f = fl && fl.filter(function (x) { return x.id === X.idDoRotulo(id); })[0]; return f ? X.rotuloForn(f) : (fl ? '' : id || ''); }
+  function reabrirCotOS(os) { if (!os || os === 'Insumo' || $('modal').open) return; var o = (D.os || []).filter(function (x) { return x.num === os; })[0]; if (o) ACOES['os-cot'](o._row); }
+  function formCotacao(pre, erroMsg) {
+    pre = pre || {}; var s = m9Dados(); if (!m9PodeGravar(s)) return;
+    var crm = s.modo === 'crm', fl = s.fornecedores, edit = crm && !!pre.id, osOpc = ['Insumo'].concat(osAbertasNums());
+    if (pre.os && osOpc.indexOf(pre.os) < 0) osOpc.push(pre.os);
+    var val = Object.assign({ qtd: '1', frete: '0', validade: V.somaDias(D.hoje, X.VALIDADE_ONLINE_DIAS) }, pre); if (!val.condicao) val.condicao = 'Novo';
+    val.fornecedor = rotuloAtual(fl, val.fornecedor);
+    formulario(edit ? '🧾 Editar ' + e(pre.id) : '🧾 Nova cotação', [{ k: 'os', r: 'OS vinculada', t: 'select', o: osOpc, req: true, ajuda: 'Peça só se compra depois do orçamento aprovado e pago (ou sinal).' },
+      campoFornecedor(fl, pre.fornecedor, false), { k: 'peca', r: 'Peça / item', req: true }, { k: 'marca', r: 'Marca / modelo' },
       { k: 'condicao', r: 'Condição', t: 'select', o: X.CONDICOES, req: true }, { k: 'autorizadoUsado', r: 'Cliente autorizou peça usada/recondicionada', t: 'checkbox' },
       { k: 'qtd', r: 'Qtd', t: 'number', req: true }, { k: 'unit', r: 'Preço unitário (R$)', t: 'number', req: true }, { k: 'frete', r: 'Frete (R$)', t: 'number', ajuda: '0 se for retirada.' },
       { k: 'prazo', r: 'Prazo de entrega (dias)', t: 'number' }, { k: 'forma', r: 'Forma de pagamento', t: 'select', o: X.FORMAS_FORN }, { k: 'validade', r: 'Validade', t: 'date', req: true, ajuda: 'Padrão: 3 dias (loja online) ou a validade do fornecedor.' },
-      { k: 'fonte', r: 'Fonte (link, “e-mail de dd/mm” ou print)', req: true }, { k: 'garantia', r: 'Garantia do fornecedor' }],
-      Object.assign({ qtd: '1', frete: '0', condicao: 'Novo', validade: V.somaDias(D.hoje, X.VALIDADE_ONLINE_DIAS) }, pre)).then(function (v) {
-      if (!v) return; var s = lerM9(), c;
-      try { c = X.validarCotacao(Object.assign({ data: D.hoje }, v), { hoje: D.hoje, osNums: abertas, fornecedores: fornecedoresCRM() }); } catch (er) { aviso(er.message); return formCotacao(v); }
-      c.id = X.proxId(s.cotacoes, 'CT-'); s.cotacoes.push(c); gravarM9(s); aviso('Cotação ' + c.id + ' salva: ' + V.brl(c.custoPosto) + '/un. posto em Sorocaba.'); render();
-      if (c.os !== 'Insumo') { var o = (D.os || []).filter(function (x) { return x.num === c.os; })[0]; if (o) ACOES['os-cot'](o._row); }
+      { k: 'fonte', r: 'Fonte (link, “e-mail de dd/mm” ou print)', req: true }, { k: 'garantia', r: 'Garantia do fornecedor' }], val,
+      crm ? '<p class="muted" id="cotNoCrm">Vai direto para o CRM. O custo posto em Sorocaba é recalculado pelo servidor.</p>' : '').then(function (v) {
+      if (!v) return; v.fornecedor = X.idDoRotulo(v.fornecedor); var tent = Object.assign({}, pre, v), c;
+      try { c = X.validarCotacao(Object.assign({ data: edit ? (pre.data || D.hoje) : D.hoje }, v), { hoje: D.hoje, osNums: osOpc.slice(1), fornecedores: fl }); } catch (er) { aviso(er.message); return formCotacao(tent, er.message); }
+      if (!crm) {
+        var sl = lerM9(); c.id = X.proxId(sl.cotacoes, 'CT-'); sl.cotacoes.push(c); gravarM9(sl); aviso('Cotação ' + c.id + ' salva: ' + V.brl(c.custoPosto) + '/un. posto em Sorocaba.'); render(); reabrirCotOS(c.os); return;
+      }
+      if (edit) { c.id = pre.id; c.origem = 'crm'; c.obs = pre.obs || ''; }
+      m9Gravar('salvarCotacao', X.cotParaCRM(c)).then(function (d) {
+        if (d.cotacao) { m9Upsert('cotacoes', d.cotacao); var n = X.cotDoCRM(d.cotacao, D.hoje); aviso('Cotação ' + n.id + ' salva no CRM: ' + brlOu(n.custoPosto) + '/un. posto em Sorocaba.'); }
+        else aviso(d.msg || 'Salvo.');
+        render(); reabrirCotOS(c.os); carregarM9(true);
+      }, function (er) { aviso('Não salvou: ' + er.message); formCotacao(tent, er.message); });
     });
+    if (erroMsg && $('fErro')) $('fErro').textContent = erroMsg;
   }
   ACOES['cot-nova'] = function (k) { k = String(k || ''); var pre = {}; if (/^Insumo\|/.test(k)) { pre.os = 'Insumo'; pre.peca = k.slice(7); } else if (k) pre.os = k; formCotacao(pre); };
+  ACOES['cot-editar'] = function (id) {
+    var s = m9Dados(), c = s.cotacoes.filter(function (x) { return x.id === id; })[0]; if (!c || s.modo !== 'crm') return;
+    if (['Cotado', 'Escolhido'].indexOf(c.status) < 0) return aviso('Cotação ' + c.id + ' está como ' + c.status + ': não dá para editar.');
+    formCotacao({ id: c.id, data: c.data, os: c.os, fornecedor: c.fornecedor, peca: c.peca, marca: c.marca, condicao: c.condicao, autorizadoUsado: /CDC art\. 21/.test(c.obs), qtd: String(c.qtd), unit: isFinite(c.unit) ? String(c.unit) : '',
+      frete: String(c.frete), prazo: c.prazo, forma: c.forma, validade: c.validade, fonte: c.fonte, garantia: c.garantia, obs: c.obs });
+  };
   ACOES['os-cot'] = function (row) {
-    var o = achar('os', row), s = lerM9(), cmp = X.compararOS(s.cotacoes, o.num, D.hoje), rec = V.recebidoOS(D, o.num), m = $('modal');
-    m.innerHTML = '<form method="dialog" class="detalhe" id="fCotOS"><h2 style="margin:0">🧾 Cotações · ' + e(o.num) + '</h2>' +
+    var o = achar('os', row), s = m9Dados(), cmp = X.compararOS(s.cotacoes, o.num, D.hoje), rec = V.recebidoOS(D, o.num), m = $('modal');
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fCotOS"><h2 style="margin:0">🧾 Cotações · ' + e(o.num) + '</h2>' + (s.modo === 'crm' && s.offline ? '<p class="alerta">Cópia do CRM sem internet: pode estar desatualizada.</p>' : '') +
       (rec > 0 ? '<p class="muted" id="cotPago">Recebido do cliente: ' + V.brl(rec) + '.</p>' : '<p class="alerta" id="cotPago">OS sem pagamento registrado. Compre a peça só depois do orçamento aprovado e pago (ou sinal).</p>') +
-      '<p class="muted">Válidas, da mais barata para a mais cara (custo posto em Sorocaba).</p><div id="cotValidas">' + lista(cmp.validas, function (c) { return cardCot(c, true); }, 'Nenhuma cotação válida para esta OS.') + '</div>' +
-      (cmp.vencidas.length ? '<details id="cotVencidas"><summary>Vencidas / descartadas (' + cmp.vencidas.length + ')</summary>' + lista(cmp.vencidas, function (c) { return cardCot(c, true); }, '') + '</details>' : '') +
+      '<p class="muted">Válidas, da mais barata para a mais cara (custo posto em Sorocaba).</p><div id="cotValidas">' + lista(cmp.validas, function (c) { return cardCot(c, true, s); }, 'Nenhuma cotação válida para esta OS.') + '</div>' +
+      (cmp.vencidas.length ? '<details id="cotVencidas"><summary>Vencidas / descartadas (' + cmp.vencidas.length + ')</summary>' + lista(cmp.vencidas, function (c) { return cardCot(c, true, s); }, '') + '</details>' : '') +
       '<div class="grandes">' + botao('+ Cotação para esta OS', 'cot-nova', o.num, '').replace(' peq', '') + '<button class="btn sec" value="fechar">Fechar</button></div></form>';
     m.onclose = null; m.returnValue = ''; m.showModal(); ligarAcoes(m, true);
   };
   ACOES['cot-esc'] = function (id) {
-    var s = lerM9(); try { var c = X.escolher(s.cotacoes, id, D.hoje); } catch (er) { return aviso(er.message); }
-    gravarM9(s); aviso(c.id + ' escolhida.'); render(); var o = (D.os || []).filter(function (x) { return x.num === c.os; })[0]; if (o) ACOES['os-cot'](o._row);
+    var s = m9Dados(); if (!m9PodeGravar(s)) return;
+    var copia = JSON.parse(JSON.stringify(s.cotacoes)), c; try { c = X.escolher(copia, id, D.hoje); } catch (er) { return aviso(er.message); }
+    if (s.modo === 'local') { var sl = lerM9(); X.escolher(sl.cotacoes, id, D.hoje); gravarM9(sl); aviso(c.id + ' escolhida.'); render(); return reabrirCotOS(c.os); }
+    m9Gravar('mudarStatusCotacao', { id: id, status: 'Escolhido' }).then(function (d) {
+      if (d.cotacao) m9Upsert('cotacoes', d.cotacao); aviso(d.msg || c.id + ' escolhida.');
+      return carregarM9(true).then(function () { render(); reabrirCotOS(c.os); });
+    }, function (er) { aviso('Não mudou: ' + er.message); });
   };
   ACOES['cot-st'] = function (id) {
-    var s = lerM9(), c = s.cotacoes.filter(function (x) { return x.id === id; })[0]; if (!c) return;
-    formulario('Status da ' + e(c.id), [{ k: 'status', r: 'Novo status', t: 'select', o: X.STATUS_COT, req: true }], { status: c.status }).then(function (v) {
+    var s = m9Dados(), crm = s.modo === 'crm', c = s.cotacoes.filter(function (x) { return x.id === id; })[0]; if (!c) return;
+    if (crm && c.status === 'Comprado') return aviso('Cotação ' + c.id + ' já está como Comprado: o status não muda mais (evita lançar o caixa duas vezes).');
+    if (!m9PodeGravar(s)) return;
+    formulario('Status da ' + e(c.id), [{ k: 'status', r: 'Novo status', t: 'select', o: crm ? X.STATUS_COT_CRM : X.STATUS_COT, req: true }], { status: c.status }).then(function (v) {
       if (!v || v.status === c.status) return;
+      var copia = JSON.parse(JSON.stringify(s.cotacoes)); try { X.mudarStatus(copia, id, v.status, D.hoje); } catch (er) { return aviso(er.message); } // mesmas regras antes de chamar o servidor
       var seguir = v.status === 'Comprado' && X.avisoOSNaoPaga(c, V.recebidoOS(D, c.os))
         ? perguntar('A ' + c.os + ' não tem pagamento do cliente registrado. A regra é pagar o fornecedor só depois de receber. Marcar como comprado mesmo assim?', { titulo: '⚠️ OS sem pagamento', sim: 'Marcar comprado', perigo: true })
         : Promise.resolve(true);
       seguir.then(function (ok) {
         if (!ok) return aviso('Nada mudou.');
-        try { X.mudarStatus(s.cotacoes, id, v.status, D.hoje); } catch (er) { return aviso(er.message); }
-        if (v.status === 'Recebido') X.receberInsumo(s, c, D.hoje);
-        gravarM9(s); aviso(c.id + ': ' + v.status + '.'); render();
-        if (v.status !== 'Comprado') return;
-        var cats = D.categoriasFin || [], cat = cats.indexOf('Compra de peça') >= 0 ? 'Compra de peça' : (cats[0] || '');
-        if (!api.pode('salvarLancamento')) return aviso('Lance a saída de ' + V.brl(X.totalCompra(c)) + ' no Financeiro pela planilha.');
-        formulario('Lançar a compra no caixa?', [{ k: 'lancar', r: 'Lançar saída de ' + V.brl(X.totalCompra(c)) + ' no Financeiro', t: 'checkbox' }, { k: 'categoria', r: 'Categoria', t: 'select', o: cats, req: true }], { lancar: true, categoria: cat }).then(function (l) {
-          if (!l || !l.lancar) return aviso('Compra marcada sem lançamento no Financeiro.');
-          var n = X.lancamentoCompra(c, D.hoje, l.categoria);
-          escrever('salvarLancamento', [n], function (cache) { (cache.financeiro = cache.financeiro || []).push(Object.assign({ _row: 0 }, n)); }).then(function () { var s2 = lerM9(), c2 = s2.cotacoes.filter(function (x) { return x.id === id; })[0]; if (c2) { c2.lancadoCaixa = D.hoje; gravarM9(s2); } });
+        if (!crm) return statusLocal(id, v.status);
+        var total = isFinite(c.total) ? c.total : X.totalCompra(c), cats = X.categoriasSaida(D.categoriasFin), cat = cats.indexOf('Compra de peça') >= 0 ? 'Compra de peça' : cats[0];
+        var pedir = v.status !== 'Comprado' ? Promise.resolve({ lancar: false }) : !api.pode('salvarLancamento') ? Promise.resolve({ lancar: false, semCaixa: true })
+          : formulario('Lançar a compra no caixa?', [{ k: 'lancar', r: 'Lançar saída de ' + V.brl(total) + ' no Financeiro (junto com o Comprado)', t: 'checkbox' }, { k: 'categoria', r: 'Categoria', t: 'select', o: cats, req: true }], { lancar: true, categoria: cat },
+            '<p class="muted">O CRM grava o Comprado e a Saída juntos. Depois de Comprado, o status não muda mais.</p>');
+        pedir.then(function (l) {
+          if (!l) return aviso('Nada mudou.');
+          var args = { id: id, status: v.status }; if (l.lancar) args.lancarCaixa = { categoria: l.categoria };
+          m9Gravar('mudarStatusCotacao', args).then(function (d) {
+            if (d.cotacao) m9Upsert('cotacoes', d.cotacao);
+            aviso((d.msg || c.id + ': ' + v.status + '.') + (v.status === 'Comprado' && !l.lancar ? ' Compra marcada sem lançamento no Financeiro.' : ''));
+            carregarM9(true).then(function () { if (d.financeiro) iniciar(); else render(); });
+          }, function (er) { aviso('Não mudou: ' + er.message); });
         });
       });
     });
   };
+  /** 0.8.5 (sem CRM): status e caixa no aparelho, saída pelo salvarLancamento. */
+  function statusLocal(id, st) {
+    var s = lerM9(), c = s.cotacoes.filter(function (x) { return x.id === id; })[0]; if (!c) return;
+    try { X.mudarStatus(s.cotacoes, id, st, D.hoje); } catch (er) { return aviso(er.message); }
+    if (st === 'Recebido') X.receberInsumo(s, c, D.hoje);
+    gravarM9(s); aviso(c.id + ': ' + st + '.'); render();
+    if (st !== 'Comprado') return;
+    var cats = D.categoriasFin || [], cat = cats.indexOf('Compra de peça') >= 0 ? 'Compra de peça' : (cats[0] || '');
+    if (!api.pode('salvarLancamento')) return aviso('Lance a saída de ' + V.brl(X.totalCompra(c)) + ' no Financeiro pela planilha.');
+    formulario('Lançar a compra no caixa?', [{ k: 'lancar', r: 'Lançar saída de ' + V.brl(X.totalCompra(c)) + ' no Financeiro', t: 'checkbox' }, { k: 'categoria', r: 'Categoria', t: 'select', o: cats, req: true }], { lancar: true, categoria: cat }).then(function (l) {
+      if (!l || !l.lancar) return aviso('Compra marcada sem lançamento no Financeiro.');
+      var n = X.lancamentoCompra(c, D.hoje, l.categoria);
+      escrever('salvarLancamento', [n], function (cache) { (cache.financeiro = cache.financeiro || []).push(Object.assign({ _row: 0 }, n)); }).then(function () { var s2 = lerM9(), c2 = s2.cotacoes.filter(function (x) { return x.id === id; })[0]; if (c2) { c2.lancadoCaixa = D.hoje; gravarM9(s2); } });
+    });
+  }
   ACOES['in-editar'] = function (id) {
-    var s = lerM9(), i = s.insumos.filter(function (x) { return x.id === id; })[0] || {};
-    formulario(id ? 'Insumo · ' + e(i.item) : '+ Item de bancada', [{ k: 'item', r: 'Item', req: true }, { k: 'qtd', r: 'Qtd atual', t: 'number' }, { k: 'minimo', r: 'Mínimo (você define)', t: 'number', ajuda: 'Sem mínimo, não alerta “Repor”.' },
-      { k: 'fornecedor', r: 'Fornecedor habitual (código FN-xxxx)' }], i).then(function (v) {
-      if (!v) return; var fn = v.fornecedor.toUpperCase();
+    var s = m9Dados(), crm = s.modo === 'crm'; if (!m9PodeGravar(s)) return;
+    var i = s.insumos.filter(function (x) { return x.id === id; })[0] || {}, fl = s.fornecedores, val = Object.assign({}, i, { fornecedor: rotuloAtual(fl, i.fornecedor) });
+    var campoF = campoFornecedor(fl, i.fornecedor, true); if (crm && !fl && i.fornecedorNome && !i.fornecedor) campoF.ajuda = 'No CRM hoje: ' + e(i.fornecedorNome) + '. Deixe vazio para manter.';
+    formulario(id ? 'Insumo · ' + e(i.item) : '+ Item de bancada', [{ k: 'item', r: 'Item', req: true }, { k: 'qtd', r: 'Qtd atual', t: 'number', req: crm, ajuda: crm ? 'O CRM precisa da quantidade (0 se acabou).' : '' },
+      { k: 'minimo', r: 'Mínimo (você define)', t: 'number', ajuda: 'Sem mínimo, não alerta “Repor”.' }, campoF], val).then(function (v) {
+      if (!v) return;
+      if (crm) {
+        var args; try { args = X.insumoParaCRM(v, i, fl); } catch (er) { return aviso(er.message); }
+        return m9Gravar('salvarInsumo', args).then(function (d) { if (d.insumo) m9Upsert('insumos', d.insumo); aviso(d.msg || 'Insumo salvo.'); render(); carregarM9(true); }, function (er) { aviso('Não salvou: ' + er.message); });
+      }
+      var sl = lerM9(), fn = X.idDoRotulo(v.fornecedor);
       if (fn && !X.RE_FORN.test(fn)) { aviso('Fornecedor: use o código da lista do CRM (FN-xxxx).'); return; }
       var q = v.qtd === '' ? '' : X.num(v.qtd), mi = v.minimo === '' ? '' : X.num(v.minimo);
       if ((q !== '' && !(q >= 0)) || (mi !== '' && !(mi >= 0))) return aviso('Quantidade e mínimo devem ser números (0 ou mais).');
-      var alvo = id ? s.insumos.filter(function (x) { return x.id === id; })[0] : null;
-      if (!alvo) { alvo = { id: X.proxId(s.insumos, 'IN-'), ultimaCompra: '' }; s.insumos.push(alvo); }
-      Object.assign(alvo, { item: v.item, qtd: q, minimo: mi, fornecedor: fn }); gravarM9(s); aviso('Insumo salvo.'); render();
+      var alvo = id ? sl.insumos.filter(function (x) { return x.id === id; })[0] : null;
+      if (!alvo) { alvo = { id: X.proxId(sl.insumos, 'IN-'), ultimaCompra: '' }; sl.insumos.push(alvo); }
+      Object.assign(alvo, { item: v.item, qtd: q, minimo: mi, fornecedor: fn }); gravarM9(sl); aviso('Insumo salvo.'); render();
     });
   };
   ACOES['in-novo'] = function () { ACOES['in-editar'](''); };
-  ACOES['m9-exp'] = function () { copiar(JSON.stringify(lerM9(), null, 1), 'Cotações e insumos copiados (JSON).'); };
+  ACOES['m9-exp'] = function () { var s = m9Dados(); copiar(JSON.stringify(s.modo === 'crm' ? { origem: 'CRM', quando: s.quando, fornecedores: s.fornecedores, cotacoes: s.cotacoes, insumos: s.insumos } : lerM9(), null, 1), 'Cotações e insumos copiados (JSON).'); };
+  ACOES['m9-exp-local'] = function () { copiar(JSON.stringify({ origem: 'aparelho (0.8.5)', dados: lerJSON(M9K, null), copiaAntesDoEnvio: lerJSON(M9BK, null) }, null, 1), 'Cópia do aparelho copiada (JSON).'); };
+  /** Envio único das cotações/insumos que estavam só no aparelho (0.8.5). Retoma de onde parou; não apaga a cópia local. */
+  ACOES['m9-enviar'] = function () {
+    var s = m9Dados(); if (s.modo !== 'crm' || !m9PodeGravar(s)) return;
+    var bruto = lerJSON(M9K, null), env = lerJSON(M9ENV, null) || {}, pl = X.planoEnvioCRM(bruto, M9.cache, s.fornecedores, D.hoje, env);
+    if (!pl.cotacoes.length && !pl.insumos.length) return aviso('Nada para enviar.');
+    perguntar('Enviar ' + pl.cotacoes.length + ' cotação(ões) e ' + pl.insumos.length + ' insumo(s) deste aparelho para o CRM? É feito uma vez só. Compras já feitas entram como Comprado SEM lançar de novo no caixa. A cópia do aparelho continua guardada.', { titulo: '📤 Enviar ao CRM', sim: 'Enviar' }).then(async function (ok) {
+      if (!ok) return;
+      if (!lerJSON(M9BK, null)) try { localStorage.setItem(M9BK, JSON.stringify({ em: new Date().toISOString(), dados: bruto })); } catch (x) {}
+      env.mapa = env.mapa || {}; env.insumos = env.insumos || {}; env.avisos = env.avisos || [];
+      var feitos = 0, parouRede = false, salvarEnv = function () { try { localStorage.setItem(M9ENV, JSON.stringify(env)); } catch (x) {} };
+      aviso('Enviando ao CRM…');
+      for (var a = 0; a < pl.cotacoes.length && !parouRede; a++) {
+        var it = pl.cotacoes[a];
+        try {
+          var d = await m9Gravar('salvarCotacao', it.args); if (!d.cotacao) { env.avisos.push(it.local + ': o CRM não devolveu a cotação'); continue; }
+          env.mapa[it.local] = d.cotacao.id; m9Upsert('cotacoes', d.cotacao); feitos++; salvarEnv();
+          if (it.nota) env.avisos.push(it.local + ' → ' + d.cotacao.id + ': ' + it.nota);
+          if (it.depois) { try { var d2 = await m9Gravar('mudarStatusCotacao', { id: d.cotacao.id, status: it.depois }); if (d2.cotacao) m9Upsert('cotacoes', d2.cotacao); } catch (er2) { env.avisos.push(it.local + ' → ' + d.cotacao.id + ': ficou Cotado (' + er2.message + ')'); if (er2.rede) parouRede = true; } }
+        } catch (er) { if (er.rede) parouRede = true; else env.avisos.push(it.local + ': ' + er.message); }
+        salvarEnv();
+      }
+      for (var b = 0; b < pl.insumos.length && !parouRede; b++) {
+        var ii = pl.insumos[b];
+        try { var d3 = await m9Gravar('salvarInsumo', ii.args); if (d3.insumo) { env.insumos[ii.local] = d3.insumo.id; m9Upsert('insumos', d3.insumo); feitos++; } if (ii.nota) env.avisos.push(ii.args.item + ': ' + ii.nota); }
+        catch (er3) { if (er3.rede) parouRede = true; else env.avisos.push(ii.args.item + ': ' + er3.message); }
+        salvarEnv();
+      }
+      if (parouRede) { salvarEnv(); aviso('Parou sem conexão depois de ' + feitos + ' envio(s). Toque de novo em “Enviar ao CRM” para continuar (o que já foi não repete).'); render(); return; }
+      var pcs = lerPCs(), nPC = X.remapPCs(pcs, env.mapa); if (nPC) gravarPCs(pcs);
+      env.concluido = new Date().toISOString(); env.resumo = Object.keys(env.mapa).length + ' cotação(ões) e ' + Object.keys(env.insumos).length + ' insumo(s) no CRM' + (nPC ? '; ' + nPC + ' peça(s) dos PCs salvos religadas' : '');
+      env.avisos = env.avisos.concat(pl.pulados.map(function (p) { return p.id + ' não foi (' + p.motivo + ')'; })); salvarEnv();
+      aviso('Enviado ao CRM: ' + env.resumo + '.'); carregarM9(true); render();
+    });
+  };
 
   // ---- 8) Calculadora de PCs ----
   function montagens() { return (D.catalogo || []).filter(function (s) { return Number(s.preco) > 0 && s.ativo !== 'Não'; }); }
-  function calcDe(pc) { return X.calcPC(pc, lerM9().cotacoes, D.hoje, cfgCalc()); }
+  function calcDe(pc) { return X.calcPC(pc, m9Dados().cotacoes, D.hoje, cfgCalc()); }
   function resumoCalc(k) {
     return (k.completo ? 'Custo das peças: <b>' + V.brl(k.custoPecas) + '</b>' : '<span class="alerta">Faltam cotações válidas: ' + e(k.faltam.join(', ') || 'nenhuma peça escolhida') + '</span>') +
       (k.montagem ? ' · montagem ' + V.brl(k.montagem) : '') + (k.sugerido != null ? ' · sugerido ' + V.brl(k.sugerido) : '') +
@@ -1895,11 +2056,13 @@
       (k.lucro != null ? ' · lucro ' + V.brl(k.lucro) + ' (' + pctTxt(k.margemReal) + ')' : '') + (k.prejuizo ? ' ' + tag('PREJUÍZO', 'alta') : '');
   }
   function telaCalculadora() {
-    var pcs = lerPCs(), s = lerM9(), val = s.cotacoes.filter(function (c) { return X.cotacaoValida(c, D.hoje); }).length;
+    if (M9.pendente && m9UsaCRM()) carregarM9();
+    var pcs = lerPCs(), s = m9Dados(), val = s.cotacoes.filter(function (c) { return X.cotacaoValida(c, D.hoje) && c.custoPosto > 0; }).length;
     CMP = CMP.filter(function (id) { return pcs.some(function (p) { return p.id === id; }); });
     var cmp = X.compararPCs(pcs.filter(function (p) { return CMP.indexOf(p.id) >= 0; }), s.cotacoes, D.hoje, cfgCalc());
     return '<p class="muted" id="calcRegra">Custo de peça vem <b>só</b> do custo posto em Sorocaba de cotação válida (Mais › Suprimentos). Sem cotação válida, a peça fica sem custo. Você digita só o preço de venda e a margem.</p>' +
-      '<p class="muted" id="calcCot">' + val + ' cotação(ões) válida(s) hoje.</p><div class="row">' + botao('+ Novo PC', 'pc-novo', '', '') + '</div>' +
+      '<p class="muted" id="calcCot">' + val + ' cotação(ões) válida(s) hoje' + (s.modo === 'crm' ? ' (do CRM' + (s.offline ? ', cópia sem internet: pode estar desatualizada' : '') + ')' : s.modo === 'local' ? ' (só deste aparelho)' : '') + '.</p>' +
+      '<p class="muted" id="calcPCsLocal">PCs salvos ficam só neste aparelho: o CRM ainda não grava PCs da calculadora.</p><div class="row">' + botao('+ Novo PC', 'pc-novo', '', '') + '</div>' +
       lista(pcs, function (p) { var k = calcDe(p), on = CMP.indexOf(p.id) >= 0;
         return card(e(p.nome), (p.itens || []).length + ' peça(s)<br>' + resumoCalc(k), '', botao('Abrir', 'pc-abrir', p.id, '') + botao(on ? '✓ Comparando' : 'Comparar', 'pc-cmp', p.id) + botao('📋 Anúncio', 'pc-anuncio', p.id), ' data-pc="' + e(p.id) + '"'); }, 'Nenhum PC na calculadora.') +
       (cmp.length >= 2 ? '<h2>Comparar (' + cmp.length + ' de até ' + X.MAX_COMPARAR + ')</h2><div class="tabela-rolar"><table class="dre" id="pcComparar"><tr><th></th>' + cmp.map(function (x) { return '<th>' + e(x.pc.nome) + '</th>'; }).join('') + '</tr>' +
@@ -1912,7 +2075,7 @@
   ACOES['pc-anuncio'] = function (id) { var p = lerPCs().filter(function (x) { return x.id === id; })[0]; if (!p) return; var k = calcDe(p); if (!k.preco) return aviso('Defina o preço (ou complete as cotações) antes do anúncio.'); copiar(X.anuncioPC(p, k, CFG.WHATSAPP_LOJA), 'Texto do anúncio copiado.'); };
   ACOES['pc-abrir'] = function (id) {
     var l = lerPCs(), p = l.filter(function (x) { return x.id === id; })[0]; if (!p) return;
-    var cots = lerM9().cotacoes.filter(function (c) { return X.cotacaoValida(c, D.hoje); }), mts = montagens(), m = $('modal');
+    var cots = m9Dados().cotacoes.filter(function (c) { return X.cotacaoValida(c, D.hoje) && c.custoPosto > 0; }), mts = montagens(), m = $('modal');
     var itemDe = function (t) { return (p.itens || []).filter(function (i) { return i.tipo === t; })[0] || {}; };
     m.innerHTML = '<form method="dialog" class="detalhe" id="fPC"><h2 style="margin:0">🖥️ Calculadora</h2><div><label for="pcNome">Nome do PC</label><input id="pcNome" value="' + e(p.nome) + '"></div>' +
       (cots.length ? '' : '<p class="alerta" id="pcSemCot">Nenhuma cotação válida. Cadastre em Mais › Suprimentos (com fonte) para a peça ter custo.</p>') +
