@@ -84,7 +84,9 @@
   api.aoExpirar = function () { if ($('tela-chave').hidden) telaChave(MSG_EXPIROU); };
 
   // ---------- Carregar e navegar ----------
+  var ESTAT = { iniciar: 0 }; // v0.8.8: contagem de recargas completas (os testes conferem que o toque no WhatsApp não recarrega)
   function iniciar() {
+    ESTAT.iniciar++;
     if (!api.temToken()) return Promise.resolve(telaChave());
     $('tela-chave').hidden = true; $('app').hidden = false;
     carregando = true;
@@ -99,7 +101,7 @@
   function render() {
     clearTimeout(buscaTimer);
     var r = rota();
-    var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela === 'cliente' ? 'clientes' : r.tela;
+    var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela === 'cliente' ? 'clientes' : r.tela === 'leads' ? 'hoje' : r.tela;
     document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === telaMenu; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var c = $('conteudo');
     if (!D) { c.innerHTML = carregando ? '<div class="vazio">Carregando dados da planilha… (pode levar uns 20 segundos)</div>' : '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; var fab0 = $('fab'); if (fab0) fab0.hidden = true; return; }
@@ -127,7 +129,7 @@
   function bloq(a) { return PRECISA[a] && !api.pode(PRECISA[a]); }
   function waOp(o) {
     var l = V.linkWaOp(D.modelos, o); if (!l) return '';
-    var atual = V.nomeModeloOp(D.modelos, o), nomes = (D.modelos || []).map(function (m) { return m.modelo; }).filter(Boolean);
+    var atual = V.nomeModeloOp(D.modelos, o), nomes = V.modelosOp(D.modelos).map(function (m) { return m.modelo; }).filter(Boolean);
     var sel = nomes.length ? '<select class="peq" aria-label="Modelo da mensagem" data-wa-mod="' + o._row + '">' + (atual ? '' : '<option value="">(sem modelo)</option>') +
       nomes.map(function (n) { return '<option' + (n === atual ? ' selected' : '') + '>' + e(n) + '</option>'; }).join('') + '</select>' : '';
     return '<a class="btn wa peq" target="_blank" rel="noopener" href="' + e(l) + '" data-wa-op="' + o._row + '" data-contato-op="' + o._row + '" data-canal="WhatsApp">📲 WhatsApp</a>' + sel;
@@ -157,14 +159,25 @@
         cids.map(function (c) { return chip(c.chave, c.nome + ' (' + c.n + ')'); }).join('') + '</div>' : '';
       var nWa = (D.oportunidades || []).filter(V.temWaOp).length;
       var barraWa = '<div class="chips" role="group" aria-label="Filtrar por WhatsApp"><button type="button" class="chip" id="fWa" aria-pressed="' + !!F.op.wa + '">📲 WhatsApp (' + nWa + ')</button></div>';
+      // v0.8.8: Ainda não contactei × Já contactei (com contagem).
+      var cc = V.contagemContatoOps(D.oportunidades), chipC = function (k, rot) { return '<button type="button" class="chip" data-contato="' + k + '" aria-pressed="' + ((F.op.contato || '') === k) + '">' + rot + '</button>'; };
+      var barraContato = '<div class="chips" id="fContato" role="group" aria-label="Filtrar por contato">' + chipC('', 'Todas') + chipC('nao', '🆕 ' + V.SITUACAO_CONTATO.nao + ' (' + cc.nao + ')') + chipC('sim', '✅ ' + V.SITUACAO_CONTATO.sim + ' (' + cc.sim + ')') + '</div>';
       var ops = V.filtrarOps(D.oportunidades, fOp);
-      return barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
+      return barraContato + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
         '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
         (ops.length > LIMITE ? '<p class="muted">Mostrando as ' + LIMITE + ' primeiras. Use os filtros ou a busca para achar as outras.</p>' : '') +
         lista(ops.slice(0, LIMITE), function (o) {
-          return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + (o.ultimoContato ? '<br>Último contato ' + V.dataBR(o.ultimoContato) : ''),
-            tagPri(o.prioridade) + tag(o.status), waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
+          return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + blocoContatoOp(o),
+            tagPri(o.prioridade) + '<span data-op-st="' + o._row + '">' + tag(o.status) + '</span>', waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
         }, 'Nenhuma empresa com esse filtro.');
+  }
+  // v0.8.8: último contato em destaque + histórico abrível no próprio card (sem abrir Editar).
+  function blocoContatoOp(o) {
+    var u = V.ultimoContatoOp(o), h = V.historicoOp(o);
+    var ult = '<div class="ult-contato' + (u ? '' : ' nunca') + '" data-op-ult="' + o._row + '">' + (u ? '📌 <b>Último contato: ' + e(V.dataBR(u.data)) + '</b>' + (u.canal ? ' · ' + e(u.canal) : '') : '🆕 Ainda não contactei') + '</div>';
+    var hist = '<details class="hist-op" data-op-hist="' + o._row + '"' + (h.length ? '' : ' hidden') + '><summary>🕘 Histórico (' + h.length + ')</summary><ul>' +
+      h.map(function (x) { return '<li>' + (x.data ? '<b>' + e(V.dataBR(x.data)) + '</b> – ' : '') + e(x.texto) + '</li>'; }).join('') + '</ul></details>';
+    return ult + hist;
   }
   function abas(base, itens, sub) { return '<div class="abas">' + itens.map(function (x, i) { var on = (sub || itens[0][0]) === x[0]; return '<a href="#' + base + (i ? '/' + x[0] : '') + '" class="' + (on ? 'ativo' : '') + '">' + x[1] + '</a>'; }).join('') + '</div>'; }
   function sel(id, lst, v, todos) { return '<select id="' + id + '" aria-label="' + todos + '"><option value="">' + todos + '</option>' + (lst || []).map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + e(x) + '</option>'; }).join('') + '</select>'; }
@@ -198,6 +211,18 @@
       var st = situacaoLead(x), muda = api.pode('definirStatusLead') ? SIT_LEAD.filter(function (k) { return k !== st && st !== 'Convertido'; }).map(function (k) { return botao(k === 'Convertido' ? '✅ Converter em cliente' : '→ ' + k, 'lead-st', x._row + '|' + k); }).join('') : '';
       return card(e(x.nome), [e(x.telefone), x.cidade ? e(x.cidade) : '', x.servico ? e(x.servico) : '', x.dataHora ? '⏰ ' + e(x.dataHora) : ''].filter(Boolean).join(' · ') + (x.clienteExistente ? '<br>⚠️ Telefone já é do cliente ' + e(x.clienteExistente.nome) + ' (não junta sozinho).' : '') + (x.statusEm ? '<br><span class="muted">' + e(st) + ' em ' + e(x.statusEm) + '</span>' : ''),
         tag(st, st === 'Novo' ? 'alta' : st === 'Convertido' ? 'ok' : 'cinza') + (x.followup ? tag('follow-up', 'media') : ''), (st !== 'Convertido' ? waLead(x) : '') + muda + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'lead-excluir', x._row, 'perigo') : ''), ' data-lead="' + x._row + '"'); }, 'Nenhum lead com esse filtro.'); }
+  // v0.8.8: novos cadastros do site em destaque no topo do Hoje, com atalho para a tela só deles (#leads).
+  function bannerLeadsSite() {
+    var todos = leadsVisiveis(); if (!todos.length) return '';
+    var n = leadsNovos().length;
+    return '<a class="banner-leads' + (n ? ' tem' : '') + '" id="bannerLeads" href="#leads">🔗 ' + (n ? '<b>' + n + '</b> cadastro' + (n === 1 ? ' novo' : 's novos') + ' pelo site' : 'Cadastros pelo site: nenhum novo') + '<span>Ver ' + (n ? 'agora' : 'todos') + ' ›</span></a>';
+  }
+  function telaLeads() {
+    var todos = leadsVisiveis();
+    return '<a class="mais-voltar" href="#hoje">← Voltar para Hoje</a><h1>🔗 Cadastros pelo site</h1>' +
+      '<p class="muted">Quem preencheu o formulário do site já está no CRM. WhatsApp só um a um, tocado por você, e só com consentimento.</p>' +
+      (todos.length ? secaoLeadsLink() : '<div class="vazio">Nenhum cadastro pelo site ainda.</div>');
+  }
   function acoesHojeOS(o) {
     if (!o) return '';
     return (api.pode('textoStatusOS') ? botao('📲 Avisar status', 'os-msg', o._row) : '') +
@@ -222,11 +247,12 @@
       };
       var badgeParada = function (o) { var b = V.badgeParada3d(o, D.hoje); return b ? tag('🐢 ' + b.texto, 'parada') : ''; };
       return '<h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
+        bannerLeadsSite() +
         '<div class="resumo"><div><b>' + H.chamar.length + '</b>para chamar</div><div><b>' + bancada.length + '</b>em bancada</div><div><b>' + entregas.length + '</b>entregas do dia</div><div><b>' + H.cobrar.length + '</b>OS para cobrar</div></div>' +
         secaoLeadsLink() +
         '<section id="emBancada"><h2>🔧 Em bancada</h2>' + lista(bancada, function (o) { return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento || '') + (o.statusEm ? ' · desde ' + V.dataBR(o.statusEm) : ''), tagStatusOS(o.status) + badgeParada(o), acoesHojeOS(o) + botao('Msg serviço', 'os-msg-tipo', o._row)); }, 'Nada em bancada.') + '</section>' +
         '<section id="entregasDia"><h2>📦 Entregas do dia</h2>' + lista(entregas, function (o) { return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento || '') + (o.previsao ? ' · previsão ' + V.dataBR(o.previsao) : ''), tagStatusOS(o.status), acoesHojeOS(o)); }, 'Nenhuma entrega prevista para hoje.') + '</section>' +
-        '<section id="visitasHoje"><h2>🚗 Visitas de hoje</h2>' + (!CT && api.pode('listaContratos') ? '<div class="vazio">Carregando visitas…</div>' : lista(visitasHoje, function (v) {
+        '<section id="visitasHoje"><h2>🚗 Visitas de hoje <a class="link-sec" href="#agenda">Agendamento ›</a></h2>' + (!CT && api.pode('listaContratos') ? '<div class="vazio">Carregando visitas…</div>' : lista(visitasHoje, function (v) {
           var c = (D.clientes || []).filter(function (k) { return k.nome === v.cliente; })[0];
           return card(e(v.id) + ' · ' + e(v.cliente), (V.horaVisita(v) ? e(V.horaVisita(v)) + ' · ' : '') + e(v.status) + (v.os ? ' · ' + e(v.os) : ''), tag(v.prioridade, V.norm(v.prioridade)), botao('Lembrete', 'vis-msg', v.id + '|lembrete') + botao('Confirmar', 'vis-msg', v.id + '|confirmar') + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-visita-hoje="' + e(v.id) + '"');
         }, 'Nenhuma visita agendada para hoje.')) + '</section>' +
@@ -1292,8 +1318,8 @@
   function carregarCT() {
     if (carregarCT.indo) return; if (!api.pode('listaContratos')) { CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [] }; return; }
     carregarCT.indo = true;
-    api.ler('listaContratos', []).then(function (r) { carregarCT.indo = false; CT = r || { contratos: [], visitas: [] }; if (['mais','hoje','cliente','servicos'].indexOf(rota().tela) >= 0) render(); },
-      function () { carregarCT.indo = false; CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [], erro: true }; if (['mais','hoje','cliente','servicos'].indexOf(rota().tela) >= 0) render(); });
+    api.ler('listaContratos', []).then(function (r) { carregarCT.indo = false; CT = r || { contratos: [], visitas: [] }; if (['mais','hoje','cliente','servicos','agenda'].indexOf(rota().tela) >= 0) render(); },
+      function () { carregarCT.indo = false; CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [], erro: true }; if (['mais','hoje','cliente','servicos','agenda'].indexOf(rota().tela) >= 0) render(); });
   }
   function telaVisitas() {
     if (!CT) { carregarCT(); return '<div class="vazio">Carregando contratos e visitas…</div>'; }
@@ -1307,8 +1333,48 @@
           (v.status === 'Agendada' && api.pode('iniciarVisita') ? botao('▶️ Iniciar visita', 'vis-ini', v.id, '') : '') + (v.status === 'Em andamento' && api.pode('encerrarVisita') ? botao('⏹ Encerrar visita', 'vis-fim', v.id, '') : '') +
           botoesMsgVisita(v) + (end ? mapsBtn(end) : '') + (c && telLink(c) ? '<a class="btn sec peq" href="' + e(telLink(c)) + '">📞 Ligar</a>' : '') + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-visita="' + e(v.id) + '"');
       }, 'Nenhuma visita.') +
-      cardsPlanos() + '<h2>📄 Contratos mensais</h2>' + lista(CT.contratos || [], function (k) { return card(e(k.id) + ' · ' + e(k.cliente), e(k.plano || '') + ' · ' + V.brl(k.valor) + '/mês · ' + e(frequenciaContrato(k)) + (/fictício/i.test(k.obs || '') ? ' · Exemplo fictício' : ''), tag(k.status, k.status === 'Ativo' ? 'ok' : 'cinza'), ''); }, 'Nenhum contrato.');
+      cardsPlanos() + listaQuemAssinou();
   }
+  // ---- v0.8.8: Quem assinou (contratos com data inicial) e tela Agendamento (#agenda) ----
+  F.ct = 'ativos';
+  function listaQuemAssinou() {
+    var todos = (CT && CT.contratos) || [], cont = V.contagemContratos(todos), vs = (CT && CT.visitas) || [];
+    var chip = function (k, rot) { return '<button type="button" class="chip" data-chip-ct="' + k + '" aria-pressed="' + (F.ct === k) + '">' + rot + '</button>'; };
+    var l = V.listarContratos(todos, F.ct);
+    return '<section id="quemAssinou"><h2>✍️ Quem assinou com a ProFix <span class="tag ok">' + cont.ativos + ' ativo' + (cont.ativos === 1 ? '' : 's') + '</span></h2>' +
+      '<div class="chips" id="fContratos" role="group" aria-label="Filtrar contratos">' + chip('ativos', 'Ativos (' + cont.ativos + ')') + chip('outros', 'Encerrados/pausados (' + cont.outros + ')') + chip('todos', 'Todos (' + cont.todos + ')') + '</div>' +
+      lista(l, function (k) {
+        var ini = V.inicioContrato(k), prox = V.proximaVisitaContrato(vs, k, D.hoje);
+        return card(e(k.cliente) + ' <span class="muted">· ' + e(k.id) + '</span>',
+          '<b>' + e(k.plano || 'Plano') + '</b> · ' + V.brl(k.valor) + '/mês · ' + e(frequenciaContrato(k)) +
+          '<br><span class="ct-inicio" data-ct-inicio="' + e(k.id) + '">📆 Início: <b>' + (ini ? e(V.dataBR(ini)) : 'não informado') + '</b></span>' +
+          '<br>' + (prox ? '🚗 Próxima visita: ' + e(V.dataBR(prox.data)) + (V.horaVisita(prox) ? ' às ' + e(V.horaVisita(prox)) : '') + (prox.atrasada ? ' ' + tag('atrasada', 'vencido') : '') : '<span class="muted">Sem visita marcada.</span>') +
+          (/fictício/i.test(k.obs || '') ? '<br><span class="muted">Exemplo fictício</span>' : ''),
+          tag(k.status || 'Ativo', V.ativoContrato(k) ? 'ok' : 'cinza'),
+          (V.ativoContrato(k) && api.pode('salvarVisita') ? botao('🚗 Agendar visita', 'ct-visita', k.id, '') : ''), ' data-contrato="' + e(k.id) + '"');
+      }, F.ct === 'ativos' ? 'Nenhum contrato ativo.' : 'Nenhum contrato com esse filtro.') + '</section>';
+  }
+  function telaAgenda() {
+    if (!CT) { carregarCT(); return '<h1>📅 Agendamento</h1><div class="vazio">Carregando visitas e contratos…</div>'; }
+    var prox = V.proximasVisitas(CT.visitas || [], D.hoje), cts = CT.contratos || [];
+    var planoDe = function (v) { var k = v.contrato ? cts.filter(function (x) { return x.id === v.contrato; })[0] : V.contratoAtivoCliente(cts, v.cliente); return k ? tag(k.plano || 'Plano', 'ok') : ''; };
+    var HV = (CFG && CFG.HORARIOS_VISITA) || { util: { inicio: '19:00', fim: '22:00' }, fimDeSemana: { inicio: '09:00', fim: '17:00' } }, h = 'seg a sex, ' + HV.util.inicio + ' às ' + HV.util.fim + ' · sáb e dom, ' + HV.fimDeSemana.inicio + ' às ' + HV.fimDeSemana.fim;
+    return '<h1>📅 Agendamento</h1>' +
+      '<div class="grandes">' + (api.pode('salvarVisita') ? botao('🚗 Agendar visita', 'vis-nova', '', 'primaria').replace(' peq', '') : '') + (api.pode('salvarContrato') ? botao('+ Contrato', 'ct-novo', '', 'sec').replace(' peq', '') : '') + '</div>' +
+      '<p class="muted">Horários de visita: ' + e(h) + '. Você marca aqui; a confirmação ao cliente é pelo WhatsApp, tocada por você.</p>' + (CT.erro ? '<p class="muted">Sem internet: mostrando a última cópia.</p>' : '') +
+      '<section id="proximasVisitas"><h2>🗓 Próximas visitas (' + prox.length + ')</h2>' + lista(prox, function (v) {
+        var c = (D.clientes || []).filter(function (k) { return k.nome === v.cliente; })[0], hora = V.horaVisita(v);
+        return card(e(V.dataBR(v.data)) + (hora ? ' · ' + e(hora) : '') + ' · ' + e(v.cliente), e(v.id) + (v.contrato ? ' · ' + e(v.contrato) : '') + (v.os ? ' · ' + e(v.os) : ''),
+          (v.atrasada ? tag('atrasada', 'vencido') : v.data === D.hoje ? tag('hoje', 'alta') : '') + planoDe(v) + tag(v.status, v.status === 'Em andamento' ? 'azul' : 'cinza'),
+          (v.status === 'Agendada' && api.pode('iniciarVisita') ? botao('▶️ Iniciar', 'vis-ini', v.id, '') : '') + (v.status === 'Em andamento' && api.pode('encerrarVisita') ? botao('⏹ Encerrar', 'vis-fim', v.id, '') : '') +
+          botoesMsgVisita(v) + (c ? botao('📇 Ficha', 'cli-ficha', c._row) : ''), ' data-agenda-visita="' + e(v.id) + '"');
+      }, 'Nenhuma visita marcada. Toque em “Agendar visita”.') + '</section>' +
+      listaQuemAssinou() +
+      '<p class="muted"><a href="#mais/visitas">Histórico completo de visitas e planos ›</a></p>';
+  }
+  TELAS.agenda = telaAgenda; TELAS.leads = telaLeads;
+  PRECISA['ct-visita'] = 'salvarVisita';
+  ACOES['ct-visita'] = function (id) { var k = ((CT && CT.contratos) || []).filter(function (x) { return x.id === id; })[0]; if (!k) return aviso('Contrato não encontrado.'); abrirMarcarVisita({ cliente: k.cliente, contrato: k.id }); };
   function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
   // v0.8.2+/0.8.3: marcar visita + msgs §9 (Remarcar cliente/Pedro).
   function precoVisitaCfg() { return (CFG && CFG.PRECO_VISITA_EMPRESA != null) ? CFG.PRECO_VISITA_EMPRESA : 179.9; }
@@ -2105,6 +2171,33 @@
     if ($('fFinMes')) $('fFinMes').onchange = function () { FINM.mes = this.value || ''; render(); };
   }
 
+  // ---------- v0.8.8: 1º contato em segundo plano (UI otimista, sem iniciar() no toque) ----------
+  var CONTATO_FUNDO = { pendente: 0, sync: false };
+  function atualizarCardOp(o) {
+    var st = document.querySelector('[data-op-st="' + o._row + '"]'); if (st) st.innerHTML = tag(o.status);
+    var u = document.querySelector('[data-op-ult="' + o._row + '"]'), h = document.querySelector('[data-op-hist="' + o._row + '"]');
+    if (u) { var tmp = document.createElement('div'); tmp.innerHTML = blocoContatoOp(o); u.replaceWith(tmp.firstChild); if (h) h.replaceWith(tmp.firstChild); }
+  }
+  function registrarContatoOpFundo(o, canal) {
+    var row = o._row, hoje = D.hoje;
+    V.aplicarContatoOp(o, hoje, canal); // cópia em memória: a tela já mostra Contatada / último contato / histórico
+    setTimeout(function () { atualizarCardOp(o); }, 0); // depois do toque: não mexe no <a> que está abrindo o WhatsApp
+    CONTATO_FUNDO.pendente++;
+    api.escrever('registrarContatoOp', [o.empresa, row, canal], function (cache) { var x = (cache.oportunidades || []).filter(function (y) { return y._row === row; })[0]; if (x) V.aplicarContatoOp(x, hoje, canal); })
+      .then(function (r) { CONTATO_FUNDO.pendente--; CONTATO_FUNDO.sync = !r.enfileirado; faixa(); aviso(r.enfileirado ? r.msg : 'Contato registrado no CRM.'); },
+        function (er) { CONTATO_FUNDO.pendente--; faixa(); aviso('O contato não foi registrado no CRM: ' + er.message); });
+  }
+  /** Ao voltar do WhatsApp: atualiza com o CRM sem tela de carregamento e sem perder a rolagem. */
+  function sincronizarQuieto() {
+    var m = $('modal'); if (m && m.open) { CONTATO_FUNDO.sync = true; return; }
+    return api.carregar().then(function (r) { if (r.dados) { D = r.dados; aplicarPrecosDoCrm(D); } offline = r.offline; faixa();
+      var m2 = $('modal'); if (m2 && m2.open) return; var y = window.scrollY; render(); window.scrollTo(0, y); }, function () {});
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible' || !CONTATO_FUNDO.sync || CONTATO_FUNDO.pendente) return;
+    CONTATO_FUNDO.sync = false; setTimeout(sincronizarQuieto, 400);
+  });
+
   function ligarAcoes(raiz, dentroModal) {
     raiz.querySelectorAll('[data-a]').forEach(function (b) {
       b.onclick = function (ev) {
@@ -2143,12 +2236,15 @@
       var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
       if (a && l) a.href = l; }; }); // só troca o texto; consentimento continua valendo (link some se bloqueada)
     if ($('fWa')) $('fWa').onclick = function () { F.op.wa = !F.op.wa; try { localStorage.setItem(WAF, F.op.wa ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fWa')) $('fWa').focus(); };
-    // v0.5.6: 1º contato (WhatsApp, ligação, e-mail) -> Contatada automaticamente via registrarContatoOp (UI otimista + fila offline). Só se ainda Nova.
+    // v0.5.6: 1º contato (WhatsApp, ligação, e-mail) -> Contatada automaticamente via registrarContatoOp. Só se ainda Nova.
+    // v0.8.8: o link abre NA HORA (sem preventDefault, sem esperar o CRM, sem recarregar a tela). O registro vai em segundo plano.
     c.querySelectorAll('[data-contato-op]').forEach(function (a) { a.addEventListener('click', function () {
       var o = achar('oportunidades', a.dataset.contatoOp), canal = a.dataset.canal || 'WhatsApp';
       if (!V.primeiroContatoOp(o) || !api.pode('registrarContatoOp')) return;
-      escrever('registrarContatoOp', [o.empresa, o._row, canal], function (cache) { var x = cache.oportunidades.filter(function (y) { return y._row === o._row; })[0]; if (x) V.aplicarContatoOp(x, D.hoje, canal); });
+      registrarContatoOpFundo(o, canal);
     }); });
+    c.querySelectorAll('[data-chip-ct]').forEach(function (b) { b.onclick = function () { F.ct = b.dataset.chipCt; render(); var n = document.querySelector('[data-chip-ct="' + F.ct + '"]'); if (n) n.focus(); }; });
+    c.querySelectorAll('[data-contato]').forEach(function (b) { b.onclick = function () { F.op.contato = b.dataset.contato; render(); var n = document.querySelector('[data-contato="' + F.op.contato + '"]'); if (n) n.focus(); }; });
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };
     if ($('bSair')) $('bSair').onclick = function () { perguntar('Sair deste aparelho? Vai precisar digitar a senha (ou a chave) de novo.', { titulo: 'Sair', sim: 'Sair', perigo: true }).then(function (ok) { if (ok) { api.esquecerToken(); telaChave(); } }); };
@@ -2166,6 +2262,6 @@
     // Primeiro uso do demo pode ter baixado o script antes do SW assumir a página.
     if (demo) navigator.serviceWorker.ready.then(function (r) { if (r.active) r.active.postMessage('guardar-demonstracao'); });
   }).catch(function () {});
-  window.ProFixApp = { api: api, iniciar: iniciar, ajustes: ajustes };
+  window.ProFixApp = { api: api, iniciar: iniciar, ajustes: ajustes, estat: ESTAT };
   iniciar();
 })();

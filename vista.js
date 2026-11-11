@@ -17,9 +17,32 @@
   V.podeWaCliente = function (c) { var n = c && c.consent === 'Sim' && !/^s/i.test(String(c.naoContatar || '').trim()) && V.numeroWa(c.whatsapp); return !!n && n.length === 13 && n.charAt(4) === '9'; };
   V.MODELO_OP = { 'Nova': 'Empresa – Primeiro contato', 'Contatada': 'Empresa – Lembrete único (3 dias)', 'Sem resposta': 'Empresa – Lembrete único (3 dias)',
     'Virou lead': 'Empresa – Respondeu com interesse', 'Descartada': 'Empresa – Agora não' };
+  // v0.8.8: texto OFICIAL do 1º contato (Atendimento ProFix, 11/11/2026). Vale no App mesmo se a planilha ainda tiver o modelo antigo.
+  V.NOME_PRIMEIRO_CONTATO = 'Empresa – Primeiro contato';
+  V.SITE_OFICIAL = 'https://profixcomputadores.github.io/';
+  V.TEXTO_PRIMEIRO_CONTATO = 'Olá! Tudo bem?\n\n' +
+    'Me chamo Pedro, sou responsável pela ProFix Computadores. Oferecemos suporte técnico e manutenção preventiva em TI para empresas em Sorocaba, como a {empresa} ({segmento}), para que o escritório de vocês trabalhe com mais velocidade e menos interrupções por falhas ou travamentos nos equipamentos.\n\n' +
+    'Deixo abaixo o link do nosso site oficial para consulta rápida das nossas soluções:\n🌐 ' + 'https://profixcomputadores.github.io/' + '\n\n' +
+    'Gostaria de agendar uma breve ligação de 5 a 10 minutos esta semana para entender a estrutura de TI de vocês e apresentar como podemos otimizar o desempenho da sua equipe. Qual o melhor dia e horário para conversarmos?\n\n' +
+    'Se preferir não receber mensagens, é só me avisar.';
+  /** Ramo/segmento da empresa (campo existente o.segmento; aceita ramo/setor se vier). '' se vazio ou genérico ("Outro"). */
+  V.ramoOp = function (o) { var r = String((o && (o.segmento || o.ramo || o.setor)) || '').trim(); return /^(outro|outros|-|—|n\/?a)$/i.test(r) ? '' : r; };
   V.preencher = function (texto, o) {
-    var nome = String(o.contato || o.responsavel || o.nome || o.empresa || '').trim();
-    return String(texto || '').replace(/\{empresa\}/g, o.empresa || nome).replace(/\{contato\}/g, o.responsavel || 'tudo bem').replace(/\{primeiro_nome\}/g, nome.split(' ')[0]).replace(/\{equipamento\}/g, o.equipamento || 'equipamento').replace(/\{os\}/g, o.num || '');
+    o = o || {};
+    var nome = String(o.contato || o.responsavel || o.nome || o.empresa || '').trim(), ramo = V.ramoOp(o);
+    var t = String(texto || '');
+    // v0.8.8: {segmento}/{ramo} vazio some sem deixar "()" nem "no ramo de" sobrando; onde precisa de substantivo, vira "empresas".
+    if (!ramo) t = t.replace(/\s*\(\s*\{(segmento|ramo)\}\s*\)/g, '').replace(/,?\s*(no|do) (ramo|segmento) (de |da |do )?\{(segmento|ramo)\}/g, '');
+    return t.replace(/\{empresa\}/g, o.empresa || nome).replace(/\{contato\}/g, o.responsavel || 'tudo bem').replace(/\{primeiro_nome\}/g, nome.split(' ')[0])
+      .replace(/\{segmento\}|\{ramo\}/g, ramo || 'empresas')
+      .replace(/\{equipamento\}/g, o.equipamento || 'equipamento').replace(/\{os\}/g, o.num || '');
+  };
+  /** Modelos do CRM com o 1º contato oficial do App (substitui o texto antigo da planilha ou entra na lista se faltar). */
+  V.modelosOp = function (modelos) {
+    var l = (modelos || []).slice(), achou = false;
+    l = l.map(function (m) { if (m && V.normModelo(m.modelo) === V.normModelo(V.NOME_PRIMEIRO_CONTATO)) { achou = true; return Object.assign({}, m, { modelo: V.NOME_PRIMEIRO_CONTATO, texto: V.TEXTO_PRIMEIRO_CONTATO, oficialApp: true }); } return m; });
+    if (!achou) l.unshift({ modelo: V.NOME_PRIMEIRO_CONTATO, texto: V.TEXTO_PRIMEIRO_CONTATO, quando: 'Oportunidade Nova', oficialApp: true });
+    return l;
   };
   // Nome de modelo normalizado: travessões/hífens iguais, espaços colapsados, sem caixa e sem acento.
   V.normModelo = function (s) { return V.norm(String(s || '').replace(/[\u2010-\u2015\u2212-]/g, '-')).replace(/\s*-\s*/g, ' - ').replace(/\s+/g, ' ').trim(); };
@@ -27,17 +50,20 @@
   /** Nome do modelo da oportunidade: modeloSugerido do servidor (API v19) se existir na lista; senão a regra por etapa. */
   V.nomeModeloOp = function (modelos, o) {
     if (V.bloqueadaOp(o)) return '';
-    var sug = o && o.modeloSugerido ? V.acharModelo(modelos, o.modeloSugerido) : null;
+    // v0.8.8: 1º contato (status Nova) usa sempre o texto oficial do App; os modelos por segmento continuam na lista para escolher.
+    if (V.primeiroContatoOp(o)) return V.NOME_PRIMEIRO_CONTATO;
+    var ms = V.modelosOp(modelos);
+    var sug = o && o.modeloSugerido ? V.acharModelo(ms, o.modeloSugerido) : null;
     if (sug) return sug.modelo;
     var nome = V.MODELO_OP[o.status || 'Nova'] || V.MODELO_OP.Nova;
-    var m = (modelos || []).filter(function (x) { return x.modelo === nome; })[0];
+    var m = ms.filter(function (x) { return x.modelo === nome; })[0];
     return m ? m.modelo : '';
   };
   /** Texto de um modelo (nome escolhido pelo usuário ou o padrão) preenchido para a oportunidade. Bloqueada → ''. */
   V.modeloOp = function (modelos, o, nomeEscolhido) {
     if (V.bloqueadaOp(o)) return '';
     var nome = nomeEscolhido != null ? nomeEscolhido : V.nomeModeloOp(modelos, o);
-    var m = (modelos || []).filter(function (x) { return x.modelo === nome; })[0];
+    var m = V.modelosOp(modelos).filter(function (x) { return x.modelo === nome; })[0];
     return m ? V.preencher(m.texto, o) : '';
   };
   V.linkWaOp = function (modelos, o, nomeEscolhido) { if (!V.podeWaOp(o)) return null; var t = V.modeloOp(modelos, o, nomeEscolhido); return 'https://wa.me/' + V.numeroWa(o.whatsapp) + (t ? '?text=' + encodeURIComponent(t) : ''); };
@@ -145,6 +171,31 @@
   V.temWaOp = function (o) { return V.podeWaOp(o); };
   /** 1º contato? Só status inicial (Nova/vazio). Status posteriores nunca mudam por toque em contato. */
   V.primeiroContatoOp = function (o) { return !!o && !V.bloqueadaOp(o) && ['', 'Nova', 'Novo', 'Aberta', 'Aberto'].indexOf(String(o.status || '').trim()) >= 0; };
+  // v0.8.8: "Ainda não contactei" × "Já contactei". Nova/vazio sem registro de contato = não contactei; Descartada/Não contatar sem contato ficam fora dos dois.
+  V.SITUACAO_CONTATO = { nao: 'Ainda não contactei', sim: 'Já contactei' };
+  V.contatoOp = function (o) {
+    if (!o) return '';
+    var st = String(o.status || '').trim(), teve = !!(o.ultimoContato || String(o.historico || '').trim());
+    if (['', 'Nova', 'Novo', 'Aberta', 'Aberto'].indexOf(st) >= 0) return teve ? 'sim' : 'nao';
+    if ((st === 'Descartada' || st === 'Não contatar') && !teve) return '';
+    return 'sim';
+  };
+  V.contagemContatoOps = function (lista) { var c = { nao: 0, sim: 0 }; (lista || []).forEach(function (o) { var k = V.contatoOp(o); if (k) c[k]++; }); return c; };
+  /** Linhas do histórico (mais recente primeiro). Cada linha: { data (dd/mm/aaaa ou ISO como veio), canal, texto }. */
+  V.historicoOp = function (o) {
+    return String((o && o.historico) || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+      var m = l.match(/^(\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2})?)?\s*[–—-]\s*(.*)$/);
+      var resto = m ? m[2] : l, canal = (resto.match(/^(WhatsApp|Liga[çc][ãa]o|E-?mail|Telefone|Visita|Instagram|Presencial)/i) || [])[1] || '';
+      return { data: m ? m[1] : '', canal: canal, texto: resto };
+    }).reverse();
+  };
+  /** Último contato: { data ISO/BR, canal } a partir de ultimoContato + histórico (o canal só aparece se o histórico disser). */
+  V.ultimoContatoOp = function (o) {
+    var h = V.historicoOp(o)[0], data = (o && o.ultimoContato) || (h && h.data) || '';
+    if (!data) return null;
+    var canal = (o && o.canalUltimoContato) || (h ? h.canal : '') || '';
+    return { data: data, canal: canal };
+  };
   V.linkTelOp = function (o) { if (V.bloqueadaOp(o)) return null; var d = String(o.telefone || o.whatsapp || '').replace(/[^\d+]/g, ''); return d.replace(/\D/g, '').length >= 8 ? 'tel:' + d : null; };
   V.linkEmailOp = function (o) { if (V.bloqueadaOp(o)) return null; var m = String(o.email || '').trim(); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) ? 'mailto:' + m : null; };
   V.filtrarOps = function (lista, f) {
@@ -155,6 +206,7 @@
       if (f.segmento && o.segmento !== f.segmento) return false;
       if (f.cidade && V.chaveCidade(o.cidade) !== f.cidade) return false;
       if (f.wa && !V.temWaOp(o)) return false;
+      if (f.contato && V.contatoOp(o) !== f.contato) return false;
       if (q && V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' ')).indexOf(q) < 0) return false;
       return true;
     }).sort(function (a, b) {
@@ -436,6 +488,32 @@
   };
   V.contratoAtivoCliente = function (contratos, nome) {
     return (contratos || []).filter(function (k) { return k.cliente === nome && k.status === 'Ativo'; })[0] || null;
+  };
+  // ---- v0.8.8: quem assinou (contratos) e Agendamento ----
+  /** Data inicial do contrato (campo inicio do CRM). '' se o CRM não mandou. */
+  V.inicioContrato = function (k) { var i = k && (k.inicio || k.dataInicio || k.inicioEm); return i ? String(i) : ''; };
+  V.ativoContrato = function (k) { return !!k && (!k.status || k.status === 'Ativo'); };
+  /** filtro: 'ativos' (padrão) | 'outros' | 'todos'. Ativos primeiro; dentro do grupo, início mais recente primeiro (sem data no fim). */
+  V.listarContratos = function (contratos, filtro) {
+    filtro = filtro || 'ativos';
+    return (contratos || []).filter(function (k) { return filtro === 'todos' ? true : filtro === 'outros' ? !V.ativoContrato(k) : V.ativoContrato(k); })
+      .slice().sort(function (a, b) {
+        var aa = V.ativoContrato(a) ? 0 : 1, bb = V.ativoContrato(b) ? 0 : 1; if (aa !== bb) return aa - bb;
+        var ia = String(V.inicioContrato(a)).slice(0, 10), ib = String(V.inicioContrato(b)).slice(0, 10);
+        if (ia !== ib) return !ia ? 1 : !ib ? -1 : ib.localeCompare(ia);
+        return String(a.cliente || '').localeCompare(String(b.cliente || ''), 'pt-BR');
+      });
+  };
+  V.contagemContratos = function (contratos) { var c = { ativos: 0, outros: 0, todos: 0 }; (contratos || []).forEach(function (k) { c.todos++; if (V.ativoContrato(k)) c.ativos++; else c.outros++; }); return c; };
+  /** Visitas em aberto (não concluídas/canceladas), da mais próxima para a mais distante. atrasada = data antes de hoje. */
+  V.proximasVisitas = function (visitas, hoje) {
+    return (visitas || []).filter(function (v) { return v && v.status !== 'Concluída' && v.status !== 'Cancelada'; })
+      .map(function (v) { return Object.assign({}, v, { atrasada: !!(v.data && hoje && v.data < hoje) }); })
+      .sort(function (a, b) { return (String(a.data) + ' ' + V.horaVisita(a)).localeCompare(String(b.data) + ' ' + V.horaVisita(b)); });
+  };
+  /** Próxima visita em aberto de um contrato (pelo id do contrato ou, sem id, pelo nome do cliente). */
+  V.proximaVisitaContrato = function (visitas, k, hoje) {
+    return V.proximasVisitas(visitas, hoje).filter(function (v) { return (v.contrato && v.contrato === k.id) || (!v.contrato && v.cliente === k.cliente); })[0] || null;
   };
   /** PJ = tem contrato OU tipoCli PJ/Empresa OU nome sugere empresa. PF = resto. */
   V.clienteEhEmpresa = function (c) {
