@@ -36,11 +36,11 @@
     var v = numBR(c && c.valor), n = String((c && c.categoria) || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     return itemVazio({ tipo: n === 'peca' ? 'peça' : 'serviço', descricao: txt(c && c.descricao), valor: v != null && v > 0 ? numTxt(v) : '', origem: 'Tabela de preços' + (c && c.id ? ' ' + c.id : '') });
   }
-  /** Item a partir de uma cotação VÁLIDA da OS (custo posto em Sorocaba). Sem cotação válida não se inventa valor nem data. */
+  /** Item a partir de uma cotação VÁLIDA da OS. v0.9.1: o custo posto fica só como referência interna (campo custo, nunca vai para o cliente); o preço de venda o Pedro digita. Sem cotação válida não se inventa valor nem data. */
   function itemDaCotacao(c, hoje) {
     if (!cotacaoUsavel(c, hoje)) return null;
     var nome = txt(c.peca || c.componente) + (txt(c.marca || c.marcaModelo) ? ' ' + txt(c.marca || c.marcaModelo) : '');
-    return itemVazio({ tipo: 'peça', descricao: nome, qtd: String(Number(c.qtd) > 0 ? c.qtd : 1), valor: numTxt(c.custoPosto), origem: 'Cotação ' + txt(c.id), validoAte: String(c.validade).slice(0, 10) });
+    return itemVazio({ tipo: 'peça', descricao: nome, qtd: String(Number(c.qtd) > 0 ? c.qtd : 1), valor: '', custo: numTxt(c.custoPosto), origem: 'Cotação ' + txt(c.id), validoAte: String(c.validade).slice(0, 10) });
   }
   function cotacaoUsavel(c, hoje) {
     return !!c && c.status !== 'Descartado' && c.vencida !== true && /^\d{4}-\d{2}-\d{2}/.test(String(c.validade || '')) && String(c.validade).slice(0, 10) >= String(hoje || '') && Number(c.custoPosto) > 0;

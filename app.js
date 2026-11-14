@@ -565,7 +565,7 @@
           '<button type="button" class="btn sec peq" data-orc-del="' + i + '" aria-label="Remover item ' + (i + 1) + '">✕</button></div>' +
           '<div class="orc-l2"><label>Qtd<input data-f="qtd" inputmode="decimal" value="' + e(it.qtd) + '"></label><label>Valor R$<input data-f="valor" inputmode="decimal" placeholder="' + (it.tipo === 'peça' ? 'digite' : '0,00') + '" value="' + e(it.valor) + '"></label>' +
           '<label>Desconto<span class="orc-par"><input data-f="desc" inputmode="decimal" placeholder="0" value="' + e(it.desc) + '"><select data-f="descModo" aria-label="Desconto do item em % ou R$"><option' + (it.descModo !== 'R$' ? ' selected' : '') + '>%</option><option' + (it.descModo === 'R$' ? ' selected' : '') + '>R$</option></select></span></label>' +
-          '<b class="orc-lt" data-lt="' + i + '">—</b></div>' + (it.validoAte ? '<div class="muted">' + e(it.origem || 'Cotação') + ' · O valor da peça vale até ' + V.dataBR(it.validoAte) + '</div>' : it.origem ? '<div class="muted">' + e(it.origem) + '</div>' : '') +
+          '<b class="orc-lt" data-lt="' + i + '">—</b></div>' + (it.validoAte ? '<div class="muted">' + e(it.origem || 'Cotação') + ' · O valor da peça vale até ' + V.dataBR(it.validoAte) + (it.custo ? ' · <b>custo posto R$ ' + e(it.custo) + ' (só você vê): digite o preço de venda</b>' : '') + '</div>' : it.origem ? '<div class="muted">' + e(it.origem) + '</div>' : '') +
           '<div class="erro" data-le="' + i + '"></div></div>';
       }).join('');
       totais();
@@ -573,7 +573,7 @@
     function totais() {
       Q.total = { modo: $('orcDescTotalModo').value, valor: $('orcDescTotal').value };
       var k = ORC.calcular(Q.itens, Q.total);
-      k.linhas.forEach(function (l) { var b = f.querySelector('[data-lt="' + l.i + '"]'), er = f.querySelector('[data-le="' + l.i + '"]'); if (b) b.textContent = l.vazia || l.erro ? '—' : ORC.brl(l.liquido); if (er) er.textContent = l.erro && !(l.erro === 'Informe o valor (R$).' && Q.itens[l.i].valor === '') ? l.erro : ''; });
+      k.linhas.forEach(function (l) { var b = f.querySelector('[data-lt="' + l.i + '"]'), er = f.querySelector('[data-le="' + l.i + '"]'); if (b) b.textContent = l.vazia || l.erro ? '—' : ORC.brl(l.liquido); if (er) { var cu = ORC.numBR(Q.itens[l.i].custo), abaixo = !l.vazia && !l.erro && cu > 0 && l.valor != null && l.valor <= cu; er.textContent = l.erro && !(l.erro === 'Informe o valor (R$).' && Q.itens[l.i].valor === '') ? l.erro : abaixo ? 'Atenção: o preço de venda está igual ou abaixo do custo posto (R$ ' + Q.itens[l.i].custo + ').' : ''; } });
       var et = k.erros.filter(function (x) { return x.i === 'total'; })[0];
       $('orcResumo').innerHTML = '<span class="muted">' + k.validos.length + ' item(ns) · subtotal ' + ORC.brl(k.bruto) + (k.descontos ? ' · descontos −' + ORC.brl(k.descontos).replace('−', '') : '') + '</span>' +
         '<b class="osm-total">Total: <span id="orcTotal">' + ORC.brl(k.total) + '</span></b>' + (et ? '<span class="erro" id="orcErroTotal">' + e(et.msg) + '</span>' : '');
