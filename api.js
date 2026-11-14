@@ -19,7 +19,7 @@
     'listarClientesResumo', 'listarLixeira',
     'listarFornecedores', 'listarCotacoes', 'listarInsumos']; // v0.8.6/0.8.7: Módulo 9 no CRM (API @113/@115). v0.7.1: API @43. v0.7.0: diferenciais (crm-v3 API @41). v0.6.0: OS com vários equipamentos (crm-v3 API v32)
   var ESCRITA = ['salvarCliente', 'moverEtapa', 'registrarInteracao', 'salvarOS', 'mudarStatusOS', 'salvarOrcamento', 'decidirOrcamento',
-    'lancarRecebimento', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
+    'lancarRecebimento', 'salvarValidadeOS', 'salvarPeca', 'salvarLancamento', 'mudarStatusTarefa', 'salvarOportunidade', 'registrarContatoOp', 'virarLead',
     'salvarRevenda', 'venderRevenda', 'salvarServicoCatalogo', 'salvarModelo', 'registrarFollowup',
     'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente',
     'salvarOSMulti', 'salvarCatalogoOS', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS',

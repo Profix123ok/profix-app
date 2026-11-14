@@ -125,7 +125,7 @@
   var PRECISA = { 'op-editar': 'salvarOportunidade', 'op-lead': 'virarLead', 'os-status': 'mudarStatusOS', 'os-editar': 'salvarOS', 'os-orc': 'salvarOrcamento', 'os-decidir': 'decidirOrcamento',
     'os-receber': 'lancarRecebimento', 'os-peca': 'salvarPeca', 'cli-editar': 'salvarCliente', 'cli-novo': 'salvarCliente', 'cli-inter': 'registrarInteracao', 'cli-etapa': 'moverEtapa',
     'rv-editar': 'salvarRevenda', 'rv-novo': 'salvarRevenda', 'rv-vender': 'venderRevenda', 'fin-novo': 'salvarLancamento', 'cat-editar': 'salvarServicoCatalogo', 'cat-novo': 'salvarServicoCatalogo',
-    'mod-editar': 'salvarModelo', 'mod-novo': 'salvarModelo', 'tar-feita': 'mudarStatusTarefa', 'os-nova': 'salvarOS' };
+    'mod-editar': 'salvarModelo', 'mod-novo': 'salvarModelo', 'tar-feita': 'mudarStatusTarefa', 'os-nova': 'salvarOS', 'orc-novo': 'salvarOrcamento' };
   function bloq(a) { return PRECISA[a] && !api.pode(PRECISA[a]); }
   function waOp(o) {
     var l = V.linkWaOp(D.modelos, o); if (!l) return '';
@@ -275,7 +275,7 @@
     servicos: function () {
       var q = V.norm(F.os.q), l = (D.os || []).filter(function (o) { return (!F.os.status || o.status === F.os.status) && (!q || V.norm([o.num, o.cliente, o.equipamento, o.defeito].join(' ')).indexOf(q) >= 0); })
         .sort(function (a, b) { return String(b.num) < String(a.num) ? -1 : 1; });
-      return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', 'primaria') + '</div>' +
+      return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', 'primaria') + (api.pode('salvarOrcamento') ? botao('⚡ Orçamento rápido', 'orc-novo', '', 'primaria') : '') + '</div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
         lista(l, function (o) { var s = V.saldoOS(D, o), b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.');
@@ -369,10 +369,16 @@
       else inp = '<input id="' + id + '" type="' + (c.t === 'number' ? 'text" inputmode="decimal' : c.t || 'text') + '" value="' + e(v) + '"' + (c.req ? ' required' : '') + '>';
       return '<div><label for="' + id + '">' + c.r + (c.req ? ' *' : '') + '</label>' + inp + (c.ajuda ? '<div class="muted">' + c.ajuda + '</div>' : '') + '</div>';
     }).join('') + '<p class="erro" id="fErro"></p><div class="acoes"><button class="btn" value="ok" id="fSalvar">Salvar</button><button class="btn sec" value="cancelar" formnovalidate>Cancelar</button></div></form>';
+    // v0.9.0: campos de dinheiro aceitam "1.234,56" / "157,51" (um só leitor: V.dinheiro) e chegam ao servidor como número em texto ("1234.56").
+    $('fGen').addEventListener('submit', function (ev) {
+      if (ev.submitter && ev.submitter.value === 'cancelar') return;
+      var ruim = campos.filter(function (c) { var el = $('c_' + c.k); return V.campoDinheiro(c) && el && el.value.trim() !== '' && isNaN(V.dinheiro(el.value)); })[0];
+      if (ruim) { ev.preventDefault(); ev.stopImmediatePropagation(); $('fErro').textContent = 'Valor inválido em “' + String(ruim.r).replace(/<[^>]*>/g, '') + '”. Ex.: 1.234,56'; }
+    });
     return new Promise(function (ok) {
       m.onclose = function () {
         if (m.returnValue !== 'ok') return ok(null);
-        var r = {}; campos.forEach(function (c) { var el = $('c_' + c.k); r[c.k] = c.t === 'checkbox' ? el.checked : el.value.trim(); }); ok(r);
+        var r = {}; campos.forEach(function (c) { var el = $('c_' + c.k); r[c.k] = c.t === 'checkbox' ? el.checked : el.value.trim(); if (V.campoDinheiro(c) && r[c.k] !== '') { var n = V.dinheiro(r[c.k]); if (!isNaN(n)) r[c.k] = String(n); } }); ok(r);
       };
       m.returnValue = ''; m.showModal();
     });
@@ -483,8 +489,8 @@
       if (clientePendente) { $('fErro').textContent = 'Sincronize o cadastro pendente antes de vincular a OS.'; return; }
       var v = valores(), cli = achar('clientes', v.cliente);
       if (!cli || !v.equipamento) { $('fErro').textContent = 'Selecione o cliente e informe o equipamento.'; return; }
-      if (v.valor !== '' && (!isFinite(Number(v.valor.replace(',', '.'))) || Number(v.valor.replace(',', '.')) < 0)) { $('fErro').textContent = 'Informe um valor válido, igual ou maior que zero.'; return; }
-      if (v.valor !== '') v.valor = Number(v.valor.replace(',', '.'));
+      if (v.valor !== '' && isNaN(V.dinheiro(v.valor))) { $('fErro').textContent = 'Informe um valor válido, igual ou maior que zero (ex.: 1.234,56).'; return; }
+      if (v.valor !== '') v.valor = V.dinheiro(v.valor);
       v.cliente = cli.nome; var d = Object.assign({}, v, { _rowCliente: cli._row }); if (row) { d._row = o._row; d.num = o.num; }
       travar(true);
       try { var r = await api.escrever('salvarOS', [d], row ? aplicar('os', row, v) : null); m.close(''); aviso(r.msg); await iniciar(); }
@@ -492,39 +498,156 @@
       finally { if (f.isConnected) travar(false); }
     };
   }
-  function orcamentoRapido(row) {
-    var o = achar('os', row), c = V.clienteDaOS(D, o) || {}, dias = Dif.padroes(D).validadeDias || 7, busy = false;
-    var campos = [{ k: 'diagnostico', r: 'Diagnóstico / laudo', t: 'textarea' }, { k: 'itensOrc', r: 'Itens do orçamento', t: 'textarea' }, { k: 'orcamento', r: 'Valor do orçamento (R$)', t: 'number', req: true },
-      { k: 'validade', r: 'Válido até', t: 'date', ajuda: 'Em branco = ' + dias + ' dias (padrão do servidor).' }, { k: 'previsao', r: 'Previsão de entrega', t: 'date' }];
-    var regra = V.botaoWaCliente(c, 'os', 'Orçamento');
-    formulario('Orçamento da ' + e(o.num), campos, o, '<p class="muted">Só abre wa.me com o texto pronto; quem envia é você.</p>' + (regra && regra.aviso ? '<p class="alerta">Sem consentimento LGPD: só mensagem sobre a OS.</p>' : ''));
-    var m = $('modal'), f = $('fGen');
-    if (regra) {
-      var b = document.createElement('button'); b.className = 'btn wa'; b.id = 'fSalvarWa'; b.value = 'ok'; b.textContent = 'Salvar e abrir WhatsApp'; f.querySelector('.acoes').prepend(b);
-      $('fSalvar').classList.add('sec');
-    } else f.querySelector('h2').insertAdjacentHTML('afterend', '<p class="muted">' + (Dif.naoContatar(c) ? 'Cliente marcado como Não contatar.' : 'WhatsApp inválido: salve o orçamento e combine por outro canal.') + '</p>');
+  // v0.9.0: ORÇAMENTO RÁPIDO numa tela só. Itens da tabela oficial ou livres, peça de cotação válida, desconto por item e no total (R$ ou %),
+  // total na hora (nunca negativo). Grava com salvarOrcamento (campos que o CRM já tem: itensOrc em texto legível + orcamento = total).
+  // Sem OS (cliente novo/sem OS): cria a OS com salvarOS e grava o orçamento nela (precisa de internet). Nada é enviado sozinho.
+  var ORC = window.ProFixOrc, ORC_RASC = 'profix.orcRascunho.';
+  function osVariosEquip(o) { return !!o && /^\d+ equipamentos:/.test(String(o.equipamento || '')); }
+  function catalogoOrc() { carregarCatalogo(); return (CAT && CAT.length ? CAT : O.CATALOGO_DEMO).filter(function (c) { return c.ativo !== 'Não'; }); }
+  function cotacoesOrc(num) {
+    if (!num) return [];
+    try { return m9Dados().cotacoes.filter(function (c) { return c.os === num && ORC.cotacaoUsavel(c, D.hoje); }).sort(function (a, b) { return a.custoPosto - b.custoPosto; }); } catch (x) { return []; }
+  }
+  function orcamentoRapido(row, pre) {
+    var o = row ? achar('os', row) : null;
+    if (o && osVariosEquip(o) && api.pode('lerOSMulti')) {
+      return perguntar('A ' + o.num + ' tem vários equipamentos: o orçamento dela é feito na tela 💻 Vários equipamentos (itens por máquina). Abrir lá?', { titulo: 'OS com vários equipamentos', sim: 'Abrir' }).then(function (ok) { if (ok) ACOES['osm-abrir'](row); });
+    }
+    var c = o ? (V.clienteDaOS(D, o) || {}) : null, dias = Dif.padroes(D).validadeDias || 7, busy = false, chave = ORC_RASC + (o ? o.num : 'novo');
+    var Q = null, rasc = lerJSON(chave, null);
+    if (rasc && rasc.itens) { Q = rasc; } else if (o) { var l = ORC.lerItensOrc(o.itensOrc, o.orcamento); Q = { itens: l.itens, total: l.total, diagnostico: o.diagnostico || '', previsao: o.previsao || '', validade: '' }; }
+    else Q = { itens: [], total: { modo: '%', valor: '' }, diagnostico: '', previsao: '', validade: '', cliente: pre && pre.cliente ? String(pre.cliente) : '', equipamento: '' };
+    if (!Q.itens.length) Q.itens.push(ORC.itemVazio());
+    var cots = cotacoesOrc(o && o.num), cat = catalogoOrc();
+    function htmlCots() {
+      return cots.length ? '<span class="muted">Peças com cotação válida nesta OS (custo posto em Sorocaba):</span>' + cots.map(function (k, i) { return '<button type="button" class="osm-cat" data-orc-cot="' + i + '"><span>🔩 ' + e(k.peca || k.componente || '') + ' <span class="muted">vale até ' + V.dataBR(k.validade) + '</span></span><b>' + V.brl(k.custoPosto) + '</b></button>'; }).join('')
+        : '<p class="muted" id="orcSemCot">Sem cotação válida nesta OS: o valor da peça fica para você digitar.</p>';
+    }
+    var regra = c ? V.botaoWaCliente(c, 'os', 'Orçamento') : true;
+    var dt = function (v) { return /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10) : ''; };
+    var m = $('modal');
+    m.innerHTML = '<form method="dialog" id="fGen" class="orc-rap"><h2 style="margin:0">⚡ Orçamento' + (o ? ' da ' + e(o.num) + ' · ' + e(o.cliente) : ' rápido') + '</h2>' +
+      (rasc && rasc.itens ? '<p class="muted" id="orcRascAviso">Rascunho recuperado (ainda não salvo). <button type="button" class="btn sec peq" id="orcDescartar">Descartar rascunho</button></p>' : '') +
+      (o ? '<p class="muted">' + e(o.equipamento || '') + '</p>' :
+        '<div><label for="orcBuscaCli">Cliente (buscar por nome ou WhatsApp) *</label><input id="orcBuscaCli" type="search" autocomplete="off"><select id="orcCliente" aria-label="Cliente"></select></div>' +
+        '<div><label for="orcEquip">Equipamento *</label><input id="orcEquip" autocomplete="off" placeholder="Ex.: Notebook Dell Inspiron" value="' + e(Q.equipamento || '') + '"></div>') +
+      '<div><label for="c_diagnostico">Diagnóstico / laudo</label><textarea id="c_diagnostico" rows="2">' + e(Q.diagnostico || '') + '</textarea></div>' +
+      '<div><label for="orcBusca">Adicionar da tabela de preços</label><input id="orcBusca" type="search" autocomplete="off" placeholder="Ex.: formatação, SSD, limpeza"><div class="osm-res" id="orcRes"></div></div>' +
+      '<div class="chips" id="orcAdd"><button type="button" class="chip" id="orcLivre">+ Item livre</button><button type="button" class="chip" id="orcPeca">+ Peça</button></div>' +
+      (o ? '<div id="orcCotsBox">' + htmlCots() + '</div>' : '') +
+      '<div id="orcItens"></div>' +
+      '<div class="orc-desc-total"><label for="orcDescTotal">Desconto no total</label><div class="orc-par"><input id="orcDescTotal" inputmode="decimal" placeholder="0" value="' + e(Q.total.valor || '') + '"><select id="orcDescTotalModo" aria-label="Desconto no total em % ou R$"><option' + (Q.total.modo === '%' ? ' selected' : '') + '>%</option><option' + (Q.total.modo === 'R$' ? ' selected' : '') + '>R$</option></select></div>' +
+      '<div class="chips">' + O.ATALHOS.filter(function (a) { return a.tipo === 'desconto'; }).map(function (a) { return '<button type="button" class="chip" data-orc-atalho="' + a.valorUnit + '">' + e(a.rot) + '</button>'; }).join('') + '</div></div>' +
+      '<div class="osm-bar" id="orcResumo"></div>' +
+      '<div class="lin"><div><label for="c_validade">Válido até</label><input id="c_validade" type="date" value="' + e(dt(Q.validade)) + '"><div class="muted">Em branco = ' + dias + ' dias (padrão do servidor).</div></div><div><label for="c_previsao">Previsão de entrega</label><input id="c_previsao" type="date" value="' + e(dt(Q.previsao)) + '"></div></div>' +
+      '<p class="alerta" id="orcAvisoPeca" hidden></p>' +
+      (c && !regra ? '<p class="muted">' + (Dif.naoContatar(c) ? 'Cliente marcado como Não contatar.' : 'WhatsApp inválido: salve o orçamento e combine por outro canal.') + '</p>' : '') +
+      (c && regra && regra.aviso ? '<p class="alerta">Sem consentimento LGPD: só mensagem sobre a OS.</p>' : '') +
+      '<p class="erro" id="fErro"></p><div class="acoes orc-acoes">' + (regra ? '<button class="btn wa" value="ok" id="fSalvarWa">Salvar e abrir WhatsApp</button>' : '') +
+      (api.pode('linkClienteOS') ? '<button class="btn sec" value="ok" id="orcSalvarLink">Salvar e gerar link</button>' : '') +
+      '<button class="btn' + (regra ? ' sec' : '') + '" value="ok" id="fSalvar">Salvar</button><button class="btn sec" value="cancelar" formnovalidate>Cancelar</button></div>' +
+      '<p class="muted">Só abre o WhatsApp com o texto pronto: quem envia é você.</p></form>';
+    var f = $('fGen'), sel = null;
+    if (!o) {
+      var opcoesCli = function () {
+        var lista = V.buscarClientesOS(D.clientes, $('orcBuscaCli').value), esc = (D.clientes || []).find(function (k) { return String(k._row) === String(sel) || (!sel && Q.cliente && k.nome === Q.cliente); });
+        if (esc) { sel = esc._row; if (!lista.some(function (k) { return k._row === esc._row; })) lista.unshift(esc); }
+        $('orcCliente').innerHTML = '<option value="">Escolha o cliente</option>' + lista.map(function (k) { return '<option value="' + k._row + '"' + (esc && k._row === esc._row ? ' selected' : '') + '>' + e(k.nome) + (k.whatsapp ? ' · ' + e(k.whatsapp) : '') + '</option>'; }).join('');
+      };
+      opcoesCli(); $('orcBuscaCli').oninput = opcoesCli; $('orcCliente').onchange = function () { sel = this.value; Q.cliente = (achar('clientes', sel) || {}).nome || ''; guardar(); };
+      $('orcEquip').oninput = function () { Q.equipamento = this.value; guardar(); };
+    }
+    function guardar() { Q.diagnostico = $('c_diagnostico').value; Q.validade = $('c_validade').value; Q.previsao = $('c_previsao').value; try { localStorage.setItem(chave, JSON.stringify(Q)); } catch (x) { /* cota */ } }
+    function limparRasc() { try { localStorage.removeItem(chave); } catch (x) { /* ok */ } }
+    function desenharItens() {
+      $('orcItens').innerHTML = Q.itens.map(function (it, i) {
+        return '<div class="orc-it" data-i="' + i + '"><div class="orc-l1"><input data-f="descricao" aria-label="Descrição do item ' + (i + 1) + '" placeholder="' + (it.tipo === 'peça' ? 'Peça (ex.: SSD 480 GB)' : 'Descrição do serviço') + '" value="' + e(it.descricao) + '">' +
+          '<button type="button" class="btn sec peq" data-orc-del="' + i + '" aria-label="Remover item ' + (i + 1) + '">✕</button></div>' +
+          '<div class="orc-l2"><label>Qtd<input data-f="qtd" inputmode="decimal" value="' + e(it.qtd) + '"></label><label>Valor R$<input data-f="valor" inputmode="decimal" placeholder="' + (it.tipo === 'peça' ? 'digite' : '0,00') + '" value="' + e(it.valor) + '"></label>' +
+          '<label>Desconto<span class="orc-par"><input data-f="desc" inputmode="decimal" placeholder="0" value="' + e(it.desc) + '"><select data-f="descModo" aria-label="Desconto do item em % ou R$"><option' + (it.descModo !== 'R$' ? ' selected' : '') + '>%</option><option' + (it.descModo === 'R$' ? ' selected' : '') + '>R$</option></select></span></label>' +
+          '<b class="orc-lt" data-lt="' + i + '">—</b></div>' + (it.validoAte ? '<div class="muted">' + e(it.origem || 'Cotação') + ' · O valor da peça vale até ' + V.dataBR(it.validoAte) + '</div>' : it.origem ? '<div class="muted">' + e(it.origem) + '</div>' : '') +
+          '<div class="erro" data-le="' + i + '"></div></div>';
+      }).join('');
+      totais();
+    }
+    function totais() {
+      Q.total = { modo: $('orcDescTotalModo').value, valor: $('orcDescTotal').value };
+      var k = ORC.calcular(Q.itens, Q.total);
+      k.linhas.forEach(function (l) { var b = f.querySelector('[data-lt="' + l.i + '"]'), er = f.querySelector('[data-le="' + l.i + '"]'); if (b) b.textContent = l.vazia || l.erro ? '—' : ORC.brl(l.liquido); if (er) er.textContent = l.erro && !(l.erro === 'Informe o valor (R$).' && Q.itens[l.i].valor === '') ? l.erro : ''; });
+      var et = k.erros.filter(function (x) { return x.i === 'total'; })[0];
+      $('orcResumo').innerHTML = '<span class="muted">' + k.validos.length + ' item(ns) · subtotal ' + ORC.brl(k.bruto) + (k.descontos ? ' · descontos −' + ORC.brl(k.descontos).replace('−', '') : '') + '</span>' +
+        '<b class="osm-total">Total: <span id="orcTotal">' + ORC.brl(k.total) + '</span></b>' + (et ? '<span class="erro" id="orcErroTotal">' + e(et.msg) + '</span>' : '');
+      var vp = ORC.pecasVencendoAntes(k, $('c_validade').value || V.somaDias(D.hoje, dias));
+      $('orcAvisoPeca').hidden = !vp.length; $('orcAvisoPeca').textContent = vp.length ? 'Atenção: o valor da peça (' + vp.map(function (l) { return l.descricao + ' até ' + V.dataBR(l.validoAte); }).join('; ') + ') vence antes da validade do orçamento.' : '';
+      return k;
+    }
+    function addItem(it) { Q.itens = Q.itens.filter(function (x) { return String(x.descricao || '').trim() || String(x.valor || '').trim(); }); Q.itens.push(it); desenharItens(); guardar(); var ls = f.querySelectorAll('.orc-it'), u = ls[ls.length - 1]; if (u) { var alvo = !it.descricao ? u.querySelector('[data-f=descricao]') : it.valor === '' ? u.querySelector('[data-f=valor]') : null; if (alvo) alvo.focus(); } }
+    function resultados() {
+      var q = $('orcBusca').value.trim(), r = q ? O.buscarCatalogo(cat, q, 8) : cat.slice(0, 6);
+      $('orcRes').innerHTML = r.map(function (k) { var v = ORC.numBR(k.valor); return '<button type="button" class="osm-cat" data-orc-cat="' + cat.indexOf(k) + '"><span>' + e(k.descricao) + '</span><b>' + (v > 0 ? V.brl(v) : 'Sob orçamento') + '</b></button>'; }).join('') +
+        (q ? '<button type="button" class="osm-cat" data-orc-livre-q="1"><span>+ Lançar “' + e(q) + '” com valor livre</span></button>' : '');
+    }
+    desenharItens(); resultados();
+    $('orcBusca').oninput = resultados;
+    f.addEventListener('input', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) { Q.itens[Number(d.dataset.i)][t.dataset.f] = t.value; } $('fErro').textContent = ''; totais(); guardar(); });
+    f.addEventListener('change', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) Q.itens[Number(d.dataset.i)][t.dataset.f] = t.value; totais(); guardar(); });
+    f.addEventListener('click', function (ev) {
+      var b = ev.target.closest('button'); if (!b || b.type === 'submit') return;
+      if (b.dataset.orcCat !== undefined) { addItem(ORC.itemDoCatalogo(cat[Number(b.dataset.orcCat)])); $('orcBusca').value = ''; resultados(); }
+      else if (b.dataset.orcLivreQ) { addItem(ORC.itemVazio({ descricao: $('orcBusca').value.trim() })); $('orcBusca').value = ''; resultados(); }
+      else if (b.dataset.orcCot !== undefined) { var it = ORC.itemDaCotacao(cots[Number(b.dataset.orcCot)], D.hoje); if (it) addItem(it); }
+      else if (b.dataset.orcDel !== undefined) { Q.itens.splice(Number(b.dataset.orcDel), 1); if (!Q.itens.length) Q.itens.push(ORC.itemVazio()); desenharItens(); guardar(); }
+      else if (b.dataset.orcAtalho !== undefined) { $('orcDescTotal').value = b.dataset.orcAtalho; $('orcDescTotalModo').value = '%'; totais(); guardar(); }
+      else if (b.id === 'orcLivre') addItem(ORC.itemVazio());
+      else if (b.id === 'orcPeca') addItem(ORC.itemVazio({ tipo: 'peça' }));
+      else if (b.id === 'orcDescartar') { limparRasc(); m.close(''); orcamentoRapido(row, pre); }
+    });
+    m.onclose = null; m.returnValue = ''; m.showModal();
+    // Cotações vêm do CRM (Módulo 9): abre já com a cópia do aparelho e atualiza a lista quando a leitura voltar.
+    if (o && m9UsaCRM() && !semRede()) carregarM9(true).then(function () { if (!f.isConnected || !$('orcCotsBox')) return; cots = cotacoesOrc(o.num); $('orcCotsBox').innerHTML = htmlCots(); });
     f.onsubmit = async function (ev) {
       if (ev.submitter && ev.submitter.value === 'cancelar') return;
       ev.preventDefault(); if (busy) return;
-      var v = {}; campos.forEach(function (k) { v[k.k] = $('c_' + k.k).value.trim(); });
-      if (!v.orcamento || !isFinite(Number(v.orcamento.replace(',', '.'))) || Number(v.orcamento.replace(',', '.')) < 0) { $('fErro').textContent = 'Informe um valor de orçamento válido.'; return; }
-      v.orcamento = Number(v.orcamento.replace(',', '.'));
+      $('fErro').textContent = '';
+      var k = totais();
+      if (!k.ok) { var pe = k.erros[0]; $('fErro').textContent = (typeof pe.i === 'number' && pe.i >= 0 ? 'Item ' + (pe.i + 1) + ': ' : '') + pe.msg; return; }
+      if (!(k.total > 0)) { $('fErro').textContent = 'O total ficou R$ 0,00: confira os valores e os descontos.'; return; }
+      var cli = o ? c : achar('clientes', sel), equip = o ? o.equipamento : $('orcEquip').value.trim();
+      if (!o && (!cli || !equip)) { $('fErro').textContent = 'Escolha o cliente e informe o equipamento.'; return; }
+      var semRedeAgora = !navigator.onLine || offline;
+      if (!o && semRedeAgora) { guardar(); $('fErro').textContent = 'Sem internet: para cliente sem OS é preciso conectar (a OS é criada no CRM). O rascunho ficou guardado neste aparelho.'; return; }
+      var v = { diagnostico: $('c_diagnostico').value.trim(), itensOrc: ORC.paraItensOrc(k), orcamento: k.total, validade: $('c_validade').value, previsao: $('c_previsao').value };
       var prazoPadrao = !v.validade; v.validade = v.validade || V.somaDias(D.hoje, dias);
-      var enviar = ev.submitter && ev.submitter.id === 'fSalvarWa', popup = null;
+      var modo = ev.submitter && ev.submitter.id === 'fSalvarWa' ? 'wa' : ev.submitter && ev.submitter.id === 'orcSalvarLink' ? 'link' : 'so', popup = null;
       // Abrir no gesto do usuário evita bloqueio de popup após a espera da API.
-      if (enviar && navigator.onLine && !offline) { popup = window.open('about:blank', '_blank'); if (popup) { popup.opener = null; popup.document.body.textContent = 'Salvando orçamento… O WhatsApp abrirá após a confirmação.'; } }
+      if (modo === 'wa' && !semRedeAgora) { popup = window.open('about:blank', '_blank'); if (popup) { popup.opener = null; popup.document.body.textContent = 'Salvando orçamento… O WhatsApp abrirá após a confirmação.'; } }
       busy = true; f.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
       try {
-        var r = await api.escrever('salvarOrcamento', [Object.assign({ num: o.num, _row: o._row }, v)], aplicar('os', row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v)));
+        var os = o;
+        if (!os) {
+          var rOS = await api.escrever('salvarOS', [{ cliente: cli.nome, _rowCliente: cli._row, equipamento: equip, previsao: v.previsao }]);
+          var dOS = rOS.dados || {}; await iniciar();
+          os = dOS.num ? (D.os || []).filter(function (x) { return x.num === dOS.num; })[0] : null;
+          if (!os) os = (D.os || []).filter(function (x) { return x.cliente === cli.nome; }).sort(function (a, b) { return b._row - a._row; })[0];
+          if (!os) throw new Error('OS criada, mas ainda não apareceu. Atualize e abra o orçamento pela OS (não crie outra).');
+          limparRasc(); chave = ORC_RASC + os.num; guardar();
+        }
+        var r = await api.escrever('salvarOrcamento', [Object.assign({ num: os.num, _row: os._row }, v)], aplicar('os', os._row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v)));
+        limparRasc();
         if (r.enfileirado) { if (popup) popup.close(); m.close(''); aviso('Orçamento salvo na fila. Sincronize antes de abrir o WhatsApp.'); await iniciar(); return; }
-        var texto = V.textoOrcamentoSimples(Object.assign({}, o, v), c, v.validade, prazoPadrao ? dias : null), wa = V.botaoWaCliente(c, 'os', texto);
+        var cc = V.clienteDaOS(D, os) || cli || {}, base = { calc: k, cliente: cc, num: os.num, equipamento: os.equipamento || equip, diagnostico: v.diagnostico, validade: v.validade, dias: prazoPadrao ? dias : null, previsao: v.previsao };
+        var texto = ORC.textoWhats(base), wa = V.botaoWaCliente(cc, 'os', texto);
         m.close(''); await iniciar();
-        if (enviar && wa) {
-          if (popup && !popup.closed) { popup.location.href = wa.href; registrarAberta({ dataset: { regNome: c.nome, regOs: o.num, regTipo: 'orcamento', regTexto: texto } }); }
-          else abrirMsg({ titulo: 'Orçamento da ' + o.num, texto: texto, waUrl: wa.href, aviso: wa.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '', cliente: c, os: o.num, tipo: 'orcamento' });
-        } else if (popup) popup.close();
+        if (modo === 'link') {
+          var rl = await api.escrever('linkClienteOS', [{ num: os.num, _row: os._row }]), url = ((rl.dados || rl) || {}).url || '';
+          var tl = ORC.textoWhats(Object.assign({}, base, { link: url })), wl = V.botaoWaCliente(cc, 'os', tl);
+          abrirMsg({ titulo: 'Orçamento da ' + os.num, texto: tl, link: url, waUrl: wl ? wl.href : '', aviso: wl && wl.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '', semWa: Dif.naoContatar(cc) ? 'Cliente marcado como “Não contatar”.' : 'WhatsApp inválido: copie o link.', cliente: cc, os: os.num, tipo: 'orcamento' });
+        } else if (modo === 'wa' && wa) {
+          if (popup && !popup.closed) { popup.location.href = wa.href; registrarAberta({ dataset: { regNome: cc.nome, regOs: os.num, regTipo: 'orcamento', regTexto: texto } }); }
+          else abrirMsg({ titulo: 'Orçamento da ' + os.num, texto: texto, waUrl: wa.href, aviso: wa.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '', cliente: cc, os: os.num, tipo: 'orcamento' });
+        } else { if (popup) popup.close(); if (modo === 'wa') aviso('Orçamento salvo. WhatsApp não liberado para este cliente (Não contatar ou número inválido).'); }
         aviso(r.msg);
-      } catch (er) { if (popup) popup.close(); if (f.isConnected) $('fErro').textContent = 'Não salvou: ' + er.message; }
+      } catch (er) { if (popup) popup.close(); if (f.isConnected) $('fErro').textContent = 'Não salvou: ' + er.message; else aviso('Não deu: ' + er.message); }
       finally { busy = false; if (f.isConnected) f.querySelectorAll('button').forEach(function (b) { b.disabled = false; }); }
     };
   }
@@ -557,7 +680,7 @@
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
         lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
-        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('💬 Mensagens', 'os-msgs', row) + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('🧾 Cotações', 'os-cot', row) + botao('🏷 Etiqueta QR', 'os-qr', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
+        '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('💬 Mensagens', 'os-msgs', row) + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('⚡ Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('🧾 Cotações', 'os-cot', row) + botao('🏷 Etiqueta QR', 'os-qr', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div></details>' +
         '<div class="acoes"><button class="btn sec" value="fechar">Fechar</button></div></form>';
       var principal = m.querySelector('#proximaOS [data-a]'); if (principal) m.querySelectorAll('#maisAcoesOS [data-a="' + principal.dataset.a + '"]').forEach(function (b) { b.remove(); });
@@ -571,6 +694,7 @@
     'os-editar': function (row, pre) { abrirOSRapida(row, pre); },
     'os-nova': function () { abrirOSRapida(''); },
     'os-orc': function (row) { orcamentoRapido(row); },
+    'orc-novo': function () { orcamentoRapido('', {}); },
     'os-pronto': function (row) {
       var o = achar('os', row);
       perguntar('Marcar ' + o.num + ' como Pronto? Depois você poderá abrir o WhatsApp; nenhuma mensagem é enviada automaticamente.', { titulo: 'OS pronta', sim: 'Marcar pronto' }).then(function (ok) {
@@ -581,16 +705,25 @@
       });
     },
     'os-decidir': function (row) {
+      // v0.9.0: o CRM (decidirOrcamento) EXIGE o motivo quando o cliente recusa (caro, prazo, desistiu, foi para outro, outro).
+      // Antes o App não mandava o motivo e toda recusa voltava com erro do servidor.
       var o = achar('os', row);
-      formulario('Decisão do orçamento · ' + e(o.num), [{ k: 'decisao', r: 'Decisão', t: 'select', o: ['Aprovado', 'Recusado'], req: true }, { k: 'como', r: 'Como aprovou', t: 'select', o: ['WhatsApp', 'Presencial', 'Ligação'] },
-        { k: 'proximoStatus', r: 'Próximo status (se aprovado)', t: 'select', o: ['Em reparo', 'Aguardando peça'] }], {})
-        .then(function (v) { if (!v) return; escrever('decidirOrcamento', [Object.assign({ num: o.num, _row: o._row }, v)], aplicar('os', row, { aprovacao: v.decisao })); });
+      formulario('Decisão do orçamento · ' + e(o.num), [{ k: 'decisao', r: 'Decisão', t: 'select', o: ['Aprovado', 'Recusado'], req: true }, { k: 'como', r: 'Como respondeu', t: 'select', o: ['WhatsApp', 'Presencial', 'Ligação'] },
+        { k: 'proximoStatus', r: 'Próximo status (se aprovado)', t: 'select', o: ['Em reparo', 'Aguardando peça'] },
+        { k: 'motivo', r: 'Motivo da recusa (obrigatório se recusou)', t: 'select', o: V.MOTIVOS_RECUSA }, { k: 'motivoTexto', r: 'Detalhe da recusa (opcional)' },
+        { k: 'cobrarDiagnostico', r: 'Recusou: cobrar o diagnóstico (preço do catálogo do CRM)', t: 'checkbox' }], {})
+        .then(function (v) {
+          if (!v) return;
+          var x = V.argsDecisao(o, v);
+          if (x.erro) return aviso(x.erro);
+          escrever('decidirOrcamento', [x.args], aplicar('os', row, x.local));
+        });
     },
     'os-receber': function (row) {
       var o = achar('os', row);
       formulario('Receber · ' + e(o.num), [{ k: 'receita', r: 'Valor recebido (R$)', t: 'number', req: true }, { k: 'forma', r: 'Forma de pagamento', t: 'select', o: D.formasPag, req: true },
         { k: 'parcelas', r: 'Parcelas (crédito parcelado)', t: 'number' }, { k: 'data', r: 'Data', t: 'date' }], { receita: V.saldoOS(D, o) > 0 ? String(V.saldoOS(D, o)).replace('.', ',') : '', data: D.hoje })
-        .then(function (v) { if (!v) return; escrever('lancarRecebimento', [Object.assign({ os: o.num }, v)], function (c) { c.financeiro.push({ _row: 0, data: v.data, tipo: 'Entrada', categoria: 'Serviço', os: o.num, descricao: 'Recebimento OS ' + o.num + ' (a enviar)', forma: v.forma, receita: Number(String(v.receita).replace(',', '.')) }); }); });
+        .then(function (v) { if (!v) return; escrever('lancarRecebimento', [Object.assign({ os: o.num }, v)], function (c) { c.financeiro.push({ _row: 0, data: v.data, tipo: 'Entrada', categoria: 'Serviço', os: o.num, descricao: 'Recebimento OS ' + o.num + ' (a enviar)', forma: v.forma, receita: V.dinheiro(v.receita) }); }); });
     },
     'os-peca': function (row) {
       var o = achar('os', row);
@@ -876,6 +1009,13 @@
         '<details><summary>Ver texto do WhatsApp</summary><pre class="pre" id="orcTexto">' + e(o.whatsappTexto) + '</pre></details></div>';
       if (!t.open) t.showModal();
       $('orcFechar').onclick = function () { t.close(); };
+      // v0.9.0: mandar o orçamento da OS com vários equipamentos -> Aguardando aprovação (o link do cliente mostra Aprovar/Recusar). Vencido: oferece renovar antes.
+      $('orcWa').onclick = function (ev) {
+        var os = OSM.num && !OSM.sujo ? (D.os || []).filter(function (x) { return x.num === OSM.num; })[0] : null;
+        if (!os) return;
+        if (V.orcamentoVencido(os, D.hoje)) { ev.preventDefault(); prepararEnvioOrc(os).then(function () { aviso('Confira e toque de novo em “Enviar pelo WhatsApp”.'); }); return; }
+        prepararEnvioOrc(os);
+      };
       $('orcCopiar').onclick = function () { (navigator.clipboard ? navigator.clipboard.writeText(o.whatsappTexto) : Promise.reject()).then(function () { aviso('Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto em “Ver texto do WhatsApp”.'); }); };
       $('orcPdf').onclick = function () {
         if (!o.html) return window.print();
@@ -1176,9 +1316,31 @@
       $('bImprLaudo').onclick = function () { try { $('laudoFrame').contentWindow.print(); } catch (x) { aviso('Não deu para imprimir neste aparelho.'); } };
     }, function () {});
   };
+  /** v0.9.0: antes de mandar orçamento ou link: validade vencida -> oferece renovar (padrão do servidor); Recebido/Em diagnóstico com
+   *  orçamento salvo -> Aguardando aprovação (senão o link do cliente não mostra Aprovar/Recusar). Nada é enviado aqui. Nunca rejeita. */
+  function prepararEnvioOrc(o) {
+    if (!o || !o.num) return Promise.resolve(o);
+    var dias = Dif.padroes(D).validadeDias || 7, p = Promise.resolve();
+    if (V.orcamentoVencido(o, D.hoje)) {
+      var nova = V.somaDias(D.hoje, dias);
+      p = perguntar('Este orçamento venceu em ' + V.dataBR(o.validade) + ', atualize a validade. Renovar por ' + dias + ' dias (até ' + V.dataBR(nova) + ')?', { titulo: 'Orçamento vencido', sim: 'Renovar validade', nao: 'Seguir sem renovar' }).then(function (ok) {
+        if (!ok) return;
+        if (!api.pode('salvarValidadeOS')) return aviso('Renovar a validade ainda não está liberado no servidor: ajuste em ⚡ Orçamento.');
+        return api.escrever('salvarValidadeOS', [{ num: o.num, _row: o._row, escolha: '' }], aplicar('os', o._row, { validade: nova })).then(function (r) {
+          o.validade = (r.dados && r.dados.validade) || nova; aviso(r.enfileirado ? 'Validade renovada no aparelho (envio quando voltar a internet).' : (r.msg || 'Validade renovada.'));
+        }, function (er) { aviso('Validade não renovada: ' + er.message); });
+      });
+    }
+    return p.then(function () {
+      if (!V.deveMarcarAguardando(o) || !api.pode('mudarStatusOS')) return;
+      return api.escrever('mudarStatusOS', [o.num, o._row, 'Aguardando aprovação', {}], aplicar('os', o._row, { status: 'Aguardando aprovação', statusEm: D.hoje })).then(function () {
+        o.status = 'Aguardando aprovação'; aviso(o.num + ' → Aguardando aprovação (o link do cliente mostra Aprovar/Recusar).');
+      }, function (er) { aviso('Status não mudou: ' + er.message); });
+    }).then(function () { return o; }, function () { return o; });
+  }
   ACOES['os-link'] = function (row) {
     var o = achar('os', row), c = V.clienteDaOS(D, o);
-    escreverResp('linkClienteOS', [{ num: o.num, _row: o._row }]).then(function (r) {
+    prepararEnvioOrc(o).then(function () { return escreverResp('linkClienteOS', [{ num: o.num, _row: o._row }]); }).then(function (r) {
       if (!Dif.linkAcompanhamentoOk(r.url)) aviso('Atenção: o link veio num formato inesperado.');
       abrirMsg({ titulo: '🔗 Acompanhamento da ' + o.num, link: r.url, texto: '', waUrl: '', semWa: 'Para mandar o link pelo WhatsApp, use “📲 Avisar status” (o texto já leva o link).', cliente: c, os: o.num });
     }, function () {});
@@ -1567,13 +1729,37 @@
     var url = (Dif.padroes(D).googleReviewUrl) || 'https://g.page/r/CZQuYc9gn5lJECE/review';
     var ct = V.contratoAtivoCliente(((CT && CT.contratos) || []), c.nome);
     return {
-      cliente: c, os: o || null, visita: visita, D: D, googleReviewUrl: url, linkOS: '[link da OS]',
+      cliente: c, os: o || null, visita: visita, D: D, googleReviewUrl: url, linkOS: '', // v0.9.0: link real vem do linkClienteOS em abrirPreviewMsg
       contrato: ct, precoVisita: precoVisitaCfg(), hoje: D.hoje, agendado: !!(visita || (o && o.agendadoPara))
     };
+  }
+  // v0.9.0: link de acompanhamento/aprovação da OS (mesma ação do botão 🔗). Guardado por OS enquanto o App está aberto.
+  var LINKS_OS = {};
+  function obterLinkOS(o) {
+    if (LINKS_OS[o.num]) return Promise.resolve(LINKS_OS[o.num]);
+    if (!api.pode('linkClienteOS')) return Promise.reject(new Error('link da OS ainda não liberado no servidor'));
+    if (!navigator.onLine || offline) return Promise.reject(new Error('sem internet'));
+    return api.escrever('linkClienteOS', [{ num: o.num, _row: o._row }]).then(function (r) {
+      var url = ((r && (r.dados || r)) || {}).url || '';
+      if (!/^https:\/\/\S+$/.test(url)) throw new Error('o servidor não devolveu um link válido');
+      LINKS_OS[o.num] = url; return url;
+    });
   }
   function abrirPreviewMsg(id, ctx, dataIso, hora) {
     var c = ctx.cliente;
     if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    if (['os-orc', 'os-peca-orc'].indexOf(id) >= 0 && ctx.os && !ctx.preparado) {
+      ctx.preparado = true;
+      return prepararEnvioOrc(ctx.os).then(function () { abrirPreviewMsg(id, ctx, dataIso, hora); });
+    }
+    if (V.precisaLinkOS(id, ctx)) {
+      return obterLinkOS(ctx.os).then(function (url) { ctx.linkOS = url; ctx.avisoLink = ''; }, function (er) { ctx.linkOS = ''; ctx.avisoLink = 'Sem o link da OS (' + ((er && er.message) || 'erro') + '). O texto ficou com “[link…]”: troque pelo link antes de enviar (botão 🔗 Link de acompanhamento).'; })
+        .then(function () { montarPreviewMsg(id, ctx, dataIso, hora); });
+    }
+    montarPreviewMsg(id, ctx, dataIso, hora);
+  }
+  function montarPreviewMsg(id, ctx, dataIso, hora) {
+    var c = ctx.cliente;
     var txt = V.montarMensagemPronta(id, ctx, dataIso, hora);
     if (!txt) return aviso('Mensagem não disponível.');
     var cat = (V.catalogoMensagensProntas(ctx).todas || []).filter(function (x) { return x.id === id; })[0];
@@ -1585,7 +1771,7 @@
     var em = (V.emailMensagemPronta && V.emailMensagemPronta(id, ctx, dataIso, hora)) || null;
     abrirMsg({
       titulo: '💬 ' + rot + (ctx.os ? ' · ' + ctx.os.num : ''),
-      texto: txt, waUrl: b ? b.href : '', aviso: b && b.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '',
+      texto: txt, waUrl: b ? b.href : '', aviso: [ctx.avisoLink && V.temMarcadorLink(txt) ? ctx.avisoLink : '', b && b.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : ''].filter(Boolean).join(' '),
       semWa: Dif.naoContatar(c) ? V.AVISO_NAO_CONTATAR : (b ? '' : (tipo === 'marketing' && c.consent !== 'Sim' ? 'Sem consentimento LGPD.' : 'WhatsApp inválido.')),
       cliente: c, os: ctx.os ? ctx.os.num : '', osObj: ctx.os, tipo: tipo, emailOk: true,
       assuntoEmail: (em && em.assunto) || (V.ASSUNTOS_MSG_EMAIL && V.ASSUNTOS_MSG_EMAIL[id]) || ('ProFix — ' + rot),

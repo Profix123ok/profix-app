@@ -253,7 +253,7 @@
     if (o.status === 'Em reparo') return ['os-pronto', 'Marcar pronto e preparar aviso'];
     if (o.status === 'Pronto' || o.status === 'Aguardando aprovação') return ['os-msg', '📲 Avisar status'];
     if (o.status === 'Recebido') return ['os-chk', '✅ Checklist'];
-    if (o.status === 'Em diagnóstico') return ['os-orc', 'Orçamento'];
+    if (o.status === 'Em diagnóstico') return ['os-orc', '⚡ Orçamento'];
     return ['os-status', 'Mudar status'];
   };
   V.textoOrcamentoSimples = function (o, c, validade, dias) {
@@ -308,6 +308,44 @@
   };
   /** Motivos curtos (Atendimento 09/11). Preferir esta lista no App; a planilha pode ainda ter a antiga. */
   V.MOTIVOS_PERDA = ['Preço', 'Resolveu com outra pessoa', 'Desistiu do conserto', 'Comprou um aparelho novo', 'Não respondeu', 'Fora da região', 'Serviço que a ProFix não faz', 'Outro'];
+  // v0.9.0: UM leitor de dinheiro pt-BR para o App todo: "1.234,56", "R$ 157,51", "1.500", "150.5". Vazio = null; inválido/negativo = NaN.
+  V.dinheiro = function (v) {
+    if (typeof v === 'number') return isFinite(v) && v >= 0 ? v : NaN;
+    var s = String(v == null ? '' : v).replace(/R\$|\s/gi, '');
+    if (!s) return null;
+    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    if (!/^\d*\.?\d+$/.test(s)) return NaN;
+    return Number(s);
+  };
+  /** Campo de dinheiro do formulário (rótulo com "R$"). */
+  V.campoDinheiro = function (c) { return !!c && c.t === 'number' && /R\$/.test(String(c.r || '')); };
+  /** OS com orçamento salvo (valor > 0) ainda em Recebido/Em diagnóstico: ao mandar orçamento/link, vai para Aguardando aprovação. Status depois disso não mudam. */
+  V.deveMarcarAguardando = function (o) {
+    if (!o || !o.num) return false;
+    var v = V.dinheiro(o.orcamento !== '' && o.orcamento != null ? o.orcamento : o.valor);
+    return ['Recebido', 'Em diagnóstico'].indexOf(String(o.status || '')) >= 0 && v > 0 && ['Aprovado', 'Recusado'].indexOf(String(o.aprovacao || '')) < 0;
+  };
+  /** Orçamento com validade vencida (antes de hoje)? */
+  V.orcamentoVencido = function (o, hoje) { var d = String((o && o.validade) || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(d) && !!hoje && d < hoje && ['Aprovado', 'Recusado'].indexOf(String(o.aprovacao || '')) < 0; };
+  // v0.9.0: motivos da recusa do orçamento aceitos pelo crm-v3 (Diferenciais.gs MOTIVOS_RECUSA). decidirOrcamento recusa sem motivo.
+  V.MOTIVOS_RECUSA = ['Caro', 'Prazo', 'Desistiu', 'Foi para outro', 'Outro'];
+  /** Formulário de decisão -> args do decidirOrcamento + mudança local (igual ao servidor). {erro} se faltar algo. */
+  V.argsDecisao = function (o, v) {
+    v = v || {}; o = o || {};
+    if (['Aprovado', 'Recusado'].indexOf(v.decisao) < 0) return { erro: 'Escolha se o cliente aprovou ou recusou.' };
+    var args = { num: o.num, _row: o._row, decisao: v.decisao, como: v.como || '' };
+    if (v.decisao === 'Aprovado') {
+      args.proximoStatus = v.proximoStatus || 'Em reparo';
+      var loc = { aprovacao: 'Aprovado', status: args.proximoStatus };
+      if ((o.valor === '' || o.valor == null) && o.orcamento !== '' && o.orcamento != null) loc.valor = o.orcamento;
+      return { args: args, local: loc };
+    }
+    if (V.MOTIVOS_RECUSA.indexOf(v.motivo) < 0) return { erro: 'Escolha o motivo da recusa (caro, prazo, desistiu, foi para outro ou outro). O CRM não aceita recusa sem motivo.' };
+    args.motivo = v.motivo; if (String(v.motivoTexto || '').trim()) args.motivoTexto = String(v.motivoTexto).trim().slice(0, 200);
+    if (v.cobrarDiagnostico) args.cobrarDiagnostico = true;
+    return { args: args, local: { aprovacao: 'Recusado', status: 'Pronto' } };
+  };
   V.motivoPerdaObrigatorio = function (status) { return status === 'Descartada' || status === 'Perdido'; };
   V.motivosPerda = function (D) { return (D && D.motivosPerda && D.motivosPerda.length) ? D.motivosPerda : V.MOTIVOS_PERDA; };
   /** Templates “pronto” por tipo de serviço (textos Atendimento). Placeholders entre [colchetes] o Pedro edita. */
@@ -823,6 +861,10 @@
     var resto = todas.filter(function (it) { return ok(it) && !idsM[it.id]; });
     return { momento: momento, resto: resto, todas: todas.filter(ok) };
   };
+  // v0.9.0: mensagens do painel 💬 que levam o link de acompanhamento/aprovação da OS (antes iam com "[link da OS]" fixo).
+  V.MSG_COM_LINK_OS = ['os-recebi', 'os-orc', 'os-peca-orc'];
+  V.precisaLinkOS = function (id, ctx) { return V.MSG_COM_LINK_OS.indexOf(id) >= 0 && !!(ctx && ctx.os && ctx.os.num) && !(ctx.linkOS && /^https:\/\//.test(ctx.linkOS)); };
+  V.temMarcadorLink = function (txt) { return /\[link( da OS)?( \/ Minha Área)?\]/.test(String(txt || '')); };
   V.montarMensagemPronta = function (id, ctx, dataIso, hora) {
     ctx = ctx || {};
     var c = ctx.cliente || {}, o = ctx.os, v = ctx.visita, link = ctx.linkOS || '';
