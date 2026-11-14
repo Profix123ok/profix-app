@@ -187,3 +187,4 @@ table.dre td:last-child{white-space:nowrap}
 .link-sec{font-size:13px;font-weight:600;margin-left:8px}
 .ct-inicio b{color:#bbf7d0}
 @media (max-width:420px){.menu a{font-size:11px}.menu a span{font-size:20px}}
+#cobrancaResumo input[type=month]{max-width:100%;width:auto;min-height:40px}#cobrancaResumo .m{line-height:1.7}.ct-sit .tag,.ct-venc .tag{margin-left:0}#ctRetorno{margin:8px 0}

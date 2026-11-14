@@ -26,8 +26,10 @@
     'registrarMensagemAberta', 'agendarRetorno', 'salvarMaquina', 'vincularMaquinaOS', 'salvarChecklistOS', 'linkClienteOS', 'textoStatusOS',
     'salvarContrato', 'salvarVisita', 'iniciarVisita', 'encerrarVisita',
     'registrarConsentimento', 'definirStatusLead', 'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo',
-    'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo']; // v0.8.6/0.8.7: Módulo 9 (API @113/@115). v0.7.1 (API @43). v0.7.0 diferenciais; crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
-  var SO_ONLINE = ['salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo', // v0.8.6/0.8.7: precisam da resposta (id, custo posto do servidor, avisos, Saída no caixa na mesma trava): nunca vão para a fila
+    'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo',
+    'receberMensalidade']; // v0.8.9: cobrança dos planos (API @117). v0.8.6/0.8.7: Módulo 9 (API @113/@115). v0.7.1 (API @43). v0.7.0 diferenciais; crm-v3 v13 + v32 (OS multi) (enviarEmailCliente exige idOperacao: sempre mandamos)
+  var SO_ONLINE = ['receberMensalidade', // v0.8.9: lança Entrada no Financeiro; precisa da resposta (avisos/erros) e nunca vai para a fila
+    'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo', // v0.8.6/0.8.7: precisam da resposta (id, custo posto do servidor, avisos, Saída no caixa na mesma trava): nunca vão para a fila
     'excluirRegistro', 'restaurarRegistro', 'apagarDefinitivo', // v0.7.1: Lixeira só com internet (precisa da resposta: impacto/confirmação)
     'linkClienteOS', 'textoStatusOS', 'iniciarVisita', // v0.7.0: precisam da resposta na hora (link/texto); início da visita usa a hora do servidor
     'criarEventoAgenda', 'removerEventoAgenda', 'enviarEmailCliente', 'aprovarOrcamentoOS', 'aplicarCondicaoEspecialOS', 'removerCondicaoEspecialOS']; // nunca vão para a fila offline (e-mail não sai "depois" sem o Pedro ver; aprovação e condição especial são feitas na frente do cliente, com o servidor)
@@ -149,10 +151,11 @@
     api.ler = function (acao, args) { return chamar(acao, args); };
 
     /** Escrita: tenta enviar; sem internet, vai para a fila e é aplicada na cópia local (otimista). */
-    api.escrever = function (acao, args, aplicarLocal) {
+    /** idOp (opcional, v0.8.9): id da operação enviado como idOperacao (repetição no servidor → "Já recebido."). */
+    api.escrever = function (acao, args, aplicarLocal, idOp) {
       if (!ACOES[acao] || !ACOES[acao].escrita) return Promise.reject(new Error('Ação de escrita inválida: ' + acao));
       if (!api.pode(acao)) return Promise.reject(new Error('Esta função ainda não foi liberada no servidor (crm-v3).'));
-      var op = { id: novoId(), acao: acao, args: args, em: new Date().toISOString() };
+      var op = { id: idOp ? String(idOp) : novoId(), acao: acao, args: args, em: new Date().toISOString() };
       if (SO_ONLINE.indexOf(acao) >= 0) {
         if (!online()) return Promise.reject(new Error('Sem internet: nada foi enviado. Tente de novo com conexão.'));
         return chamar(acao, args, op.id).then(function (r) { if (aplicarLocal) { var c = lerJSON(arm, CH.cache, null); if (c) { aplicarLocal(c, r); arm.setItem(CH.cache, JSON.stringify(c)); } } return { enfileirado: false, msg: (r && r.msg) || (r && r.acao === 'atualizado' ? 'Evento atualizado na Agenda.' : r && r.acao === 'criado' ? 'Evento criado na Agenda.' : 'Feito.'), dados: r }; });

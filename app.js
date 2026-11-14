@@ -1318,7 +1318,7 @@
   function carregarCT() {
     if (carregarCT.indo) return; if (!api.pode('listaContratos')) { CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [] }; return; }
     carregarCT.indo = true;
-    api.ler('listaContratos', []).then(function (r) { carregarCT.indo = false; CT = r || { contratos: [], visitas: [] }; if (['mais','hoje','cliente','servicos','agenda'].indexOf(rota().tela) >= 0) render(); },
+    api.ler('listaContratos', CTX.comp ? [{ competencia: CTX.comp }] : []).then(function (r) { carregarCT.indo = false; CT = r || { contratos: [], visitas: [] }; if (['mais','hoje','cliente','servicos','agenda'].indexOf(rota().tela) >= 0) render(); },
       function () { carregarCT.indo = false; CT = (D.dif && D.dif.contratos) || { contratos: [], visitas: [], erro: true }; if (['mais','hoje','cliente','servicos','agenda'].indexOf(rota().tela) >= 0) render(); });
   }
   function telaVisitas() {
@@ -1336,23 +1336,55 @@
       cardsPlanos() + listaQuemAssinou();
   }
   // ---- v0.8.8: Quem assinou (contratos com data inicial) e tela Agendamento (#agenda) ----
-  F.ct = 'ativos';
+  // ---- v0.8.9: + cobrança do mês (pago / a vencer / vencido / fora), Receber e Informar dia — mesmo critério do painel do CRM ----
+  F.ct = 'ativos'; F.ctSit = '';
+  var CTX = { comp: '', retorno: '' }; // competência escolhida ('' = mês atual do CRM) e último retorno do Receber/Informar dia
+  var TAG_SIT = { pago: 'ok', 'a vencer': 'azul', vencido: 'vencido', fora: 'cinza' };
+  var ROT_SIT = { pago: '✅ Pago', 'a vencer': '⏳ A vencer', vencido: '⚠️ Vencido', fora: 'Fora da cobrança' };
+  /** Atualiza só a lista de contratos (sem recarga completa do App). Mantém a cópia atual na tela até a resposta. */
+  function recarregarCT() {
+    if (!api.pode('listaContratos')) return Promise.resolve();
+    return api.ler('listaContratos', CTX.comp ? [{ competencia: CTX.comp }] : []).then(function (r) { CT = r || CT; RM.mes = ''; if (['mais', 'hoje', 'cliente', 'servicos', 'agenda'].indexOf(rota().tela) >= 0) render(); }, function () {});
+  }
+  function resumoCobrancaHtml(todos) {
+    var r = V.resumoCobranca(CT, CTX.comp || D.hoje.slice(0, 7)), cs = V.contagemSituacoes(todos);
+    var chip = function (k, rot) { return '<button type="button" class="chip" data-chip-sit="' + e(k) + '" aria-pressed="' + (F.ctSit === k) + '">' + rot + '</button>'; };
+    return '<div class="card" id="cobrancaResumo"><div class="t">💰 Mensalidades · ' + e(V.competenciaBR(r.competencia) || 'mês atual') +
+      (r.vencidos ? ' ' + tag(r.vencidos + ' vencida' + (r.vencidos === 1 ? '' : 's'), 'vencido') : '') + '</div><div class="m">' +
+      '<span data-cob="pagos">✅ Pagos: <b>' + r.pagos + '</b></span> · <span data-cob="aVencer">⏳ A vencer: <b>' + r.aVencer + '</b></span> · <span data-cob="vencidos">⚠️ Vencidos: <b>' + r.vencidos + '</b></span> · <span data-cob="fora">Fora: <b>' + r.fora + '</b></span>' +
+      '<br><span data-cob="recebido">Recebido: <b>' + V.brl(r.recebido) + '</b></span> · <span data-cob="emAberto">Em aberto: <b>' + V.brl(r.emAberto) + '</b></span>' +
+      '<br><label class="muted" for="fCompCT">Competência</label> <input type="month" id="fCompCT" value="' + e(CTX.comp || r.competencia || D.hoje.slice(0, 7)) + '" aria-label="Competência das mensalidades">' +
+      '<br><span class="muted">Mesmo critério do painel do CRM. Nada é cobrado automaticamente: o mês só fica pago quando você toca em Receber.</span></div></div>' +
+      '<div class="chips" id="fSituacao" role="group" aria-label="Filtrar pela situação do mês">' + chip('', 'Todas as situações') + chip('vencido', '⚠️ Vencidos (' + cs.vencido + ')') + chip('a vencer', '⏳ A vencer (' + cs['a vencer'] + ')') + chip('pago', '✅ Pagos (' + cs.pago + ')') + chip('fora', 'Fora (' + cs.fora + ')') + '</div>';
+  }
+  function linhaCobrancaCard(k) {
+    var s = V.situacaoContrato(k), dia = V.temDiaContrato(k) ? Number(k.dia) : 0;
+    return '<br><span class="ct-venc" data-ct-venc="' + e(k.id) + '">📅 Vencimento: <b>' + (dia ? 'todo dia ' + dia + (k.vencimento ? ' · ' + e(V.dataBR(k.vencimento)) : '') : 'não informado') + '</b></span>' +
+      (k.forma ? ' <span class="muted">· ' + e(k.forma) + '</span>' : '') +
+      '<br><span class="ct-sit" data-ct-sit="' + e(k.id) + '" data-sit="' + e(s) + '">' + tag(ROT_SIT[s], TAG_SIT[s]) + ' ' + e(V.linhaSituacaoContrato(k)) + '</span>';
+  }
   function listaQuemAssinou() {
     var todos = (CT && CT.contratos) || [], cont = V.contagemContratos(todos), vs = (CT && CT.visitas) || [];
     var chip = function (k, rot) { return '<button type="button" class="chip" data-chip-ct="' + k + '" aria-pressed="' + (F.ct === k) + '">' + rot + '</button>'; };
-    var l = V.listarContratos(todos, F.ct);
+    var l = V.filtrarSituacaoContratos(V.listarContratos(todos, F.ctSit ? 'todos' : F.ct), F.ctSit);
+    if (!F.ctSit) l = l.slice().sort(function (a, b) { var va = V.situacaoContrato(a) === 'vencido' ? 0 : 1, vb = V.situacaoContrato(b) === 'vencido' ? 0 : 1; return va - vb; }); // vencidos em evidência (ordem estável)
     return '<section id="quemAssinou"><h2>✍️ Quem assinou com a ProFix <span class="tag ok">' + cont.ativos + ' ativo' + (cont.ativos === 1 ? '' : 's') + '</span></h2>' +
+      resumoCobrancaHtml(todos) + (CTX.retorno ? '<p class="alerta" id="ctRetorno" role="status">' + e(CTX.retorno) + '</p>' : '') +
       '<div class="chips" id="fContratos" role="group" aria-label="Filtrar contratos">' + chip('ativos', 'Ativos (' + cont.ativos + ')') + chip('outros', 'Encerrados/pausados (' + cont.outros + ')') + chip('todos', 'Todos (' + cont.todos + ')') + '</div>' +
+      (F.ctSit ? '<p class="muted">Filtrando pela situação do mês: ' + e(ROT_SIT[F.ctSit] || F.ctSit) + ' (todos os status).</p>' : '') +
       lista(l, function (k) {
-        var ini = V.inicioContrato(k), prox = V.proximaVisitaContrato(vs, k, D.hoje);
+        var ini = V.inicioContrato(k), prox = V.proximaVisitaContrato(vs, k, D.hoje), s = V.situacaoContrato(k);
         return card(e(k.cliente) + ' <span class="muted">· ' + e(k.id) + '</span>',
           '<b>' + e(k.plano || 'Plano') + '</b> · ' + V.brl(k.valor) + '/mês · ' + e(frequenciaContrato(k)) +
           '<br><span class="ct-inicio" data-ct-inicio="' + e(k.id) + '">📆 Início: <b>' + (ini ? e(V.dataBR(ini)) : 'não informado') + '</b></span>' +
+          linhaCobrancaCard(k) +
           '<br>' + (prox ? '🚗 Próxima visita: ' + e(V.dataBR(prox.data)) + (V.horaVisita(prox) ? ' às ' + e(V.horaVisita(prox)) : '') + (prox.atrasada ? ' ' + tag('atrasada', 'vencido') : '') : '<span class="muted">Sem visita marcada.</span>') +
           (/fictício/i.test(k.obs || '') ? '<br><span class="muted">Exemplo fictício</span>' : ''),
-          tag(k.status || 'Ativo', V.ativoContrato(k) ? 'ok' : 'cinza'),
-          (V.ativoContrato(k) && api.pode('salvarVisita') ? botao('🚗 Agendar visita', 'ct-visita', k.id, '') : ''), ' data-contrato="' + e(k.id) + '"');
-      }, F.ct === 'ativos' ? 'Nenhum contrato ativo.' : 'Nenhum contrato com esse filtro.') + '</section>';
+          tag(k.status || 'Ativo', V.ativoContrato(k) ? 'ok' : 'cinza') + (s === 'vencido' ? tag('vencido', 'vencido') : ''),
+          (V.podeReceberContrato(k) && api.pode('receberMensalidade') ? botao('💰 Receber', 'ct-receber', k.id, '') : '') +
+          (V.precisaDiaContrato(k) && api.pode('salvarContrato') ? botao('📅 Informar dia do vencimento', 'ct-dia', k.id, '') : '') +
+          (V.ativoContrato(k) && api.pode('salvarVisita') ? botao('🚗 Agendar visita', 'ct-visita', k.id, '') : ''), ' data-contrato="' + e(k.id) + '" data-situacao="' + e(s) + '"');
+      }, F.ctSit ? 'Nenhum contrato nessa situação.' : F.ct === 'ativos' ? 'Nenhum contrato ativo.' : 'Nenhum contrato com esse filtro.') + '</section>';
   }
   function telaAgenda() {
     if (!CT) { carregarCT(); return '<h1>📅 Agendamento</h1><div class="vazio">Carregando visitas e contratos…</div>'; }
@@ -1374,6 +1406,44 @@
   }
   TELAS.agenda = telaAgenda; TELAS.leads = telaLeads;
   PRECISA['ct-visita'] = 'salvarVisita';
+  PRECISA['ct-receber'] = 'receberMensalidade'; PRECISA['ct-dia'] = 'salvarContrato';
+  function acharCT(id) { return ((CT && CT.contratos) || []).filter(function (x) { return x.id === id; })[0] || null; }
+  function formasCT() { return D.formasPagFin || D.formasPag || []; }
+  /** 💰 Receber: só em 'a vencer'/'vencido' com dia (mesmo critério do painel). Manual: o Pedro toca; lança Entrada (Serviço) no Financeiro. */
+  ACOES['ct-receber'] = function (id) {
+    var k = acharCT(id); if (!k) return aviso('Contrato não encontrado. Atualize e tente de novo.');
+    if (!V.podeReceberContrato(k)) return aviso(V.temDiaContrato(k) ? 'Este mês não está a vencer nem vencido.' : 'Informe o dia do vencimento antes de receber.');
+    var idOp = Dif.idOperacao('men'), comp = k.competencia || CTX.comp || D.hoje.slice(0, 7);
+    formulario('💰 Receber · ' + e(k.id), [{ k: 'competencia', r: 'Competência (mês da mensalidade)', t: 'month', req: true },
+      { k: 'data', r: 'Data do recebimento', t: 'date', req: true }, { k: 'valor', r: 'Valor (R$)', t: 'number', req: true },
+      { k: 'forma', r: 'Forma de pagamento', t: 'select', o: formasCT() }, { k: 'parcelas', r: 'Parcelas (crédito parcelado)', t: 'number' }],
+      { competencia: comp, data: D.hoje, valor: Number(k.valor) > 0 ? Number(k.valor).toFixed(2).replace('.', ',') : '', forma: k.forma || 'Pix' },
+      '<p class="muted">' + e(k.cliente) + ' · ' + e(k.plano || '') + ' · ' + e(V.linhaSituacaoContrato(k)) + '</p><p class="muted">Lança uma Entrada (Serviço) no Financeiro como “Mensalidade ' + e(k.id) + ' – competência MM/AAAA”. Não deixa lançar a mesma competência duas vezes. Nada é cobrado do cliente.</p>')
+      .then(function (v) {
+        if (!v) return;
+        var pr = V.payloadReceber(k, v); if (pr.erro) return aviso(pr.erro);
+        return api.escrever('receberMensalidade', [pr.payload], null, idOp).then(function (r) {
+          CTX.retorno = V.textoRetornoReceber(Object.assign({ msg: r.msg }, r.dados || {})); aviso(CTX.retorno);
+          return recarregarCT();
+        }, function (er) { CTX.retorno = 'Não lançou: ' + er.message; aviso(CTX.retorno); render(); });
+      });
+  };
+  /** 📅 Informar dia: contrato Ativo sem dia (antigo) fica fora da cobrança. salvarContrato com o id e o dia (o App não inventa o dia). */
+  ACOES['ct-dia'] = function (id) {
+    var k = acharCT(id); if (!k) return aviso('Contrato não encontrado. Atualize e tente de novo.');
+    formulario('📅 Dia do vencimento · ' + e(k.id), [{ k: 'dia', r: 'Dia do vencimento (1 a 31)', t: 'number', req: true, ajuda: 'Dias 29, 30 e 31 viram o último dia nos meses mais curtos.' },
+      { k: 'forma', r: 'Forma de pagamento (opcional)', t: 'select', o: formasCT() }], { dia: '', forma: k.forma || '' },
+      '<p class="muted">' + e(k.cliente) + ' · ' + e(k.plano || '') + '. Sem o dia, este contrato fica fora da cobrança e o Receber não aparece.</p>')
+      .then(function (v) {
+        if (!v) return; var dia = V.diaVencimento(v.dia);
+        if (!dia) return aviso('Dia do vencimento deve ser de 1 a 31.');
+        var p = { id: k.id, dia: dia }; if (v.forma) p.forma = v.forma;
+        return api.escrever('salvarContrato', [p]).then(function (r) {
+          CTX.retorno = (r.msg || 'Contrato atualizado.') + (r.dados && r.dados.avisos && r.dados.avisos.length ? ' Atenção: ' + r.dados.avisos.join(' ') : ''); aviso(CTX.retorno);
+          return recarregarCT();
+        }, function (er) { CTX.retorno = 'Não salvou: ' + er.message; aviso(CTX.retorno); render(); });
+      });
+  };
   ACOES['ct-visita'] = function (id) { var k = ((CT && CT.contratos) || []).filter(function (x) { return x.id === id; })[0]; if (!k) return aviso('Contrato não encontrado.'); abrirMarcarVisita({ cliente: k.cliente, contrato: k.id }); };
   function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
   // v0.8.2+/0.8.3: marcar visita + msgs §9 (Remarcar cliente/Pedro).
@@ -1627,20 +1697,30 @@
       { k: 'pcs', r: 'Nº de computadores', t: 'number', ajuda: 'Empresa+ começa em 11.' },
       { k: 'extras', r: 'Máquinas extras (R$ 35,00/PC/mês)', t: 'number', ajuda: 'Não soma no total até o Pedro definir o valor da máquina extra.' },
       { k: 'valor', r: 'Valor mensal (R$)', t: 'number', req: true },
-      { k: 'frequencia', r: 'Frequência da visita' }, { k: 'inicio', r: 'Início', t: 'date' }, { k: 'obs', r: 'Observações', t: 'textarea' }],
-      { plano: 'Essencial', pcs: '5', extras: '0', valor: '359,50', frequencia: '1x por mês', inicio: D.hoje },
+      { k: 'frequencia', r: 'Frequência da visita' }, { k: 'inicio', r: 'Início', t: 'date' },
+      { k: 'status', r: 'Status', t: 'select', o: V.STATUS_CONTRATO, req: true, ajuda: 'Use “Proposta” enquanto o cliente não fechar (pode ficar sem dia).' },
+      { k: 'dia', r: 'Dia do vencimento (1 a 31)', t: 'number', req: true, ajuda: 'Obrigatório para contrato Ativo. Dias 29–31 viram o último dia nos meses mais curtos.' },
+      { k: 'forma', r: 'Forma de pagamento', t: 'select', o: formasCT() }, { k: 'obs', r: 'Observações', t: 'textarea' }],
+      { plano: 'Essencial', pcs: '5', extras: '0', valor: '359,50', frequencia: '1x por mês', inicio: D.hoje, status: 'Ativo', dia: '', forma: '' },
       '<p class="muted">Preços do Financeiro (09/11). Extra ' + e(V.brl(V.EXTRA_MAQUINA)) + '/PC · Pix ' + e(String(cfgPrecos().pix)) + '% · anual ' + e(String(cfgPrecos().anual)) + '% (Pix/anual vêm do CRM).</p>')
       .then(function (v) {
         if (!v) return; var p = planoOficial(v.plano), n = Number(v.extras || 0), pcs = Number(v.pcs || 0);
+        var vc = V.validarContratoNovo(v, formasCT()); if (!vc.ok) return aviso(vc.erro);
         if (!p || !Number.isInteger(n) || n < 0) return aviso('Informe uma quantidade inteira de máquinas extras, maior ou igual a zero.');
         if (p.valorPorPc && (!Number.isInteger(pcs) || pcs < (p.pcsMin || 11))) return aviso('Empresa+ começa em 11 computadores.');
         var valor = V.valorPlano(p.nome, pcs || p.pcs, n, cfgPrecos());
         if (valor == null) return aviso('Valor do plano ainda não definido.');
         var obs = 'Visita preventiva: ' + p.frequencia + '. Limpeza a cada ' + p.limpeza + ' meses. PCs: ' + (pcs || p.pcs || p.pcsTxt) + '. Máquinas extras: ' + n + ' × ' + V.brl(V.EXTRA_MAQUINA) + '/mês. Pix ' + cfgPrecos().pix + '% (não soma em combo). Anual ' + cfgPrecos().anual + '%.' +
           ' ' + p.suporte + ', sem promessa de prazo em horas.' + (v.obs ? '\n' + v.obs : '');
-        depoisCT('salvarContrato', [{ cliente: v.cliente, plano: p.nome, valor: valor, visitas: p.visitas, inicio: v.inicio, obs: obs }]);
+        var pl = { cliente: v.cliente, plano: p.nome, valor: valor, visitas: p.visitas, inicio: v.inicio, status: vc.status, dia: vc.dia, obs: obs };
+        if (vc.forma) pl.forma = vc.forma;
+        depoisCT('salvarContrato', [pl]);
       });
     $('c_frequencia').readOnly = true;
+    // v0.8.9: dia obrigatório só no Ativo; Proposta/Pausado/Encerrado podem ficar sem dia.
+    $('c_dia').setAttribute('inputmode', 'numeric'); $('c_dia').setAttribute('pattern', '([1-9]|[12][0-9]|3[01])');
+    var regraDia = function () { var at = ($('c_status').value || 'Ativo') === 'Ativo'; $('c_dia').required = at; var lb = document.querySelector('label[for="c_dia"]'); if (lb) lb.textContent = 'Dia do vencimento (1 a 31)' + (at ? ' *' : ' (opcional)'); };
+    $('c_status').onchange = regraDia; regraDia();
     var preencher = function () {
       var p = planoOficial($('c_plano').value), n = Number($('c_extras').value || 0), pcs = Number($('c_pcs').value || 0);
       var validoExt = Number.isInteger(n) && n >= 0;
@@ -1674,7 +1754,7 @@
     return '<div class="filtros"><input type="month" id="fMes" value="' + e(mes) + '" aria-label="Mês"></div>' + (r.local ? '<p class="muted">Prévia do aparelho (sem resposta do servidor).</p>' : '') +
       '<div class="tiles" id="painelMes">' + tile('Faturamento', V.brl(r.faturamento || 0)) + tile('Lucro', V.brl(r.lucro || 0)) + tile('Custo de peças', V.brl(r.custoPecas || 0)) + tile('Ticket médio', V.brl(r.ticketMedio || 0)) +
       tile('OS abertas', r.osAbertas || 0) + tile('OS entregues', r.osEntregues || 0) + tile('Orçamentos aprovados', (o.aprovados || 0) + ' de ' + (o.total || 0) + ' (' + (o.taxaAprovacao || 0) + '%)') + tile('Clientes novos', r.clientesNovos || 0) +
-      tile('Receita de contratos', V.brl(r.receitaContratos || 0)) + tile('Avaliação', r.avaliacao && r.avaliacao.quantidade ? String(r.avaliacao.media).replace('.', ',') + ' ★ (' + r.avaliacao.quantidade + ')' : '—') + '</div>' +
+      tile('Receita de contratos (previsto)', V.brl(r.receitaContratos || 0), 'tileCtPrevisto') + tile('Receita de contratos (recebido)', r.receitaContratosRecebida == null ? '—' : V.brl(r.receitaContratosRecebida), 'tileCtRecebido') + tile('Avaliação', r.avaliacao && r.avaliacao.quantidade ? String(r.avaliacao.media).replace('.', ',') + ' ★ (' + r.avaliacao.quantidade + ')' : '—') + '</div>' +
       '<div class="card"><div class="m">OS em andamento: ' + obj(r.osPorStatus) + '<br>Como conheceu: ' + obj(r.comoConheceu) + '<br>Motivos de recusa: ' + obj(r.motivosRecusa) + '</div></div>';
   }
 
@@ -2243,7 +2323,9 @@
       if (!V.primeiroContatoOp(o) || !api.pode('registrarContatoOp')) return;
       registrarContatoOpFundo(o, canal);
     }); });
-    c.querySelectorAll('[data-chip-ct]').forEach(function (b) { b.onclick = function () { F.ct = b.dataset.chipCt; render(); var n = document.querySelector('[data-chip-ct="' + F.ct + '"]'); if (n) n.focus(); }; });
+    c.querySelectorAll('[data-chip-ct]').forEach(function (b) { b.onclick = function () { F.ct = b.dataset.chipCt; F.ctSit = ''; render(); var n = document.querySelector('[data-chip-ct="' + F.ct + '"]'); if (n) n.focus(); }; });
+    c.querySelectorAll('[data-chip-sit]').forEach(function (b) { b.onclick = function () { F.ctSit = b.dataset.chipSit; render(); var n = document.querySelector('[data-chip-sit="' + F.ctSit + '"]'); if (n) n.focus(); }; });
+    if ($('fCompCT')) $('fCompCT').onchange = function () { var v = this.value || ''; CTX.comp = /^\d{4}-\d{2}$/.test(v) && v !== D.hoje.slice(0, 7) ? v : ''; CTX.retorno = ''; recarregarCT(); };
     c.querySelectorAll('[data-contato]').forEach(function (b) { b.onclick = function () { F.op.contato = b.dataset.contato; render(); var n = document.querySelector('[data-contato="' + F.op.contato + '"]'); if (n) n.focus(); }; });
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };

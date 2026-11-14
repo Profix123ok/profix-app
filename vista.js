@@ -515,6 +515,92 @@
   V.proximaVisitaContrato = function (visitas, k, hoje) {
     return V.proximasVisitas(visitas, hoje).filter(function (v) { return (v.contrato && v.contrato === k.id) || (!v.contrato && v.cliente === k.cliente); })[0] || null;
   };
+  // ---- v0.8.9: cobrança dos planos (mesmo critério do painel do CRM: listaContratos/receberMensalidade/salvarContrato @117) ----
+  V.STATUS_CONTRATO = ['Ativo', 'Proposta', 'Pausado', 'Encerrado']; // mesmos valores do crm-v3 (STATUS_CONTRATO)
+  V.SITUACOES_MENS = ['vencido', 'a vencer', 'pago', 'fora'];
+  /** 'AAAA-MM' → 'MM/AAAA' (igual ao competenciaBR_ do CRM). */
+  V.competenciaBR = function (ym) { ym = String(ym || ''); return /^\d{4}-\d{2}$/.test(ym) ? ym.slice(5, 7) + '/' + ym.slice(0, 4) : ''; };
+  /** Dia do vencimento: '' (vazio), número 1–31, ou null (inválido). Nunca inventa um dia. */
+  V.diaVencimento = function (v) {
+    var t = String(v == null ? '' : v).trim(); if (!t) return '';
+    if (!/^\d{1,2}$/.test(t)) return null; var d = Number(t); return d >= 1 && d <= 31 ? d : null;
+  };
+  /** Vencimento na competência (dia 29–31 vira o último dia do mês). Mesmo cálculo do CRM; o App usa o que vem da API. */
+  V.vencimentoContrato = function (dia, ym) {
+    var d0 = V.diaVencimento(dia); if (!d0 || !/^\d{4}-\d{2}$/.test(String(ym || ''))) return '';
+    var p = String(ym).split('-').map(Number), ult = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(), d = Math.min(d0, ult);
+    return ym + '-' + (d < 10 ? '0' : '') + d;
+  };
+  /** Situação do mês como veio do CRM: 'pago' | 'a vencer' | 'vencido' | 'fora' (desconhecido/vazio = 'fora'). */
+  V.situacaoContrato = function (k) { var s = String((k && k.situacaoMensalidade) || '').trim().toLowerCase(); return V.SITUACOES_MENS.indexOf(s) >= 0 ? s : 'fora'; };
+  V.temDiaContrato = function (k) { return !!V.diaVencimento(k && k.dia); };
+  /** Receber só em 'a vencer' ou 'vencido' e com dia do vencimento (mesmo critério do painel). */
+  V.podeReceberContrato = function (k) { var s = V.situacaoContrato(k); return (s === 'a vencer' || s === 'vencido') && V.temDiaContrato(k); };
+  /** Contrato Ativo sem dia: fica 'fora' da cobrança até o Pedro informar o dia. */
+  V.precisaDiaContrato = function (k) { return !!k && k.status === 'Ativo' && !V.temDiaContrato(k); };
+  /** Por que está 'fora' (texto curto). */
+  V.motivoForaContrato = function (k) {
+    if (!V.temDiaContrato(k)) return 'sem dia do vencimento';
+    if (k.status && k.status !== 'Ativo') return 'contrato ' + String(k.status).toLowerCase();
+    var ini = String(V.inicioContrato(k)).slice(0, 7);
+    if (ini && k.competencia && ini > k.competencia) return 'competência antes do início';
+    return 'fora da cobrança';
+  };
+  /** Linha da situação do mês para o cartão. Usa só o que veio do CRM (vencimento, pagoEm, valorPago). */
+  V.linhaSituacaoContrato = function (k) {
+    var s = V.situacaoContrato(k), comp = V.competenciaBR(k.competencia), venc = k.vencimento ? V.dataBR(k.vencimento) : '';
+    if (s === 'pago') return 'Pago' + (k.pagoEm ? ' em ' + V.dataBR(k.pagoEm) : '') + (Number(k.valorPago) > 0 ? ' · ' + V.brl(Number(k.valorPago)) : '') + (comp ? ' (competência ' + comp + ')' : '');
+    if (s === 'vencido') return 'Vencido' + (venc ? ' desde ' + venc : '') + (comp ? ' (competência ' + comp + ')' : '');
+    if (s === 'a vencer') return 'A vencer' + (venc ? ' em ' + venc : '') + (comp ? ' (competência ' + comp + ')' : '');
+    return 'Fora da cobrança: ' + V.motivoForaContrato(k) + (comp ? ' (competência ' + comp + ')' : '');
+  };
+  /** Resumo da cobrança: o do CRM (listaContratos.cobranca) quando vier; senão calculado das situações que vieram em cada contrato. */
+  V.resumoCobranca = function (CT, ym) {
+    var c = CT && CT.cobranca;
+    if (c && typeof c === 'object') return { competencia: c.competencia || ym || '', pagos: Number(c.pagos) || 0, aVencer: Number(c.aVencer) || 0, vencidos: Number(c.vencidos) || 0, fora: Number(c.fora) || 0, recebido: Number(c.recebido) || 0, emAberto: Number(c.emAberto) || 0, doCrm: true };
+    var r = { competencia: ym || '', pagos: 0, aVencer: 0, vencidos: 0, fora: 0, recebido: 0, emAberto: 0, doCrm: false };
+    ((CT && CT.contratos) || []).forEach(function (k) {
+      var s = V.situacaoContrato(k); if (!r.competencia && k.competencia) r.competencia = k.competencia;
+      if (s === 'pago') { r.pagos++; r.recebido += Number(k.valorPago) || 0; } else if (s === 'fora') r.fora++; else { r[s === 'vencido' ? 'vencidos' : 'aVencer']++; r.emAberto += Number(k.valor) || 0; }
+    });
+    r.recebido = Math.round(r.recebido * 100) / 100; r.emAberto = Math.round(r.emAberto * 100) / 100; return r;
+  };
+  /** Filtro pela situação do mês ('' = todas). Vencidos primeiro quando o filtro é de cobrança. */
+  V.filtrarSituacaoContratos = function (contratos, sit) {
+    if (!sit) return (contratos || []).slice();
+    return (contratos || []).filter(function (k) { return V.situacaoContrato(k) === sit; });
+  };
+  V.contagemSituacoes = function (contratos) { var c = { pago: 0, 'a vencer': 0, vencido: 0, fora: 0 }; (contratos || []).forEach(function (k) { c[V.situacaoContrato(k)]++; }); return c; };
+  /** Valida o "+ Contrato": status Ativo (padrão) exige dia 1–31; Proposta/Pausado/Encerrado podem ficar sem dia. Retorna {ok, erro, dia, status, forma}. */
+  V.validarContratoNovo = function (v, formas) {
+    v = v || {}; var status = String(v.status || '').trim() || 'Ativo';
+    if (V.STATUS_CONTRATO.indexOf(status) < 0) return { ok: false, erro: 'Status inválido. Use: ' + V.STATUS_CONTRATO.join(', ') + '.' };
+    var dia = V.diaVencimento(v.dia);
+    if (dia === null) return { ok: false, erro: 'Dia do vencimento deve ser de 1 a 31.' };
+    if (status === 'Ativo' && !dia) return { ok: false, erro: 'Informe o dia do vencimento (1 a 31). Contrato ativo precisa do dia para a cobrança (use status "Proposta" enquanto não fechar).' };
+    var forma = String(v.forma || '').trim();
+    if (forma && formas && formas.length && formas.indexOf(forma) < 0) return { ok: false, erro: 'Forma de pagamento inválida.' };
+    return { ok: true, status: status, dia: dia, forma: forma };
+  };
+  /** Payload do receberMensalidade (mesmos campos do Receber do painel). Valor vazio = erro (o CRM também recusa). */
+  V.payloadReceber = function (k, v) {
+    v = v || {}; var comp = String(v.competencia || k.competencia || '').trim(), data = String(v.data || '').trim();
+    if (!k || !k.id) return { erro: 'Informe o id do contrato.' };
+    if (!V.temDiaContrato(k)) return { erro: 'O contrato ' + k.id + ' não tem dia do vencimento: informe o dia antes de receber.' };
+    if (comp && !/^\d{4}-\d{2}$/.test(comp)) return { erro: 'Competência inválida (use AAAA-MM).' };
+    if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) return { erro: 'Data inválida (use AAAA-MM-DD).' };
+    var tv = String(v.valor == null ? '' : v.valor).trim().replace(/^R\$\s*/, ''), valor = tv === '' ? NaN : Number(/,/.test(tv) ? tv.replace(/\./g, '').replace(',', '.') : tv);
+    if (!(valor > 0)) return { erro: 'Informe o valor recebido.' };
+    var p = { id: k.id, valor: Math.round(valor * 100) / 100 };
+    if (comp) p.competencia = comp; if (data) p.data = data;
+    if (v.forma) p.forma = String(v.forma); if (String(v.parcelas || '').trim()) p.parcelas = String(v.parcelas).trim();
+    return { payload: p };
+  };
+  /** Mensagem para o Pedro depois do Receber: msg do CRM + avisos (se houver). */
+  V.textoRetornoReceber = function (r) {
+    r = r || {}; var a = (r.avisos || []).filter(Boolean);
+    return (r.msg || 'Mensalidade lançada no Financeiro.') + (a.length ? ' Atenção: ' + a.join(' ') : '');
+  };
   /** PJ = tem contrato OU tipoCli PJ/Empresa OU nome sugere empresa. PF = resto. */
   V.clienteEhEmpresa = function (c) {
     if (!c) return false;
