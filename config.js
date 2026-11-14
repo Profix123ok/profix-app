@@ -20,7 +20,9 @@ window.PROFIX_CONFIG = {
     // crm-v3 API @113/@115 (10/11/2026): Módulo 9 (fornecedores só id/nome/ativo, cotações e insumos; @115: fornecedorId no insumo e limpar com ''). lmSalvarFornecedor/lmSalvarPC NÃO existem no App.
     'listarFornecedores', 'listarCotacoes', 'listarInsumos', 'salvarCotacao', 'mudarStatusCotacao', 'salvarInsumo',
     // crm-v3 API @117 (painel @116, 11/11/2026): cobrança dos planos. listaContratos com dia/vencimento/situacaoMensalidade + cobranca; salvarContrato com dia/forma/status.
-    'receberMensalidade'],
+    'receberMensalidade',
+    // v0.9.0: salvarValidadeOS (Diferenciais.gs, já no doPost): renovar a validade do orçamento vencido com o padrão do servidor.
+    'salvarValidadeOS'],
   // v0.7.1: validade do orçamento, garantia e desconto de indicação NÃO ficam aqui: vêm do servidor (getDados().config: validadePadraoDias, garantiaDiasProfix, descontoIndicacaoPct).
   WHATSAPP_LOJA: '(15) 98112-8309',
   // Horários de visita técnica (último início = fim − passo). Ajuste aqui se o expediente mudar.
@@ -30,5 +32,5 @@ window.PROFIX_CONFIG = {
     fimDeSemana: { inicio: '09:00', fim: '17:00' }
   },
   PRECO_VISITA_EMPRESA: 179.90, // tabela oficial 02/11/2026 (visita técnica a empresa)
-  VERSAO_APP: '0.8.9'
+  VERSAO_APP: '0.9.0'
 };
