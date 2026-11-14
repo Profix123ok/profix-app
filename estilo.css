@@ -188,3 +188,10 @@ table.dre td:last-child{white-space:nowrap}
 .ct-inicio b{color:#bbf7d0}
 @media (max-width:420px){.menu a{font-size:11px}.menu a span{font-size:20px}}
 #cobrancaResumo input[type=month]{max-width:100%;width:auto;min-height:40px}#cobrancaResumo .m{line-height:1.7}.ct-sit .tag,.ct-venc .tag{margin-left:0}#ctRetorno{margin:8px 0}
+/* v0.9.0: orçamento rápido */
+.orc-rap{min-width:0}.orc-rap *{min-width:0}.orc-rap input,.orc-rap select,.orc-rap textarea{width:100%;max-width:100%;box-sizing:border-box}
+.orc-it{display:grid;gap:6px;padding:8px 0;border-top:1px solid var(--borda)}.orc-l1{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center}
+.orc-l2{display:grid;grid-template-columns:56px 1fr 1.2fr;gap:6px;align-items:end}.orc-l2 label{font-size:12px;color:var(--cinza);display:grid;gap:2px}
+.orc-par{display:grid;grid-template-columns:1fr 58px;gap:4px}.orc-lt{grid-column:1/-1;text-align:right;white-space:nowrap}
+.orc-desc-total{display:grid;gap:4px}.orc-desc-total .orc-par{max-width:240px}.orc-rap .osm-bar{bottom:0}.orc-rap .osm-cat span{overflow-wrap:anywhere}
+@media (min-width:700px){.orc-l2{grid-template-columns:70px 1fr 1.2fr 110px}.orc-lt{grid-column:auto;align-self:center}}
