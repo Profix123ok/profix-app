@@ -17,13 +17,15 @@
   V.podeWaCliente = function (c) { var n = c && c.consent === 'Sim' && !/^s/i.test(String(c.naoContatar || '').trim()) && V.numeroWa(c.whatsapp); return !!n && n.length === 13 && n.charAt(4) === '9'; };
   V.MODELO_OP = { 'Nova': 'Empresa – Primeiro contato', 'Contatada': 'Empresa – Lembrete único (3 dias)', 'Sem resposta': 'Empresa – Lembrete único (3 dias)',
     'Virou lead': 'Empresa – Respondeu com interesse', 'Descartada': 'Empresa – Agora não' };
-  // v0.8.8: texto OFICIAL do 1º contato (Atendimento ProFix, 11/11/2026). Vale no App mesmo se a planilha ainda tiver o modelo antigo.
+  // v0.9.2: texto OFICIAL do 1º contato = padrão do Pedro (crm/primeiro-contato-empresas-2026-11-15.md). Vale no App mesmo se a planilha ainda tiver o modelo antigo.
+  // {empresa} vazio vira "sua empresa" ("os computadores da sua empresa").
   V.NOME_PRIMEIRO_CONTATO = 'Empresa – Primeiro contato';
   V.SITE_OFICIAL = 'https://profixcomputadores.github.io/';
+  V.SITE_EMPRESAS = 'https://profixcomputadores.github.io/empresas.html';
   V.TEXTO_PRIMEIRO_CONTATO = 'Olá! Tudo bem?\n\n' +
-    'Me chamo Pedro, sou responsável pela ProFix Computadores. Oferecemos suporte técnico e manutenção preventiva em TI para empresas em Sorocaba, como a {empresa} ({segmento}), para que o escritório de vocês trabalhe com mais velocidade e menos interrupções por falhas ou travamentos nos equipamentos.\n\n' +
-    'Deixo abaixo o link do nosso site oficial para consulta rápida das nossas soluções:\n🌐 ' + 'https://profixcomputadores.github.io/' + '\n\n' +
-    'Gostaria de agendar uma breve ligação de 5 a 10 minutos esta semana para entender a estrutura de TI de vocês e apresentar como podemos otimizar o desempenho da sua equipe. Qual o melhor dia e horário para conversarmos?\n\n' +
+    'Me chamo Pedro, sou responsável pela ProFix Computadores. Atendemos empresas de Sorocaba com suporte técnico e manutenção preventiva, para que os computadores da {empresa} funcionem bem e sem paradas por lentidão ou falhas.\n\n' +
+    'Você pode conhecer nossos serviços e planos para empresas no nosso site:\n' + 'https://profixcomputadores.github.io/empresas.html' + '\n\n' +
+    'Se fizer sentido para vocês, podemos marcar uma conversa rápida de 10 minutos, por ligação ou chamada, para eu entender como está a estrutura de TI da {empresa} e mostrar como podemos ajudar. Qual dia e horário fica melhor para você?\n\n' +
     'Se preferir não receber mensagens, é só me avisar.';
   /** Ramo/segmento da empresa (campo existente o.segmento; aceita ramo/setor se vier). '' se vazio ou genérico ("Outro"). */
   V.ramoOp = function (o) { var r = String((o && (o.segmento || o.ramo || o.setor)) || '').trim(); return /^(outro|outros|-|—|n\/?a)$/i.test(r) ? '' : r; };
@@ -32,6 +34,8 @@
     var nome = String(o.contato || o.responsavel || o.nome || o.empresa || '').trim(), ramo = V.ramoOp(o);
     var t = String(texto || '');
     // v0.8.8: {segmento}/{ramo} vazio some sem deixar "()" nem "no ramo de" sobrando; onde precisa de substantivo, vira "empresas".
+    // v0.9.2: empresa sem nome -> "da sua empresa" (não usa o nome da pessoa no lugar da empresa nessa frase).
+    if (!String(o.empresa || '').trim()) t = t.replace(/\b(da|na|para a) \{empresa\}/g, '$1 sua empresa');
     if (!ramo) t = t.replace(/\s*\(\s*\{(segmento|ramo)\}\s*\)/g, '').replace(/,?\s*(no|do) (ramo|segmento) (de |da |do )?\{(segmento|ramo)\}/g, '');
     return t.replace(/\{empresa\}/g, o.empresa || nome).replace(/\{contato\}/g, o.responsavel || 'tudo bem').replace(/\{primeiro_nome\}/g, nome.split(' ')[0])
       .replace(/\{segmento\}|\{ramo\}/g, ramo || 'empresas')
@@ -66,7 +70,19 @@
     var m = V.modelosOp(modelos).filter(function (x) { return x.modelo === nome; })[0];
     return m ? V.preencher(m.texto, o) : '';
   };
-  V.linkWaOp = function (modelos, o, nomeEscolhido) { if (!V.podeWaOp(o)) return null; var t = V.modeloOp(modelos, o, nomeEscolhido); return 'https://wa.me/' + V.numeroWa(o.whatsapp) + (t ? '?text=' + encodeURIComponent(t) : ''); };
+  V.linkWaOp = function (modelos, o, nomeEscolhido) { if (!V.podeWaOp(o)) return null; var t = V.modeloOp(modelos, o, nomeEscolhido); return V.urlWhats(V.numeroWa(o.whatsapp), t); };
+  // v0.9.2: link do WhatsApp num lugar só. Celular (Android/iPhone): whatsapp://send abre o app direto (sem a aba do navegador que
+  // redireciona wa.me -> api.whatsapp.com -> app); se o app não abrir em ~1,5 s, o App cai para api.whatsapp.com (ver app.js abrirWhatsCelular).
+  // PC: continua wa.me. Só monta o link: quem envia é sempre o Pedro.
+  V.ehCelular = function (ua) { if (ua == null) ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : ''; return /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(String(ua)); };
+  V.urlWhats = function (numero, texto, ua) {
+    var n = String(numero || '').replace(/\D/g, ''), t = texto ? encodeURIComponent(texto) : '';
+    if (V.ehCelular(ua)) return 'whatsapp://send?' + (n ? 'phone=' + n + (t ? '&' : '') : '') + (t ? 'text=' + t : '');
+    return 'https://wa.me/' + n + (t ? '?text=' + t : '');
+  };
+  /** Reserva do celular quando o app do WhatsApp não abre: whatsapp://send?… -> https://api.whatsapp.com/send?… (mesmo número e texto). */
+  V.urlWhatsWeb = function (href) { return String(href || '').replace(/^whatsapp:\/\/send\?/, 'https://api.whatsapp.com/send?'); };
+  V.ehLinkWhats = function (href) { return /^(whatsapp:\/\/send\?|https:\/\/(wa\.me|api\.whatsapp\.com)\/)/.test(String(href || '')); };
   // v0.6.1: regra LGPD do WhatsApp. Mensagem da própria OS (status, orçamento, pronto para retirar, pós-entrega) pode sair sem
   // consentimento (com aviso). Marketing (reativação, aniversário, promoção, preventiva oferecida) só com consentimento "Sim".
   V.RE_MARKETING = /reativ|anivers|promo|preventiv|oferta|cupom|black ?friday|novidade|campanha|sumid|saudade/i;
@@ -80,11 +96,11 @@
   V.botaoWaCliente = function (c, tipo, texto) {
     var n = c && V.numeroWa(c.whatsapp); if (!n || n.length !== 13 || n.charAt(4) !== '9') return null;
     if (/^s/i.test(String(c.naoContatar || '').trim())) return null; // v0.7.0: "Não contatar" = Sim bloqueia tudo (contrato crm-v3)
-    var href = 'https://wa.me/' + n + (texto ? '?text=' + encodeURIComponent(texto) : '');
+    var href = V.urlWhats(n, texto);
     if (c.consent === 'Sim') return { href: href, aviso: false };
     return tipo === 'os' ? { href: href, aviso: true } : null;
   };
-  V.linkWaCliente = function (c, texto) { if (!V.podeWaCliente(c)) return null; return 'https://wa.me/' + V.numeroWa(c.whatsapp) + (texto ? '?text=' + encodeURIComponent(texto) : ''); };
+  V.linkWaCliente = function (c, texto) { if (!V.podeWaCliente(c)) return null; return V.urlWhats(V.numeroWa(c.whatsapp), texto); };
   /** Espelho local de registrarContatoOp (crm-v3) para a tela mudar na hora, inclusive sem internet. O servidor é quem decide. */
   V.aplicarContatoOp = function (o, hoje, canal) {
     var antes = o.status || 'Nova';
@@ -744,7 +760,8 @@
       '🔎 O que encontrei: ' + causa + '\n' +
       '🛠️ O que proponho: ' + serv + ' · **' + valor + '**[, peça não inclusa / peça: R$ __]\n' +
       '⏱️ Prazo: [__] · Orçamento válido até ' + validade + '\n' +
-      'Você pode aprovar por aqui ou pelo link: ' + (link || '[link]') + '. Se preferir não fazer, tudo bem também.';
+      // v0.9.2: fechamento combinado com o Atendimento (15/11/2026)
+      'Para aprovar, é só tocar no link: ' + (link || '[link]') + '. Lá também aparecem o total e a opção de pagar com Pix. Se preferir não fazer o serviço, tudo bem também.';
   };
   V.textoAparelhoPronto = function (c, o) {
     var nome = V.primeiroNome(c, o) || '[nome]', ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
@@ -767,7 +784,7 @@
   V.textoOrcamentoPeca = function (c, o, link, validadeIso) {
     var nome = V.primeiroNome(c, o) || '[nome]', ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
     var val = validadeIso ? V.dataBR(validadeIso) : '[data]';
-    return nome + ', para o seu ' + ap + ' (OS ' + num + ') vai precisar de [peça]. A peça fica **R$ [__]**[ com frete] e o serviço, R$ [__]. O valor da peça vale até ' + val + '. A peça leva cerca de [__] dias para chegar depois que você aprovar e pagar. Pode aprovar por aqui ou pelo link: ' + (link || '[link]') + '. Se preferir não fazer, tudo bem também.';
+    return nome + ', para o seu ' + ap + ' (OS ' + num + ') vai precisar de [peça]. A peça fica **R$ [__]**[ com frete] e o serviço, R$ [__]. O valor da peça vale até ' + val + '. A peça leva cerca de [__] dias para chegar depois que você aprovar e pagar. Pode aprovar por aqui ou pelo link: ' + (link || '[link]') + '. Se preferir não fazer o serviço, tudo bem também.';
   };
   V.textoPecaEncomendada = function (c, o) {
     var nome = V.primeiroNome(c, o), ap = (o && o.equipamento) || '[aparelho]', num = (o && o.num) || '[____]';
@@ -863,9 +880,34 @@
   };
   // v0.9.0: mensagens do painel 💬 que levam o link de acompanhamento/aprovação da OS (antes iam com "[link da OS]" fixo).
   V.MSG_COM_LINK_OS = ['os-recebi', 'os-orc', 'os-peca-orc'];
+  /** v0.9.2: "Enviar mesmo assim sem link" – tira a frase do link (nunca manda "[link…]" para o cliente). */
+  V.semMarcadorLink = function (txt) {
+    return String(txt || '').replace(/\. Você pode acompanhar por aqui: \[link da OS\]\./g, '.')
+      .replace(/(Você pode aprovar por aqui ou pelo link|Pode aprovar por aqui ou pelo link|Para aprovar, é só tocar no link): \[link\]\.( Lá também aparecem o total e a opção de pagar com Pix\.)?/g, 'Para aprovar, é só me responder por aqui.')
+      .replace(/\s*\[link( da OS)?( \/ Minha Área)?\]/g, '');
+  };
+  /** v0.9.2: mensagens que levam o bloco Pix (ctx.pix(valor, num) -> texto). Orçamento: valor do orçamento; pronto: saldo/valor final. */
+  V.MSG_COM_PIX = { 'os-orc': 'orcamento', 'os-pronto': 'saldo', 'os-peca-orc': 'chave' };
   V.precisaLinkOS = function (id, ctx) { return V.MSG_COM_LINK_OS.indexOf(id) >= 0 && !!(ctx && ctx.os && ctx.os.num) && !(ctx.linkOS && /^https:\/\//.test(ctx.linkOS)); };
   V.temMarcadorLink = function (txt) { return /\[link( da OS)?( \/ Minha Área)?\]/.test(String(txt || '')); };
+  /** Valor do Pix na mensagem: orçamento = total do orçamento; pronto = saldo (já pago tudo -> sem valor); peça = sem valor (só a chave). */
+  V.valorPixMsg = function (id, ctx) {
+    var q = V.MSG_COM_PIX[id], o = ctx && ctx.os; if (!q || !o) return 0;
+    if (q === 'orcamento') return Number(o.orcamento) > 0 ? Number(o.orcamento) : 0;
+    if (q === 'saldo') { var sd = Number(ctx.saldo) || 0; if (sd > 0) return sd; if (Number(ctx.recebido) > 0) return 0; var v = Number(o.valor || o.orcamento) || 0; return v > 0 ? v : 0; }
+    return 0;
+  };
   V.montarMensagemPronta = function (id, ctx, dataIso, hora) {
+    ctx = ctx || {};
+    var base = V.montarMensagemBase(id, ctx, dataIso, hora), qual = V.MSG_COM_PIX[id], o = ctx.os;
+    if (!base || !qual || typeof ctx.pix !== 'function' || !o) return base;
+    var bloco = ctx.pix(V.valorPixMsg(id, ctx), o.num);
+    if (!bloco) return base;
+    // Pix antes do fechamento ("Para aprovar…") no orçamento; no fim nas demais.
+    var i = base.lastIndexOf('\nPara aprovar, é só tocar no link:');
+    return i > 0 ? base.slice(0, i) + '\n\n' + bloco + '\n\n' + base.slice(i + 1) : base + '\n\n' + bloco;
+  };
+  V.montarMensagemBase = function (id, ctx, dataIso, hora) {
     ctx = ctx || {};
     var c = ctx.cliente || {}, o = ctx.os, v = ctx.visita, link = ctx.linkOS || '';
     if (id === 'ag-traz') return V.textoConfirmarAgendamentoTraz(c, o, dataIso, hora);

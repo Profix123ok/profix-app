@@ -142,6 +142,8 @@
           d.config = d.config || {};
           if (p && p.pixPct != null && isFinite(Number(p.pixPct))) d.config.pixPct = Number(p.pixPct);
           if (p && p.anualPct != null && isFinite(Number(p.anualPct))) d.config.anualPct = Number(p.anualPct);
+          // v0.9.2 (API @127): chave Pix do painel do CRM. getDados.config.pix vale primeiro; planosPublicos.pix completa se faltar.
+          if (p && p.pix && typeof p.pix === 'object' && !(d.config.pix && d.config.pix.chave)) d.config.pix = p.pix;
           d.planosPublicos = p;
         }, function () {}));
         return Promise.all(tarefas).then(function () { return d; });
@@ -202,8 +204,9 @@
           if (!token) return falha(Object.assign(new Error('Aparelho sem chave de acesso.'), { codigo: 'SEM_TOKEN' }));
           if (token !== tokenServidor && !(sessoes[token] && sessoes[token] > agora())) return falha(Object.assign(new Error('Chave de acesso inválida.'), { codigo: 'TOKEN_INVALIDO', doServidor: true }));
           if (!ACOES[acao] || !servidor[acao] || (opc.semAcoes || []).indexOf(acao) >= 0) return falha(Object.assign(new Error('Ação desconhecida: ' + acao), { doServidor: true, codigo: 'ACAO_DESCONHECIDA' }));
-          if (idOp && log.some(function (l) { return l.id === idOp; })) return ok({ ok: true, msg: 'Já recebido.' }); // idempotência
-          try { var r = servidor[acao].apply(null, args || []); log.push({ id: idOp, acao: acao, args: args }); ok(r); }
+          var rep = idOp ? log.filter(function (l) { return l.id === idOp; })[0] : null;
+          if (rep) return ok(acao === 'linkClienteOS' && rep.r ? rep.r : { ok: true, msg: 'Já recebido.' }); // idempotência (v0.9.2: o link repetido devolve a MESMA url, como o crm-v3 @127)
+          try { var r = servidor[acao].apply(null, args || []); log.push({ id: idOp, acao: acao, args: args, r: acao === 'linkClienteOS' ? r : undefined }); ok(r); }
           catch (e) { falha(Object.assign(e, { doServidor: true })); }
         }, opc.atraso || 0);
       });
