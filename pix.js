@@ -63,7 +63,8 @@
     var rt = { cnpj: 'CNPJ', cpf: 'CPF', email: 'E-mail', telefone: 'Telefone', aleatoria: 'Chave aleatória' }[tipoChave(chave)] || '';
     var chaveTexto = String(c.chaveTexto || '').trim() || ((rt ? rt + ' ' : '') + formatarChave(chave));
     var pct = c.pct != null && c.pct !== '' && isFinite(Number(c.pct)) ? Number(c.pct) : null;
-    return { chave: chave, nome: nome, cidade: cidade, chaveTexto: chaveTexto, pct: pct, fonte: fonte || 'aparelho' };
+    var nomeBanco = String(c.nomeBanco || '').trim(); // API @131: nome que aparece no app do banco (vazio = não mostra)
+    return { chave: chave, nome: nome, cidade: cidade, chaveTexto: chaveTexto, pct: pct, nomeBanco: nomeBanco, fonte: fonte || 'aparelho' };
   }
   /**
    * Chave Pix vinda da configuração do SERVIDOR (painel do CRM, editável pelo Pedro) – crm-v3 API @127:
@@ -73,7 +74,7 @@
    */
   function daConfigServidor(cfg) {
     var p = cfg && cfg.pix; if (!p || typeof p !== 'object' || !String(p.chave || '').trim()) return null;
-    return normalizarConfig({ chave: String(p.chave), nome: p.recebedor || p.nome, cidade: p.cidade, chaveTexto: p.chaveTexto, pct: p.pct }, 'servidor');
+    return normalizarConfig({ chave: String(p.chave), nome: p.recebedor || p.nome, cidade: p.cidade, chaveTexto: p.chaveTexto, pct: p.pct, nomeBanco: p.nomeBanco }, 'servidor');
   }
   /** Servidor primeiro; local (Ajustes do aparelho) só como reserva; por fim o padrão da ProFix. */
   function escolherConfig(cfgServidor, local) { return daConfigServidor(cfgServidor) || normalizarConfig(local, local && (local.chave || local.nome || local.cidade) ? 'aparelho' : 'padrão'); }
@@ -99,7 +100,7 @@
   function bloco(cfg, valor, num) {
     cfg = cfg || normalizarConfig({});
     var codigo = montar({ chave: cfg.chave, nome: cfg.nome, cidade: cfg.cidade, valor: valor, txid: num });
-    var t = '*Pagamento via Pix*\nChave Pix: ' + (cfg.chaveTexto || formatarChave(cfg.chave)) + '\nRecebedor: ' + cfg.nome +
+    var t = '*Pagamento via Pix*\nChave Pix: ' + (cfg.chaveTexto || formatarChave(cfg.chave)) + '\nRecebedor: ' + cfg.nome + (cfg.nomeBanco ? '\nNo banco aparece o nome ' + cfg.nomeBanco + '.' : '') +
       (Number(valor) > 0 ? '\nValor: ' + brl(valor) : '') + '\nPix copia e cola (copie o código abaixo e cole no app do banco, em Pix › Copia e cola):\n' + codigo;
     return { texto: t, codigo: codigo };
   }

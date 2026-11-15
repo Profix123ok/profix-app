@@ -11,7 +11,8 @@
 
   // ---- Regras de contato ESPELHADAS do crm-v3 (Index.html: L.bloqueadaOp, L.modeloOp, L.temWhatsCliente) ----
   // Oportunidade: bloqueada se status "Não contatar" ou consentimento "Não contatar"/"Recusou"/"Revogado".
-  V.bloqueadaOp = function (o) { if (!o) return true; if (o.status === 'Não contatar') return true; var c = V.norm(o.consentOp).trim(); return ['nao contatar', 'recusou', 'revogado', 'revogou'].indexOf(c) >= 0; };
+  // v0.9.3: linha que só veio pela lista leve (_parcial: sem consentimento/notas) conta como bloqueada até a leitura completa (lado seguro).
+  V.bloqueadaOp = function (o) { if (!o) return true; if (o._parcial) return true; if (o.status === 'Não contatar') return true; var c = V.norm(o.consentOp).trim(); return ['nao contatar', 'recusou', 'revogado', 'revogou'].indexOf(c) >= 0; };
   V.podeWaOp = function (o) { return !V.bloqueadaOp(o) && !!V.numeroWa(o.whatsapp); }; // só o WhatsApp comercial publicado pela empresa
   // Cliente: consentimento "Sim" e número de celular (13 dígitos com 9).
   V.podeWaCliente = function (c) { var n = c && c.consent === 'Sim' && !/^s/i.test(String(c.naoContatar || '').trim()) && V.numeroWa(c.whatsapp); return !!n && n.length === 13 && n.charAt(4) === '9'; };
@@ -212,6 +213,70 @@
     var canal = (o && o.canalUltimoContato) || (h ? h.canal : '') || '';
     return { data: data, canal: canal };
   };
+  // ---- v0.9.3: 📸 Instagram nas Oportunidades (colunas novas no fim da aba: Instagram, Link, Nível, Canal contatado, Data contato Instagram) ----
+  // Texto curto do Direct (Atendimento, crm/primeiro-contato-empresas-2026-11-15.md, "Versão curta para Direct do Instagram"), igual ao arquivo.
+  V.TEXTO_DIRECT_INSTAGRAM = 'Olá, tudo bem? Sou o Pedro, da ProFix Computadores. Fazemos suporte técnico e manutenção preventiva para empresas aqui de Sorocaba. Se quiser conhecer nossos serviços e planos: https://profixcomputadores.github.io/empresas.html\n' +
+    'Se fizer sentido para a {empresa}, posso explicar em uma conversa rápida de 10 minutos. Se preferir não receber mensagens, é só me avisar.';
+  // Nomes de coluna aceitos (sem acento, sem espaço/símbolo, minúsculas). O CRM pode mandar a chave já em camelCase ou o cabeçalho como veio.
+  var NOMES_IG = { instagram: ['instagram', 'instagramarroba', 'arrobainstagram', 'perfilinstagram', 'ig'], link: ['linkinstagram', 'instagramlink', 'urlinstagram', 'link'],
+    nivel: ['nivelinstagram', 'nivel'], canal: ['canalcontatado', 'canaisContatados', 'canaiscontatados', 'canaldecontato'], dataIg: ['datacontatoinstagram', 'datadocontatoinstagram', 'datacontatoig'] };
+  var chaveNorm = function (k) { return V.norm(String(k || '')).replace(/[^a-z0-9]/g, ''); };
+  var memoIg = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  /** Lê os campos novos de uma oportunidade, aceitando o nome da coluna em qualquer formato. {instagram, link, nivel, canal, dataIg} (strings). */
+  V.camposIgOp = function (o) {
+    if (!o) return { instagram: '', link: '', nivel: '', canal: '', dataIg: '' };
+    var assin = [o.instagram, o.canalContatado, o.dataContatoInstagram, o.historico ? String(o.historico).length : 0].join('|');
+    var m = memoIg && memoIg.get(o); if (m && m.assin === assin) return m.v;
+    var r = { instagram: '', link: '', nivel: '', canal: '', dataIg: '' };
+    Object.keys(o).forEach(function (k) {
+      if (k.charAt(0) === '_') return; var n = chaveNorm(k), v = o[k] == null ? '' : String(o[k]).trim(); if (!v) return;
+      Object.keys(NOMES_IG).forEach(function (campo) { if (!r[campo] && NOMES_IG[campo].map(chaveNorm).indexOf(n) >= 0) { if (campo === 'link' && n === 'link' && !/instagram\.com/i.test(v)) return; r[campo] = v; } });
+    });
+    if (memoIg) memoIg.set(o, { assin: assin, v: r });
+    return r;
+  };
+  /** "@perfil", "perfil", "https://www.instagram.com/perfil/?igsh=…" -> "perfil" ('' se inválido). */
+  V.handleInstagram = function (v) {
+    var s = String(v || '').trim(); if (!s) return '';
+    var m = s.match(/instagram\.com\/([^/?#\s]+)/i); if (m) s = m[1];
+    s = s.replace(/^@+/, '').replace(/\/+$/, '').trim();
+    if (!/^[A-Za-z0-9._]{1,30}$/.test(s) || /^(p|reel|reels|explore|stories|accounts|tv)$/i.test(s)) return '';
+    return s;
+  };
+  V.instagramOp = function (o) { var c = V.camposIgOp(o); return V.handleInstagram(c.instagram) || V.handleInstagram(c.link); };
+  /** Filial/ramo marcado para "mandar só uma mensagem" (revisão do Analista 14/11): não mostra o 📸 Instagram. */
+  V.soUmaMensagemOp = function (o) { return /s[oó] uma mensagem/i.test([o && o.obs, o && o.proximoPasso, o && o.motivoPot, V.camposIgOp(o).nivel].join(' ')); };
+  /** Pode mostrar o 📸 Instagram? Mesmas regras do WhatsApp (Não contatar / consentimento recusado) + @ válido + nível não "não encontrado". */
+  V.podeIgOp = function (o) {
+    if (!o || V.bloqueadaOp(o) || V.soUmaMensagemOp(o)) return false;
+    var c = V.camposIgOp(o); if (/n[aã]o encontrad/i.test(c.nivel)) return false;
+    return !!V.instagramOp(o);
+  };
+  V.temIgOp = function (o) { return V.podeIgOp(o); };
+  V.textoDirectOp = function (o) { return V.preencher(V.TEXTO_DIRECT_INSTAGRAM, { empresa: String((o && o.empresa) || '').trim() }); };
+  V.linkInstagram = function (h) { return 'https://instagram.com/' + encodeURIComponent(h); };
+  V.linkInstagramApp = function (h) { return 'instagram://user?username=' + encodeURIComponent(h); };
+  /** Canais já usados com a empresa (para não mandar duas vezes): coluna "Canal contatado" + histórico + "Data contato Instagram". */
+  V.canaisUsadosOp = function (o) {
+    var l = [], add = function (c) { c = String(c || '').trim(); if (!c) return; var k = /insta/i.test(c) ? 'Instagram' : /whats/i.test(c) ? 'WhatsApp' : /liga|telefone/i.test(c) ? 'Ligação' : /e-?mail/i.test(c) ? 'E-mail' : c; if (l.indexOf(k) < 0) l.push(k); };
+    var c = V.camposIgOp(o); String(c.canal).split(/[,;/|]+/).forEach(add);
+    V.historicoOp(o).forEach(function (h) { if (h.canal) add(h.canal); });
+    if (c.dataIg) add('Instagram');
+    return l;
+  };
+  /** Espelho local do registro pelo Instagram: o mesmo do registrarContatoOp + colunas novas (só na tela; quem grava é o CRM). */
+  V.marcarCanalOp = function (o, canal, hoje) {
+    var usados = V.canaisUsadosOp(o); if (usados.indexOf(canal) < 0) usados.push(canal);
+    o.canalContatado = usados.join(', '); if (canal === 'Instagram') o.dataContatoInstagram = hoje;
+    return o;
+  };
+  /** Espelho local de registrarContatoOp(…, 'Instagram') como o crm-v3 faz para canal que não é WhatsApp: Nova → Contatada; depois só registra. */
+  V.aplicarContatoIgOp = function (o, hoje) {
+    var st = String(o.status || '').trim();
+    if (st === '' || st === 'Nova') V.aplicarContatoOp(o, hoje, 'Instagram');
+    else { if (st === 'Sem resposta') o.status = 'Contatada'; o.ultimoContato = hoje; o.historico = (o.historico ? o.historico + '\n' : '') + V.dataBR(hoje) + ' – Instagram'; }
+    return V.marcarCanalOp(o, 'Instagram', hoje);
+  };
   V.linkTelOp = function (o) { if (V.bloqueadaOp(o)) return null; var d = String(o.telefone || o.whatsapp || '').replace(/[^\d+]/g, ''); return d.replace(/\D/g, '').length >= 8 ? 'tel:' + d : null; };
   V.linkEmailOp = function (o) { if (V.bloqueadaOp(o)) return null; var m = String(o.email || '').trim(); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) ? 'mailto:' + m : null; };
   V.filtrarOps = function (lista, f) {
@@ -222,6 +287,7 @@
       if (f.segmento && o.segmento !== f.segmento) return false;
       if (f.cidade && V.chaveCidade(o.cidade) !== f.cidade) return false;
       if (f.wa && !V.temWaOp(o)) return false;
+      if (f.ig && !V.temIgOp(o)) return false; // v0.9.3: Tem Instagram
       if (f.contato && V.contatoOp(o) !== f.contato) return false;
       if (q && V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' ')).indexOf(q) < 0) return false;
       return true;
