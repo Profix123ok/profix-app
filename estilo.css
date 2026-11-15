@@ -199,3 +199,7 @@ table.dre td:last-child{white-space:nowrap}
 .orc-comprar { font-size: .9em; margin-top: 4px; }
 #orcPix { margin: 8px 0; word-break: break-word; }
 #osAComprar { margin-top: 4px; }
+/* v0.9.3: Instagram, canais já usados, faixa com erro e "enviando…" */
+.btn.ig{background:#3b1d4a;color:#f5d0fe;border:1px solid #6b2f86}.canais-op{font-size:13px;margin-top:2px}
+.faixa.com-erro{background:#4a1d1d;color:#fecaca}.faixa .faixa-erro{display:inline-block;margin-top:4px}.faixa .btn.peq{min-height:30px;padding:3px 8px;font-size:13px}
+button[data-enviando]{opacity:.8;cursor:progress}

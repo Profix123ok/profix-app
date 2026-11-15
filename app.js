@@ -12,8 +12,10 @@
     });
     if (!demoPronto) { document.getElementById('erro-senha').textContent = 'Não foi possível carregar a demonstração. Conecte à internet e tente novamente.'; return; }
   }
-  var api = demo ? ProFixAPI.criarAdaptadorMock({ hoje: CFG.HOJE_FIXO, enviarSenha: true, semAcoes: ((location.search.match(/[?&]semAcoes=([\w,]+)/) || [])[1] || '').split(',').filter(Boolean) })
-    : ProFixAPI.criarAdaptadorGas(CFG.API_URL, { liberadas: CFG.ACOES_SERVIDOR });
+  // v0.9.3: cópia dos dados no IndexedDB do aparelho (sem segredos): o App abre NA HORA com ela e atualiza por trás.
+  var RAP = window.ProFixRapido, PERSIST = RAP && !/[?&]semCopia=1/.test(location.search) ? RAP.criarPersistencia(demo ? 'profix-demo' : 'profix-app') : null;
+  var api = demo ? ProFixAPI.criarAdaptadorMock({ hoje: CFG.HOJE_FIXO, enviarSenha: true, persistencia: PERSIST, velocidade: CFG.LEITURAS_VELOCIDADE || [], atraso: Number((location.search.match(/[?&]atraso=(\d+)/) || [])[1]) || 0, semAcoes: ((location.search.match(/[?&]semAcoes=([\w,]+)/) || [])[1] || '').split(',').filter(Boolean) })
+    : ProFixAPI.criarAdaptadorGas(CFG.API_URL, { liberadas: CFG.ACOES_SERVIDOR, persistencia: PERSIST, velocidade: CFG.LEITURAS_VELOCIDADE || [] });
   var D = null, offline = false;
   var F = { op: { status: '', prioridade: '', segmento: '', q: '' }, os: { status: '', q: '' }, cli: { q: '' }, lead: { sit: 'Novo' } };
   var $ = function (id) { return document.getElementById(id); }, e = V.esc;
@@ -44,16 +46,27 @@
     if (mudou) salvarAjustes();
   }
   var WAF = 'profix.waOp'; try { F.op.wa = localStorage.getItem(WAF) === '1'; } catch (x) { F.op.wa = false; }
+  var IGF = 'profix.igOp'; try { F.op.ig = localStorage.getItem(IGF) === '1'; } catch (x) { F.op.ig = false; }
   var CID = 'profix.cidadeOp'; try { F.op.cidade = localStorage.getItem(CID) || ''; } catch (x) { F.op.cidade = ''; }
 
   function aviso(t) { var a = $('aviso'); a.textContent = t; a.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(function () { a.classList.remove('on'); }, 3500); }
   function faixa() {
-    var f = $('faixa'), n = api.fila().length, p = [];
+    var f = $('faixa'), n = api.fila().length, er = api.filaErros ? api.filaErros() : [], p = [];
     if (api.tipo === 'mock') p.push('Modo demonstração – dados fictícios');
     if (offline) p.push('Sem internet – mostrando os últimos dados salvos');
-    if (n) p.push(n + ' alteração(ões) aguardando envio');
-    f.textContent = p.join(' · '); f.hidden = !p.length;
+    if (n) p.push(offline || !navigator.onLine ? n + ' alteração(ões) aguardando envio' : '⏳ ' + n + ' alteração(ões) enviando ao CRM…');
+    // v0.9.3: recusa do servidor NUNCA some calada: fica aqui até tentar de novo ou descartar.
+    var html = e(p.join(' · '));
+    if (er.length) html += (html ? '<br>' : '') + er.map(function (x) {
+      return '<span class="faixa-erro" data-erro-op="' + e(x.id) + '">⚠️ Não salvou no CRM (' + e(ROTULO_ACAO[x.acao] || x.acao) + '): ' + e(x.erro) + ' <button type="button" class="btn sec peq" data-erro-tentar="' + e(x.id) + '">Tentar de novo</button> <button type="button" class="btn sec peq" data-erro-descartar="' + e(x.id) + '">Descartar</button></span>';
+    }).join('<br>');
+    f.innerHTML = html; f.hidden = !html; f.classList.toggle('com-erro', !!er.length);
+    f.querySelectorAll('[data-erro-tentar]').forEach(function (b) { b.onclick = function () { api.reenviarErro(b.dataset.erroTentar); faixa(); aviso('Enviando de novo…'); }; });
+    f.querySelectorAll('[data-erro-descartar]').forEach(function (b) { b.onclick = function () { api.descartarErro(b.dataset.erroDescartar); faixa(); aviso('Descartado. Atualizando com o que está no CRM…'); atualizarFundo(true); }; });
   }
+  var ROTULO_ACAO = { salvarCliente: 'cliente', salvarOS: 'OS', mudarStatusOS: 'status da OS', salvarOrcamento: 'orçamento', registrarInteracao: 'conversa', moverEtapa: 'etapa',
+    salvarOportunidade: 'oportunidade', registrarContatoOp: 'contato da empresa', decidirOrcamento: 'decisão do orçamento', salvarPeca: 'peça', salvarLancamento: 'lançamento',
+    mudarStatusTarefa: 'tarefa', salvarVisita: 'visita', salvarContrato: 'contrato', virarLead: 'virar lead' };
 
   // ---------- Entrada: senha (padrão) ou chave de acesso ----------
   function modoEntrada(chave) {
@@ -91,22 +104,83 @@
   api.aoExpirar = function () { if ($('tela-chave').hidden) telaChave(MSG_EXPIROU); };
 
   // ---------- Carregar e navegar ----------
-  var ESTAT = { iniciar: 0 }; // v0.8.8: contagem de recargas completas (os testes conferem que o toque no WhatsApp não recarrega)
-  function iniciar() {
-    ESTAT.iniciar++;
+  var ESTAT = { iniciar: 0, fundo: 0, renders: 0, primeiraTela: 0, daCopia: false, redesenhosEvitados: 0, leituras: 0 }; // v0.8.8: recargas completas; v0.9.3: leituras em 2º plano e redesenhos
+  /** Abre a cópia do aparelho (IndexedDB) e desenha na hora. Oportunidades vêm logo depois, fora do caminho crítico. */
+  function abrirDaCopia() {
+    if (D) return Promise.resolve();
+    return api.abrirCopia({ semOps: true }).then(function (d) {
+      if (d && !D) { D = d; ESTAT.daCopia = true; aplicarPrecosDoCrm(D); ASSIN = assinatura(D); if (D._extras) usarExtras(D._extras); }
+    }, function () {});
+  }
+  function carregarOpsDepois() {
+    if (!D || !D._opsPendentes) return;
+    var vai = function () { api.lerOpsCopia().then(function () { opsMexeu(); if (['hoje', 'vendas', 'clientes'].indexOf(rota().tela) >= 0) renderSuave(); }); };
+    if (window.requestIdleCallback) requestIdleCallback(vai, { timeout: 600 }); else setTimeout(vai, 50);
+  }
+  function assinatura(d) { try { return RAP ? RAP.assinatura(d) : String(Math.random()); } catch (x) { return String(Math.random()); } }
+  var ASSIN = '';
+  /** Recarga completa (botão Atualizar, entrada, testes). v0.9.3: desenha a cópia do aparelho NA HORA e só redesenha se o CRM trouxer algo diferente. */
+  function iniciar(opc) {
+    ESTAT.iniciar++; var forcar = !(opc && opc.abertura);
     if (!api.temToken()) return Promise.resolve(telaChave());
     $('tela-chave').hidden = true; $('app').hidden = false;
     carregando = true;
-    if (!D) { var c0 = api.cacheLocal(); if (c0) { D = c0; aplicarPrecosDoCrm(D); } } // mostra a última cópia enquanto atualiza
-    render();
-    return api.carregar().then(function (r) { carregando = false; if (r.dados) { D = r.dados; aplicarPrecosDoCrm(D); } offline = r.offline; if (typeof M9 !== 'undefined') M9.pendente = true; faixa(); render(); },
+    return abrirDaCopia().then(function () {
+      render(); if (D && !ESTAT.primeiraTela) ESTAT.primeiraTela = Math.round(performance.now());
+      carregarOpsDepois();
+      return api.carregar(forcar ? { completo: true } : null);
+    }).then(function (r) { carregando = false; aplicarLeitura(r, forcar); opsEmFundo(r); },
       function (er) { carregando = false; render(); if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave(MSG_EXPIROU); } else aviso(er.message); });
   }
+  /** Resultado de api.carregar(): troca D e redesenha só se mudou (forçar = recarga pedida, ex.: testes/botão). */
+  function aplicarLeitura(r, forcar) {
+    ESTAT.leituras++; var antes = D; offline = r.offline;
+    if (r.dados && r.dados !== D) { D = r.dados; aplicarPrecosDoCrm(D); }
+    if (r.extras) usarExtras(r.extras);
+    if (typeof M9 !== 'undefined') M9.pendente = true;
+    faixa(); opsMexeu();
+    var nova = assinatura(D), mudou = nova !== ASSIN || !antes; ASSIN = nova;
+    if (!mudou && !forcar) { ESTAT.redesenhosEvitados++; return; } // mesma coisa: não mexe na tela (rolagem, campos)
+    if (forcar) { var y = window.scrollY; render(); window.scrollTo(0, y); } else renderSuave();
+  }
+  /** aberturaApp (quando o CRM publicar) já traz contratos e catálogo: evita mais duas chamadas. */
+  function usarExtras(x) {
+    if (x.listaContratos && typeof CTX !== 'undefined' && !CTX.comp) CT = x.listaContratos;
+    if (x.catalogoOS && Array.isArray(x.catalogoOS.itens)) { CAT = x.catalogoOS.itens; carregarCatalogo.quando = Date.now(); try { localStorage.setItem(CATK, JSON.stringify(CAT)); } catch (e2) { /* cota */ } }
+  }
+  /** Leitura em 2º plano (sem "Carregando", sem travar): depois de gravações que dependem do servidor, ao voltar ao App, botão Atualizar etc. */
+  var FUNDO = { p: null, timer: null, quando: 0 };
+  /** Oportunidades pela lista leve (API @131) em 2º plano: a lista guardada continua na tela; só um aviso discreto enquanto baixa. */
+  var OPS_ATUALIZANDO = false;
+  function opsEmFundo(r) { if (r && r.opsLeve && !r.semMudanca && !r.offline && api.atualizarOps) api.atualizarOps(); }
+  function indicadorOps() { var el = $('opsAtualizando'); if (el) el.hidden = !OPS_ATUALIZANDO; }
+  function atualizarFundo(ja, espera) {
+    if (FUNDO.p) return FUNDO.p;
+    clearTimeout(FUNDO.timer);
+    var vai = function () {
+      if (!api.temToken() || !D) return Promise.resolve();
+      ESTAT.fundo++;
+      FUNDO.p = api.carregar().then(function (r) { FUNDO.p = null; FUNDO.quando = Date.now(); aplicarLeitura(r, false); opsEmFundo(r); },
+        function (er) { FUNDO.p = null; if (er.codigo === 'TOKEN_INVALIDO' || er.codigo === 'SEM_TOKEN') { api.esquecerToken(); telaChave(MSG_EXPIROU); } });
+      return FUNDO.p;
+    };
+    if (ja) return vai();
+    return new Promise(function (ok) { FUNDO.timer = setTimeout(function () { ok(vai()); }, espera || 800); });
+  }
+  /** Redesenha a tela atual sem perder a rolagem. Com formulário aberto ou campo em edição, espera (não apaga o que o Pedro digita). */
+  var REDESENHO_PENDENTE = false;
+  function renderSuave() {
+    var m = $('modal'), pg = document.getElementById('pergunta'), foco = document.activeElement;
+    var editando = foco && foco !== document.body && /^(INPUT|TEXTAREA|SELECT)$/.test(foco.tagName) && $('conteudo').contains(foco) && !/^(button|checkbox|radio)$/i.test(foco.type || '');
+    if ((m && m.open) || (pg && pg.open) || editando) { REDESENHO_PENDENTE = true; return false; }
+    REDESENHO_PENDENTE = false; var y = window.scrollY; render(); window.scrollTo(0, y); return true;
+  }
+  function talvezRedesenhar() { if (REDESENHO_PENDENTE) setTimeout(renderSuave, 0); }
   function rota() { var h = (location.hash || '#hoje').slice(1).split('/'); return { tela: h[0] || 'hoje', sub: h[1] || '' }; }
   var carregando = false;
   var buscaTimer;
   function render() {
-    clearTimeout(buscaTimer);
+    clearTimeout(buscaTimer); ESTAT.renders++;
     var r = rota();
     var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela === 'cliente' ? 'clientes' : r.tela === 'leads' ? 'hoje' : r.tela;
     document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === telaMenu; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -128,7 +202,7 @@
   function tag(t, cls) { return t ? '<span class="tag ' + (cls || 'cinza') + '">' + e(t) + '</span>' : ''; }
   function tagPri(p) { return p ? tag(p, V.norm(p)) : ''; }
   function lista(itens, fn, vazio) { return itens.length ? '<div class="lista2">' + itens.map(fn).join('') + '</div>' : '<div class="vazio">' + vazio + '</div>'; }
-  function botao(rot, acao, dados, cls) { return '<button class="btn ' + (cls || 'sec') + ' peq" data-a="' + acao + '" data-k="' + e(dados) + '"' + (bloq(acao) ? ' title="Ainda não liberado no servidor"' : '') + '>' + rot + '</button>'; }
+  function botao(rot, acao, dados, cls) { var env = ENVIANDO[acao + '|' + dados]; if (env) return '<button class="btn ' + (cls || 'sec') + ' peq" disabled data-enviando="' + e(acao) + '">⏳ ' + e(env) + '</button>'; return '<button class="btn ' + (cls || 'sec') + ' peq" data-a="' + acao + '" data-k="' + e(dados) + '"' + (bloq(acao) ? ' title="Ainda não liberado no servidor"' : '') + '>' + rot + '</button>'; }
   var PRECISA = { 'op-editar': 'salvarOportunidade', 'op-lead': 'virarLead', 'os-status': 'mudarStatusOS', 'os-editar': 'salvarOS', 'os-orc': 'salvarOrcamento', 'os-decidir': 'decidirOrcamento',
     'os-receber': 'lancarRecebimento', 'os-peca': 'salvarPeca', 'cli-editar': 'salvarCliente', 'cli-novo': 'salvarCliente', 'cli-inter': 'registrarInteracao', 'cli-etapa': 'moverEtapa',
     'rv-editar': 'salvarRevenda', 'rv-novo': 'salvarRevenda', 'rv-vender': 'venderRevenda', 'fin-novo': 'salvarLancamento', 'cat-editar': 'salvarServicoCatalogo', 'cat-novo': 'salvarServicoCatalogo',
@@ -157,39 +231,51 @@
   }
   // v0.7.9: corpo de Oportunidades reutilizado em #vendas e #clientes/oportunidades.
   function corpoOportunidades() {
+      if (D._opsPendentes) return '<div class="vazio" id="opsCarregando">Carregando as oportunidades guardadas no aparelho…</div>'; // v0.9.3: fora do caminho crítico da abertura
       // Filtro por cidade (chips com contagem). Some se nenhuma oportunidade tem cidade.
-      var cids = V.cidadesOps(D.oportunidades), temCid = cids.some(function (c) { return c.chave !== V.SEM_CIDADE; });
+      var cids = memoOps('cids', V.cidadesOps), temCid = cids.some(function (c) { return c.chave !== V.SEM_CIDADE; });
       var fOp = Object.assign({}, F.op);
       if (!temCid || !cids.some(function (c) { return c.chave === fOp.cidade; })) fOp.cidade = '';
       var chip = function (k, rot) { return '<button type="button" class="chip" data-cidade="' + e(k) + '" aria-pressed="' + (fOp.cidade === k) + '">' + e(rot) + '</button>'; };
       var barraCid = temCid ? '<div class="chips" id="fCidade" role="group" aria-label="Filtrar por cidade">' + chip('', 'Todas (' + (D.oportunidades || []).length + ')') +
         cids.map(function (c) { return chip(c.chave, c.nome + ' (' + c.n + ')'); }).join('') + '</div>' : '';
-      var nWa = (D.oportunidades || []).filter(V.temWaOp).length;
-      var barraWa = '<div class="chips" role="group" aria-label="Filtrar por WhatsApp"><button type="button" class="chip" id="fWa" aria-pressed="' + !!F.op.wa + '">📲 WhatsApp (' + nWa + ')</button></div>';
+      var nWa = memoOps('nWa', function (l) { return (l || []).filter(V.temWaOp).length; }), nIg = memoOps('nIg', function (l) { return (l || []).filter(V.temIgOp).length; });
+      var barraWa = '<div class="chips" role="group" aria-label="Filtrar por WhatsApp e Instagram"><button type="button" class="chip" id="fWa" aria-pressed="' + !!F.op.wa + '">📲 WhatsApp (' + nWa + ')</button>' +
+        '<button type="button" class="chip" id="fIg" aria-pressed="' + !!F.op.ig + '">📸 Tem Instagram (' + nIg + ')</button></div>';
       // v0.8.8: Ainda não contactei × Já contactei (com contagem).
-      var cc = V.contagemContatoOps(D.oportunidades), chipC = function (k, rot) { return '<button type="button" class="chip" data-contato="' + k + '" aria-pressed="' + ((F.op.contato || '') === k) + '">' + rot + '</button>'; };
+      var cc = memoOps('cc', V.contagemContatoOps), chipC = function (k, rot) { return '<button type="button" class="chip" data-contato="' + k + '" aria-pressed="' + ((F.op.contato || '') === k) + '">' + rot + '</button>'; };
       var barraContato = '<div class="chips" id="fContato" role="group" aria-label="Filtrar por contato">' + chipC('', 'Todas') + chipC('nao', '🆕 ' + V.SITUACAO_CONTATO.nao + ' (' + cc.nao + ')') + chipC('sim', '✅ ' + V.SITUACAO_CONTATO.sim + ' (' + cc.sim + ')') + '</div>';
       var ops = V.filtrarOps(D.oportunidades, fOp);
       // v0.9.2: 50 por vez (o toque não trava com centenas de cards). Busca e filtros valem sobre a lista toda; mudou o filtro, volta para 50.
-      var sig = JSON.stringify([fOp.status, fOp.prioridade, fOp.segmento, fOp.q, fOp.cidade, fOp.wa, fOp.contato]);
+      var sig = JSON.stringify([fOp.status, fOp.prioridade, fOp.segmento, fOp.q, fOp.cidade, fOp.wa, fOp.contato, fOp.ig]);
       if (sig !== F.op.sig || !F.op.qtd) { F.op.sig = sig; F.op.qtd = OP_PASSO; }
       var mostra = Math.min(ops.length, F.op.qtd);
       return barraContato + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
         '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
+        '<p class="muted" id="opsAtualizando"' + (OPS_ATUALIZANDO ? '' : ' hidden') + '>🔄 Atualizando a lista com o CRM… (pode usar normalmente)</p>' +
         (ops.length > mostra ? '<p class="muted" id="opMostrando">Mostrando ' + mostra + ' de ' + ops.length + '.</p>' : '') +
         lista(ops.slice(0, mostra), function (o) {
           return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + blocoContatoOp(o),
-            tagPri(o.prioridade) + '<span data-op-st="' + o._row + '">' + tag(o.status) + '</span>', waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
+            tagPri(o.prioridade) + '<span data-op-st="' + o._row + '">' + tag(o.status) + '</span>', waOp(o) + igOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
         }, 'Nenhuma empresa com esse filtro.') +
         (ops.length > mostra ? '<div class="acoes"><button type="button" class="btn sec" id="opMais">Ver mais ' + Math.min(OP_PASSO, ops.length - mostra) + '</button></div>' : '');
   }
+  // v0.9.3: 📸 Instagram (só com @ válido e as mesmas regras do WhatsApp). Toque = copia o texto curto do Direct e abre o perfil.
+  function igOp(o) {
+    if (!V.podeIgOp(o)) return '';
+    var h = V.instagramOp(o), ja = V.canaisUsadosOp(o).indexOf('Instagram') >= 0, niv = V.camposIgOp(o).nivel;
+    return '<a class="btn ig peq" target="_blank" rel="noopener" href="' + e(V.linkInstagram(h)) + '" data-ig-op="' + o._row + '" data-ig-handle="' + e(h) + '" title="@' + e(h) + (niv && !/confirm/i.test(niv) ? ' (perfil ' + e(niv) + ': confira antes)' : '') + '">' + rotuloIg(ja) + '</a>';
+  }
+  function rotuloIg(ja) { return '📸 Instagram' + (ja ? ' (já enviado)' : ''); }
+  function linhaCanaisOp(o) { var l = V.canaisUsadosOp(o); return '<div class="canais-op muted" data-op-canais="' + o._row + '"' + (l.length ? '' : ' hidden') + '>Já usado: ' + l.map(function (c) { return (c === 'WhatsApp' ? '📲 ' : c === 'Instagram' ? '📸 ' : '') + e(c); }).join(' · ') + '</div>'; }
   // v0.8.8: último contato em destaque + histórico abrível no próprio card (sem abrir Editar).
   function blocoContatoOp(o) {
     var u = V.ultimoContatoOp(o), h = V.historicoOp(o);
     var ult = '<div class="ult-contato' + (u ? '' : ' nunca') + '" data-op-ult="' + o._row + '">' + (u ? '📌 <b>Último contato: ' + e(V.dataBR(u.data)) + '</b>' + (u.canal ? ' · ' + e(u.canal) : '') : '🆕 Ainda não contactei') + '</div>';
     var hist = '<details class="hist-op" data-op-hist="' + o._row + '"' + (h.length ? '' : ' hidden') + '><summary>🕘 Histórico (' + h.length + ')</summary><ul>' +
       h.map(function (x) { return '<li>' + (x.data ? '<b>' + e(V.dataBR(x.data)) + '</b> – ' : '') + e(x.texto) + '</li>'; }).join('') + '</ul></details>';
-    return ult + hist;
+    var parc = o._parcial ? '<div class="muted" data-op-parcial="' + o._row + '">⏳ Empresa nova na lista: consentimento e histórico chegam na próxima atualização completa (🔄 Atualizar). Até lá, sem botões de contato.</div>' : '';
+    return parc + ult + linhaCanaisOp(o) + hist;
   }
   function abas(base, itens, sub) { return '<div class="abas">' + itens.map(function (x, i) { var on = (sub || itens[0][0]) === x[0]; return '<a href="#' + base + (i ? '/' + x[0] : '') + '" class="' + (on ? 'ativo' : '') + '">' + x[1] + '</a>'; }).join('') + '</div>'; }
   function sel(id, lst, v, todos) { return '<select id="' + id + '" aria-label="' + todos + '"><option value="">' + todos + '</option>' + (lst || []).map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + e(x) + '</option>'; }).join('') + '</select>'; }
@@ -438,8 +524,52 @@
   }
   // v0.7.1: validade/garantia do e-mail vêm do servidor (getDados().config), nunca de valor fixo no app.
   function cfgEmail() { var p = window.ProFixDif.padroes(D); return Object.assign({}, CFG, { validadeDias: p.validadeDias, garantiaDias: p.garantiaDias }); }
-  function escrever(acao, args, local) {
-    return api.escrever(acao, args, local).then(function (r) { aviso(r.msg); return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); });
+  // ---------- v0.9.3: gravação otimista (a tela muda na hora; o envio vai pela fila em 2º plano, sem recarregar tudo) ----------
+  function precisaServidor(acao) { return ProFixAPI.SO_ONLINE.indexOf(acao) >= 0 || (ProFixAPI.CONFIRMAR || []).indexOf(acao) >= 0; }
+  /** opc: { recarregar (o servidor calcula algo que a tela não sabe: leitura em 2º plano depois do envio), tmp, salvo (texto do aviso) } */
+  function escrever(acao, args, local, opc) {
+    opc = opc || {}; opsMexeu();
+    if (precisaServidor(acao)) return api.escrever(acao, args, local).then(function (r) { aviso(r.msg); renderSuave(); atualizarFundo(); return r; }, function (er) { aviso('Não salvou: ' + er.message); });
+    return api.enviar(acao, args, local, { recarregar: !local || !!opc.recarregar, tmp: opc.tmp, idOp: opc.idOp, aoConfirmar: opc.aoConfirmar, aoFalhar: opc.aoFalhar }).then(function (r) {
+      aviso(r.enfileirado ? r.msg : (opc.salvo || 'Salvo ✓')); faixa(); renderSuave(); return r;
+    }, function (er) { aviso('Não salvou: ' + er.message); });
+  }
+  /** Pagamento recebido, Pix, mensalidade, Comprado: só aparece como feito DEPOIS do servidor (pedido do Compras). Enquanto isso: "enviando…". */
+  var ENVIANDO = {};
+  function enviarConfirmado(chave, rotulo, acao, args, local, idOp) {
+    if (ENVIANDO[chave]) { aviso(ENVIANDO[chave] + ' Aguarde a confirmação do CRM.'); return Promise.reject(new Error('em andamento')); }
+    ENVIANDO[chave] = rotulo + ' enviando…'; aviso(rotulo + ' enviando… só conta como feito quando o CRM confirmar.'); renderSuave();
+    return api.escreverConfirmado(acao, args, local, idOp).then(function (r) { delete ENVIANDO[chave]; aviso(r.msg); renderSuave(); return r; },
+      function (er) { delete ENVIANDO[chave]; aviso(rotulo + ' NÃO foi lançado: ' + er.message); renderSuave(); throw er; });
+  }
+  var ROT_OS_NOVA = 'OS nova (enviando…)';
+  function rowProvisoria() { return -((Date.now() % 1000000000) + Math.floor(Math.random() * 1000)); }
+  function acharProvisorio(tmp) { var a = null; ['os', 'clientes'].forEach(function (l) { ((D && D[l]) || []).forEach(function (x) { if (x._tmp === tmp) a = { lista: l, reg: x }; }); }); return a; }
+  /** Resposta do servidor para um registro criado no aparelho: troca o provisório pelo número/linha reais (sem recarregar). */
+  api.aoConfirmado = function (op, r) {
+    if (!op.tmp) return; var a = acharProvisorio(op.tmp); if (!a) return;
+    var row = r && (r._row || r.row), num = r && r.num;
+    if (!row && !num) return; // repetição sem número ("Já recebido."): a leitura em 2º plano traz o registro (api.js marca recarregar)
+    if (row) a.reg._row = Number(row); if (num) a.reg.num = num; if (r.id) a.reg.id = r.id;
+    delete a.reg._tmp; delete a.reg._pendente; delete a.reg._erro; api.tocou(false); renderSuave();
+  };
+  api.aoRecusado = function (op, er) {
+    if (!op.tmp) return; var a = acharProvisorio(op.tmp); if (!a) return;
+    a.reg._erro = er.message; if (a.lista === 'os') a.reg.num = 'OS nova (NÃO salva no CRM)'; api.tocou(false); renderSuave();
+  };
+  api.aoMudar(function (ev) {
+    faixa();
+    if (ev.tipo === 'confirmado') { var msg = ev.dados && ev.dados.msg; if (msg && !/^J[aá] recebido/.test(msg) && !ev.op.silencioso) aviso(msg); }
+    else if (ev.tipo === 'recusado') aviso('⚠️ O CRM não aceitou: ' + ev.erro.message + ' (está na faixa de cima: tente de novo ou descarte).');
+    else if (ev.tipo === 'vazia' && ev.recarregar) atualizarFundo(false, 3000); // API @131: nada de getDados logo depois de gravar (o CRM fica lento ~16 s); aberturaApp com desde, um pouco depois
+    else if (ev.tipo === 'ops') { OPS_ATUALIZANDO = ev.estado === 'inicio'; if (ev.estado !== 'inicio') { opsMexeu(); if (rota().tela === 'vendas' && (ev.mudou || ev.estado === 'erro')) renderSuave(); } indicadorOps(); }
+  });
+  // Oportunidades: contagens (cidade, WhatsApp, Instagram, contato) calculadas uma vez por versão da lista, não a cada toque.
+  var OPS_MEMO = { v: 0 };
+  function opsMexeu() { OPS_MEMO.v++; }
+  function memoOps(chave, fn) {
+    var lst = D.oportunidades; if (OPS_MEMO.ref !== lst || OPS_MEMO.vRef !== OPS_MEMO.v) { OPS_MEMO.ref = lst; OPS_MEMO.vRef = OPS_MEMO.v; OPS_MEMO.c = {}; }
+    if (!(chave in OPS_MEMO.c)) OPS_MEMO.c[chave] = fn(lst); return OPS_MEMO.c[chave];
   }
   function aplicar(lista, row, mud) { return function (cache) { var x = (cache[lista] || []).filter(function (y) { return y._row === Number(row); })[0]; if (x) Object.keys(mud).forEach(function (k) { if (k[0] !== '_') x[k] = mud[k]; }); }; }
 
@@ -484,8 +614,11 @@
         var r = await api.escrever('salvarCliente', [{ nome: nome, whatsapp: wa, consent: consent ? 'Sim' : 'Não', naoContatar: 'Não', dataConsent: consent ? D.hoje : '' }]);
         clientePendente = true;
         if (r.enfileirado) { out.textContent = 'Cadastro na fila: sincronize antes de criar a OS. Não cadastre outra vez.'; faixa(); return; }
-        var carga = await api.carregar(); if (carga.dados) D = carga.dados;
-        var novo = (D.clientes || []).find(function (c) { return V.norm(c.nome) === V.norm(nome) && V.numeroWa(c.whatsapp) === V.numeroWa(wa); });
+        // v0.9.3: o CRM devolve a linha do cliente novo (row/id): entra na lista sem baixar tudo de novo.
+        var dr = r.dados || {}, novo = null;
+        if (dr.row || dr._row) { novo = { _row: Number(dr.row || dr._row), id: dr.id || '', nome: nome, whatsapp: wa, consent: consent ? 'Sim' : 'Não', naoContatar: 'Não', dataConsent: consent ? D.hoje : '', etapa: 'Lead', primeiro: D.hoje }; (D.clientes = D.clientes || []).push(novo); api.tocou(false); }
+        else { var carga = await api.carregar(); if (carga.dados) D = carga.dados;
+          novo = (D.clientes || []).find(function (c) { return V.norm(c.nome) === V.norm(nome) && V.numeroWa(c.whatsapp) === V.numeroWa(wa); }); }
         if (!novo) { out.textContent = 'Cliente salvo, mas vínculo ainda não retornou. Atualize os dados antes de criar a OS; não cadastre novamente.'; return; }
         if (!f.isConnected) return;
         clientePendente = false; selecao = novo._row; opcoes(); $('osClienteNovo').open = false; out.textContent = 'Cliente cadastrado e selecionado.';
@@ -514,10 +647,12 @@
       if (v.valor !== '' && isNaN(V.dinheiro(v.valor))) { $('fErro').textContent = 'Informe um valor válido, igual ou maior que zero (ex.: 1.234,56).'; return; }
       if (v.valor !== '') v.valor = V.dinheiro(v.valor);
       v.cliente = cli.nome; var d = Object.assign({}, v, { _rowCliente: cli._row }); if (row) { d._row = o._row; d.num = o.num; }
-      travar(true);
-      try { var r = await api.escrever('salvarOS', [d], row ? aplicar('os', row, v) : null); m.close(''); aviso(r.msg); await iniciar(); }
-      catch (er) { if (f.isConnected) $('fErro').textContent = 'Não salvou: ' + er.message; }
-      finally { if (f.isConnected) travar(false); }
+      // v0.9.3: salva NA HORA. OS nova aparece como "OS nova (enviando…)" e ganha o número quando o CRM responder.
+      if (row) { m.close(''); escrever('salvarOS', [d], aplicar('os', row, v), { salvo: 'OS salva ✓' }); return; }
+      var tmp = RAP ? RAP.idProvisorio() : 'app' + Date.now().toString(36), prov = Object.assign({}, v, { _row: rowProvisoria(), _tmp: tmp, _pendente: true, num: ROT_OS_NOVA, _rowCliente: cli._row, status: 'Recebido', statusEm: D.hoje, entrada: D.hoje });
+      if (api.usaIdApp) d.idApp = tmp; // só quando o CRM publicar idApp (config.LEITURAS_VELOCIDADE)
+      m.close('');
+      escrever('salvarOS', [d], function (c) { (c.os = c.os || []).push(prov); }, { tmp: tmp, idOp: tmp, salvo: 'OS salva ✓ O número chega em instantes.' });
     };
   }
   // v0.9.0: ORÇAMENTO RÁPIDO numa tela só. Itens da tabela oficial ou livres, peça de cotação válida, desconto por item e no total (R$ ou %),
@@ -669,13 +804,21 @@
         var os = o;
         if (!os) {
           var rOS = await api.escrever('salvarOS', [{ cliente: cli.nome, _rowCliente: cli._row, equipamento: equip, previsao: v.previsao }]);
-          var dOS = rOS.dados || {}; await iniciar();
+          var dOS = rOS.dados || {};
+          // v0.9.3: OS nova entra na cópia com o número que o CRM devolveu (antes: recarregava tudo).
+          if (dOS.num && dOS._row && !(D.os || []).some(function (x) { return x.num === dOS.num; })) { (D.os = D.os || []).push({ _row: Number(dOS._row), num: dOS.num, cliente: cli.nome, _rowCliente: cli._row, equipamento: equip, previsao: v.previsao, status: 'Recebido', statusEm: D.hoje, entrada: D.hoje }); api.tocou(false); }
+          else if (!dOS.num) await iniciar();
           os = dOS.num ? (D.os || []).filter(function (x) { return x.num === dOS.num; })[0] : null;
           if (!os) os = (D.os || []).filter(function (x) { return x.cliente === cli.nome; }).sort(function (a, b) { return b._row - a._row; })[0];
           if (!os) throw new Error('OS criada, mas ainda não apareceu. Atualize e abra o orçamento pela OS (não crie outra).');
           limparRasc(); chave = ORC_RASC + os.num; guardar();
         }
-        var r = await api.escrever('salvarOrcamento', [Object.assign({ num: os.num, _row: os._row, itens: itensEstr }, v)], aplicar('os', os._row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v)));
+        // v0.9.3: "Salvar" = NA HORA (fila em 2º plano, sem recarregar). "Salvar e abrir WhatsApp"/"gerar link" esperam o CRM gravar
+        // (o link precisa mostrar o orçamento novo), mas também não recarregam mais o App inteiro.
+        opsMexeu(); var localOrc = aplicar('os', os._row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v));
+        var r = modo === 'so' ? await api.enviar('salvarOrcamento', [Object.assign({ num: os.num, _row: os._row, itens: itensEstr }, v)], localOrc)
+          : await api.escrever('salvarOrcamento', [Object.assign({ num: os.num, _row: os._row, itens: itensEstr }, v)], localOrc);
+        if (modo === 'so' && !r.enfileirado) r.msg = 'Orçamento salvo ✓';
         limparRasc();
         var cc = V.clienteDaOS(D, os) || cli || {}, pb = blocoPix(k.total, os.num);
         var base = { calc: k, cliente: cc, num: os.num, equipamento: os.equipamento || equip, diagnostico: v.diagnostico, validade: v.validade, dias: prazoPadrao ? dias : null, previsao: v.previsao, pix: pb ? pb.texto : '' };
@@ -684,10 +827,11 @@
         var envio = { os: os, cliente: cc, titulo: 'Orçamento da ' + os.num, tipo: 'orcamento', pix: pb ? pb.codigo : '', fila: !!r.enfileirado,
           montar: function (link) { return ORC.textoWhats(Object.assign({}, base, { link: link })); },
           antes: function () { // orçamento ainda na fila: manda primeiro (senão o link mostraria o orçamento antigo)
-            if (!api.fila().some(function (op) { return op.acao === 'salvarOrcamento'; })) return;
-            return api.sincronizar().then(function () { if (api.fila().some(function (op) { return op.acao === 'salvarOrcamento'; })) throw new Error('o orçamento ainda está na fila do aparelho (sem internet)'); return iniciar(); });
+            var recusado = function () { var x = api.filaErros().filter(function (op) { return op.id === r.id; })[0]; if (x) throw new Error('o CRM não aceitou o orçamento: ' + x.erro); };
+            if (!api.fila().some(function (op) { return op.acao === 'salvarOrcamento'; })) return recusado();
+            return api.sincronizar().then(function () { if (api.fila().some(function (op) { return op.acao === 'salvarOrcamento'; })) throw new Error('o orçamento ainda está na fila do aparelho (sem internet)'); recusado(); });
           } };
-        m.close(''); await iniciar();
+        m.close(''); renderSuave();
         if (modo === 'so') { if (popup) popup.close(); aviso(r.enfileirado ? 'Orçamento salvo na fila (sem internet). Envio quando a internet voltar.' : r.msg); return; }
         if (modo === 'wa' && !wa) { if (popup) popup.close(); aviso('Orçamento salvo. WhatsApp não liberado para este cliente (Não contatar ou número inválido).'); return; }
         if (r.enfileirado) { if (popup) popup.close(); avisoSemLink(envio, new Error('sem internet: o orçamento ficou na fila')); return; }
@@ -746,9 +890,10 @@
       var o = achar('os', row);
       perguntar('Marcar ' + o.num + ' como Pronto? Depois você poderá abrir o WhatsApp; nenhuma mensagem é enviada automaticamente.', { titulo: 'OS pronta', sim: 'Marcar pronto' }).then(function (ok) {
         if (!ok) return;
-        api.escrever('mudarStatusOS', [o.num, o._row, 'Pronto', {}], aplicar('os', row, { status: 'Pronto', statusEm: D.hoje })).then(function (r) {
-          aviso(r.msg); return iniciar().then(function () { if (!r.enfileirado && api.pode('textoStatusOS')) ACOES['os-msg'](row); });
-        }, function (er) { aviso('Não salvou: ' + er.message); });
+        // v0.9.3: Pronto na hora; a mensagem (textoStatusOS) espera a fila chegar ao CRM antes de pedir o texto.
+        escrever('mudarStatusOS', [o.num, o._row, 'Pronto', {}], aplicar('os', row, { status: 'Pronto', statusEm: D.hoje })).then(function (r) {
+          if (r && !r.enfileirado && api.pode('textoStatusOS')) ACOES['os-msg'](row);
+        });
       });
     },
     'os-decidir': function (row) {
@@ -770,7 +915,12 @@
       var o = achar('os', row);
       formulario('Receber · ' + e(o.num), [{ k: 'receita', r: 'Valor recebido (R$)', t: 'number', req: true }, { k: 'forma', r: 'Forma de pagamento', t: 'select', o: D.formasPag, req: true },
         { k: 'parcelas', r: 'Parcelas (crédito parcelado)', t: 'number' }, { k: 'data', r: 'Data', t: 'date' }], { receita: V.saldoOS(D, o) > 0 ? String(V.saldoOS(D, o)).replace('.', ',') : '', data: D.hoje })
-        .then(function (v) { if (!v) return; escrever('lancarRecebimento', [Object.assign({ os: o.num }, v)], function (c) { c.financeiro.push({ _row: 0, data: v.data, tipo: 'Entrada', categoria: 'Serviço', os: o.num, descricao: 'Recebimento OS ' + o.num + ' (a enviar)', forma: v.forma, receita: V.dinheiro(v.receita) }); }); });
+        .then(function (v) {
+          if (!v) return;
+          // v0.9.3 (Compras): o recebimento só entra na tela DEPOIS que o CRM confirma; enquanto isso o botão mostra "Recebimento enviando…".
+          enviarConfirmado('os-receber|' + row, 'Recebimento', 'lancarRecebimento', [Object.assign({ os: o.num }, v)], function (c) { (c.financeiro = c.financeiro || []).push({ _row: 0, data: v.data, tipo: 'Entrada', categoria: 'Serviço', os: o.num, descricao: 'Recebimento OS ' + o.num, forma: v.forma, receita: V.dinheiro(v.receita) }); })
+            .then(function () { atualizarFundo(); }, function () {});
+        });
     },
     'os-peca': function (row) {
       var o = achar('os', row);
@@ -785,7 +935,11 @@
         { k: 'consent', r: 'Aceita receber mensagens e e-mails sobre o atendimento (LGPD)', t: 'select', o: ['Sim', 'Não'], ajuda: 'Sim = WhatsApp/e-mail de atendimento e marketing conforme as regras. Não = só OS com aviso no WhatsApp; e-mail bloqueado.' },
         { k: 'aniversario', r: 'Aniversário (dd/mm)', ajuda: 'Ex.: 25/12. Usado no chip “aniversariantes”.' }, { k: 'naoContatar', r: 'Não contatar', t: 'select', o: ['Não', 'Sim'], ajuda: '“Sim” bloqueia WhatsApp, ligação, e-mail e marketing para este cliente.' }].concat(temCol('clientes', 'endereco') ? [{ k: 'endereco', r: 'Endereço (para o Maps)' }] : [], [ { k: 'proximo', r: 'Próximo contato', t: 'date' }, { k: 'acao', r: 'Próxima ação' },
         { k: 'valorEst', r: 'Valor estimado (R$)', t: 'number' }, { k: 'obs', r: 'Observações', t: 'textarea' }]), c)
-        .then(function (v) { if (!v) return; var an = window.ProFixDif.normalizarAniversario(v.aniversario); if (an === null) return aviso('Aniversário inválido: use dd/mm (ex.: 25/12).'); v.aniversario = an; if (!v.naoContatar) v.naoContatar = 'Não'; var d = Object.assign({}, v); if (v.consent === 'Sim' && c.consent !== 'Sim') d.dataConsent = D.hoje; if (row) { d._row = c._row; d._nomeOriginal = c.nome; } escrever('salvarCliente', [d], row ? aplicar('clientes', row, v) : null); });
+        .then(function (v) { if (!v) return; var an = window.ProFixDif.normalizarAniversario(v.aniversario); if (an === null) return aviso('Aniversário inválido: use dd/mm (ex.: 25/12).'); v.aniversario = an; if (!v.naoContatar) v.naoContatar = 'Não'; var d = Object.assign({}, v); if (v.consent === 'Sim' && c.consent !== 'Sim') d.dataConsent = D.hoje; if (row) { d._row = c._row; d._nomeOriginal = c.nome; return escrever('salvarCliente', [d], aplicar('clientes', row, v), { salvo: 'Cliente salvo ✓' }); }
+          // v0.9.3: cliente novo aparece na hora (provisório) e ganha a linha do CRM quando ele responder.
+          var tmp = RAP ? RAP.idProvisorio() : 'app' + Date.now().toString(36), prov = Object.assign({ etapa: 'Lead', primeiro: D.hoje }, v, { _row: rowProvisoria(), _tmp: tmp, _pendente: true });
+          if (api.usaIdApp) d.idApp = tmp;
+          escrever('salvarCliente', [d], function (cache) { (cache.clientes = cache.clientes || []).push(prov); }, { tmp: tmp, idOp: tmp, salvo: 'Cliente salvo ✓' }); });
     },
     'cli-novo': function () { ACOES['cli-editar'](''); },
     'cli-inter': function (row) {
@@ -1001,11 +1155,15 @@
   function validarOSM() { var x = dadosOSM(); if (!x.cliente) throw new Error('Escolha o cliente.'); O.montar(x); return x; }
   function salvarOSM() {
     var x; try { x = validarOSM(); } catch (er) { return aviso(er.message); }
+    if (!x.num && api.usaIdApp) x.idApp = OSM.idApp || (OSM.idApp = RAP ? RAP.idProvisorio() : 'app' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)); // API @131: repetir não duplica a OS
     return api.escrever('salvarOSMulti', [x]).then(function (r) {
       aviso(r.msg);
       if (r.enfileirado) { OSM.sujo = false; return; }
       var num = (r.dados && r.dados.num) || OSM.num;
-      return iniciar().then(function () {
+      // v0.9.3: com a linha na resposta, não precisa baixar tudo; sem ela, leitura imediata (sem tela de carregamento).
+      var dr = r.dados || {}, ja = (D.os || []).filter(function (y) { return String(y.num) === String(num); })[0];
+      if (dr._row && num) { if (!ja) { (D.os = D.os || []).push({ _row: Number(dr._row), num: num, cliente: x.cliente, equipamento: dr.equipamento || (x.equipamentos || []).length + ' equipamentos:', status: 'Recebido', statusEm: D.hoje, entrada: D.hoje }); api.tocou(false); } atualizarFundo(); }
+      return (dr._row && num ? Promise.resolve() : atualizarFundo(true)).then(function () {
         var o = (D.os || []).filter(function (y) { return String(y.num) === String(num); })[0];
         OSM.num = num; OSM.sujo = false; if (o) { OSM.row = o._row; OSM.aprovacao = o.aprovacao || ''; OSM.chave = String(o._row); if (location.hash !== '#osm/' + o._row) history.replaceState(null, '', '#osm/' + o._row); }
         render();
@@ -1014,7 +1172,7 @@
   }
   function recarregarOSM() {
     if (!OSM.num) return Promise.resolve();
-    return iniciar().then(function () { return api.ler('lerOSMulti', [OSM.num]); }).then(function (m) {
+    return Promise.all([atualizarFundo(true), api.ler('lerOSMulti', [OSM.num])]).then(function (rs) { return rs[1]; }).then(function (m) {
       var o = (D.os || []).filter(function (y) { return String(y.num) === String(OSM.num); })[0];
       if (o) OSM.aprovacao = o.aprovacao || ''; if (m) OSM.d = rascunhoDe(m); OSM.sujo = false; render();
     }, function (er) { aviso(er.message); });
@@ -1076,7 +1234,7 @@
       if ($('orcAprovar')) $('orcAprovar').onclick = function () {
         perguntar('Registrar que o cliente APROVOU o orçamento de ' + O.brl(o.totais.total) + ' agora?', { titulo: 'Aprovar orçamento', sim: 'Sim, aprovou' }).then(function (ok) { if (!ok) return;
         api.escrever('aprovarOrcamentoOS', [{ num: OSM.num, _row: OSM.row }], aplicar('os', OSM.row, { aprovacao: 'Aprovado' })).then(function (r) {
-          aviso(r.msg); OSM.aprovacao = 'Aprovado'; return iniciar().then(verOrcamento);
+          aviso(r.msg); OSM.aprovacao = 'Aprovado'; atualizarFundo(); return verOrcamento();
         }, function (er) { aviso('Não aprovou: ' + er.message); }); });
       };
     }, function (er) { aviso(er.message); });
@@ -1138,7 +1296,8 @@
   // ---------- v0.7.0: Clientes 360 (ficha, LGPD, linha do tempo, máquinas), checklist, laudo, garantia, link da OS, contratos/visitas, painel do mês ----------
   var Dif = window.ProFixDif, FICHA = { nome: '', dados: null, estado: '' }, PRE_OSM = null, CT = null, RM = { mes: '', dados: null };
   F.cli.chip = F.cli.chip || '';
-  function escreverFicha(acao, args, local) { FICHA.nome = ''; return escrever(acao, args, local); }
+  // v0.9.3: a ficha (fichaCliente) é relida de novo quando o CRM confirmar a escrita (a gravação vai em 2º plano).
+  function escreverFicha(acao, args, local) { FICHA.nome = ''; return escrever(acao, args, local, { aoConfirmar: function () { FICHA.nome = ''; renderSuave(); } }); }
   function telLink(c) { var n = V.numeroWa(c && c.whatsapp); return n && !Dif.naoContatar(c) ? 'tel:+' + n : ''; }
   function attrReg(c, tipo, texto, os) { return api.pode('registrarMensagemAberta') && c ? ' data-reg-nome="' + e(c.nome) + '" data-reg-tipo="' + e(tipo || '') + '" data-reg-texto="' + e(texto || '') + '" data-reg-os="' + e(os || '') + '"' : ''; }
   /** Contrato: registrarMensagemAberta quando o wa.me é aberto (só registra; não envia nada). */
@@ -1198,7 +1357,7 @@
           var dados = (r && r.dados) || r || {};
           if (dados.restanteCota != null && D) D.cotaEmail = dados.restanteCota;
           aviso((dados.aviso ? dados.aviso + ' ' : 'E-mail enviado. ') + (dados.restanteCota != null ? 'Cota restante hoje: ' + dados.restanteCota + '.' : ''));
-          return iniciar();
+          atualizarFundo(); // v0.9.3: conversa registrada pelo CRM chega em 2º plano
         }, function (er) {
           aviso(amigavelEmailErro(er && er.message));
         });
@@ -1299,13 +1458,14 @@
   ACOES['cli-lgpd'] = function (row) {
     var c = achar('clientes', row), dar = c.consent !== 'Sim';
     perguntar(dar ? 'Registrar que ' + c.nome + ' AUTORIZOU receber mensagens da ProFix (LGPD)?' : 'Revogar o consentimento de ' + c.nome + '? Mensagens de marketing deixam de aparecer; as da OS continuam com aviso.', { titulo: 'Consentimento LGPD', sim: dar ? 'Sim, autorizou' : 'Revogar', perigo: !dar }).then(function (ok) { if (!ok) return;
-    var mud = { consent: dar ? 'Sim' : 'Não', dataConsent: D.hoje }, fim = function (r) { aviso((dar ? 'Consentimento registrado.' : 'Consentimento revogado.') + (r && r.enfileirado ? ' (vai para a planilha quando voltar a internet)' : '')); return iniciar(); };
+    var mud = { consent: dar ? 'Sim' : 'Não', dataConsent: D.hoje }, rot = dar ? 'Consentimento registrado ✓' : 'Consentimento revogado ✓';
     FICHA.nome = '';
-    if (api.pode('registrarConsentimento')) return api.escrever('registrarConsentimento', [{ cliente: c.nome, aceita: dar }], aplicar('clientes', row, mud)).then(fim, function (er) { aviso('Não salvou: ' + er.message); });
+    // v0.9.3: na hora, pela fila (sem recarregar o App inteiro).
+    if (api.pode('registrarConsentimento')) return escrever('registrarConsentimento', [{ cliente: c.nome, aceita: dar }], aplicar('clientes', row, mud), { salvo: rot });
     var d = { _row: c._row, _nomeOriginal: c.nome, nome: c.nome, consent: mud.consent }; if (dar) d.dataConsent = D.hoje;
-    api.escrever('salvarCliente', [d], aplicar('clientes', row, mud)).then(function () {
-      return api.escrever('registrarInteracao', [{ cliente: c.nome, _rowCliente: c._row, canal: 'Presencial', resumo: dar ? 'Consentimento LGPD registrado (cliente autorizou contato)' : 'Consentimento LGPD revogado a pedido do cliente' }]);
-    }).then(fim, function (er) { aviso('Não salvou: ' + er.message); });
+    escrever('salvarCliente', [d], aplicar('clientes', row, mud), { salvo: rot }).then(function () {
+      return api.enviar('registrarInteracao', [{ cliente: c.nome, _rowCliente: c._row, canal: 'Presencial', resumo: dar ? 'Consentimento LGPD registrado (cliente autorizou contato)' : 'Consentimento LGPD revogado a pedido do cliente' }], null, { recarregar: true });
+    });
     });
   };
   ACOES['cli-maq'] = function (row) {
@@ -1650,10 +1810,12 @@
       .then(function (v) {
         if (!v) return;
         var pr = V.payloadReceber(k, v); if (pr.erro) return aviso(pr.erro);
+        // v0.9.3 (Compras): só aparece como recebida depois da confirmação; enquanto isso "Mensalidade enviando…".
+        var kEnv = 'ct-receber|' + id; ENVIANDO[kEnv] = 'Mensalidade enviando…'; aviso('Mensalidade enviando… só conta quando o CRM confirmar.'); renderSuave();
         return api.escrever('receberMensalidade', [pr.payload], null, idOp).then(function (r) {
-          CTX.retorno = V.textoRetornoReceber(Object.assign({ msg: r.msg }, r.dados || {})); aviso(CTX.retorno);
+          delete ENVIANDO[kEnv]; CTX.retorno = V.textoRetornoReceber(Object.assign({ msg: r.msg }, r.dados || {})); aviso(CTX.retorno);
           return recarregarCT();
-        }, function (er) { CTX.retorno = 'Não lançou: ' + er.message; aviso(CTX.retorno); render(); });
+        }, function (er) { delete ENVIANDO[kEnv]; CTX.retorno = 'Não lançou: ' + er.message; aviso(CTX.retorno); render(); });
       });
   };
   /** 📅 Informar dia: contrato Ativo sem dia (antigo) fica fora da cobrança. salvarContrato com o id e o dia (o App não inventa o dia). */
@@ -1673,7 +1835,7 @@
       });
   };
   ACOES['ct-visita'] = function (id) { var k = ((CT && CT.contratos) || []).filter(function (x) { return x.id === id; })[0]; if (!k) return aviso('Contrato não encontrado.'); abrirMarcarVisita({ cliente: k.cliente, contrato: k.id }); };
-  function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; return iniciar(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
+  function depoisCT(acao, args) { return api.escrever(acao, args).then(function (r) { aviso(r.msg); CT = null; renderSuave(); atualizarFundo(); }, function (er) { aviso('Não salvou: ' + er.message); }); }
   // v0.8.2+/0.8.3: marcar visita + msgs §9 (Remarcar cliente/Pedro).
   function precoVisitaCfg() { return (CFG && CFG.PRECO_VISITA_EMPRESA != null) ? CFG.PRECO_VISITA_EMPRESA : 179.9; }
   function garantirCT() { if (!CT) carregarCT(); return CT || { contratos: [], visitas: [] }; }
@@ -2086,7 +2248,7 @@
     if (!api.pode('excluirRegistro')) return aviso('Esta função ainda não foi liberada no servidor (crm-v3).');
     if (semNet()) return;
     perguntar('Mandar ' + desc + ' para a Lixeira?\nDá para restaurar depois em Mais › Lixeira.', { titulo: '🗑 Excluir', sim: 'Mandar para a Lixeira', perigo: true }).then(function (sim) { if (!sim) return aviso('Cancelado: nada foi excluído.');
-    var ok = function (r) { aviso(r.msg || 'Foi para a Lixeira.'); LX = null; FICHA.nome = ''; if (ref.tipo === 'cliente' && rota().tela === 'cliente') location.hash = '#clientes'; return iniciar(); };
+    var ok = function (r) { aviso(r.msg || 'Foi para a Lixeira.'); LX = null; FICHA.nome = ''; if (ref.tipo === 'cliente' && rota().tela === 'cliente') location.hash = '#clientes'; return atualizarFundo(true); };
     escreverResp('excluirRegistro', [ref]).then(function (r) {
       if (!r || !r.precisaConfirmar) return ok(r || {});
       mostrarImpacto(r, function () { escreverResp('excluirRegistro', [Object.assign({}, ref, { cascata: true })]).then(function (r2) { if (r2 && r2.precisaConfirmar) return aviso('O servidor não confirmou a exclusão. Nada foi alterado.'); ok(r2 || {}); }, function () {}); });
@@ -2124,7 +2286,7 @@
   }
   ACOES['lx-rest'] = function (id) {
     if (semNet()) return;
-    escreverResp('restaurarRegistro', [{ id: id }]).then(function (r) { aviso(r.msg || 'Restaurado.'); LX = null; return iniciar(); }, function () {});
+    escreverResp('restaurarRegistro', [{ id: id }]).then(function (r) { aviso(r.msg || 'Restaurado.'); LX = null; render(); return atualizarFundo(true); }, function () {});
   };
   ACOES['lx-apagar'] = function (id) {
     if (semNet()) return;
@@ -2482,11 +2644,14 @@
         pedir.then(function (l) {
           if (!l) return aviso('Nada mudou.');
           var args = { id: id, status: v.status }; if (l.lancar) args.lancarCaixa = { categoria: l.categoria };
+          // v0.9.3 (Compras): "Comprado" só aparece DEPOIS da confirmação do CRM; enquanto isso o botão mostra "enviando…" (evita comprar duas vezes).
+          var kEnv = 'cot-st|' + id; ENVIANDO[kEnv] = v.status + ' enviando…'; aviso(c.id + ': ' + v.status + ' enviando… só conta quando o CRM confirmar.'); renderSuave();
           m9Gravar('mudarStatusCotacao', args).then(function (d) {
+            delete ENVIANDO[kEnv];
             if (d.cotacao) m9Upsert('cotacoes', d.cotacao);
             aviso((d.msg || c.id + ': ' + v.status + '.') + (v.status === 'Comprado' && !l.lancar ? ' Compra marcada sem lançamento no Financeiro.' : ''));
-            carregarM9(true).then(function () { if (d.financeiro) iniciar(); else render(); });
-          }, function (er) { aviso('Não mudou: ' + er.message); });
+            carregarM9(true).then(function () { if (d.financeiro) atualizarFundo(true); else render(); });
+          }, function (er) { delete ENVIANDO[kEnv]; aviso('Não mudou: ' + er.message); render(); });
         });
       });
     });
@@ -2628,14 +2793,25 @@
   function atualizarCardOp(o) {
     var st = document.querySelector('[data-op-st="' + o._row + '"]'); if (st) st.innerHTML = tag(o.status);
     var u = document.querySelector('[data-op-ult="' + o._row + '"]'), h = document.querySelector('[data-op-hist="' + o._row + '"]');
-    if (u) { var tmp = document.createElement('div'); tmp.innerHTML = blocoContatoOp(o); u.replaceWith(tmp.firstChild); if (h) h.replaceWith(tmp.firstChild); }
+    var cn = document.querySelector('[data-op-canais="' + o._row + '"]');
+    if (u) { var tmp = document.createElement('div'); tmp.innerHTML = blocoContatoOp(o); u.replaceWith(tmp.firstChild); if (cn) cn.replaceWith(tmp.firstChild); else tmp.removeChild(tmp.firstChild); if (h) h.replaceWith(tmp.firstChild); }
+    var ig = document.querySelector('a[data-ig-op="' + o._row + '"]'); if (ig) ig.textContent = rotuloIg(V.canaisUsadosOp(o).indexOf('Instagram') >= 0);
+  }
+  /** v0.9.3: Direct do Instagram aberto = contato registrado no CRM como canal "Instagram" (registrarContatoOp aceita o canal), em 2º plano pela fila. */
+  function registrarIgFundo(o) {
+    var hoje = D.hoje; opsMexeu();
+    V.aplicarContatoIgOp(o, hoje); api.tocou(true);
+    setTimeout(function () { atualizarCardOp(o); }, 0);
+    if (!api.pode('registrarContatoOp')) return aviso('Contato marcado só neste aparelho: o servidor ainda não aceita registrar contato.');
+    api.enviar('registrarContatoOp', [o.empresa, o._row, 'Instagram'], null, {}).then(function () { faixa(); }, function (er) { aviso('O contato não foi registrado no CRM: ' + er.message); });
   }
   function registrarContatoOpFundo(o, canal) {
     var row = o._row, hoje = D.hoje;
     V.aplicarContatoOp(o, hoje, canal); // cópia em memória: a tela já mostra Contatada / último contato / histórico
     setTimeout(function () { atualizarCardOp(o); }, 0); // depois do toque: não mexe no <a> que está abrindo o WhatsApp
     CONTATO_FUNDO.pendente++;
-    api.escrever('registrarContatoOp', [o.empresa, row, canal], function (cache) { var x = (cache.oportunidades || []).filter(function (y) { return y._row === row; })[0]; if (x) V.aplicarContatoOp(x, hoje, canal); })
+    opsMexeu(); V.marcarCanalOp(o, canal, hoje);
+    api.escrever('registrarContatoOp', [o.empresa, row, canal], function (cache) { var x = (cache.oportunidades || []).filter(function (y) { return y._row === row; })[0]; if (x && x !== o) { V.aplicarContatoOp(x, hoje, canal); V.marcarCanalOp(x, canal, hoje); } }) // v0.9.3: a cópia É a tela (não aplica duas vezes)
       .then(function (r) { CONTATO_FUNDO.pendente--; CONTATO_FUNDO.sync = !r.enfileirado; faixa(); aviso(r.enfileirado ? r.msg : 'Contato registrado no CRM.'); },
         function (er) { CONTATO_FUNDO.pendente--; faixa(); aviso('O contato não foi registrado no CRM: ' + er.message); });
   }
@@ -2655,12 +2831,23 @@
     var a = ev.target && ev.target.closest && ev.target.closest('a[href^="whatsapp://"]'); if (!a || ev.defaultPrevented) return;
     ev.preventDefault(); abrirWhatsCelular(a.getAttribute('href'));
   });
-  function abrirWhatsCelular(href) {
+  // v0.9.3: 📸 Instagram – copia o texto curto do Direct (no próprio toque) e abre o perfil (celular: app do Instagram, reserva no navegador).
+  document.addEventListener('click', function (ev) {
+    var a = ev.target && ev.target.closest && ev.target.closest('a[data-ig-op]'); if (!a || ev.defaultPrevented) return;
+    var o = achar('oportunidades', a.dataset.igOp), h = a.dataset.igHandle; if (!o || !h) return;
+    var texto = V.textoDirectOp(o);
+    (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(texto) : Promise.reject()).then(function () { aviso('Mensagem copiada, é só colar no Direct'); },
+      function () { setTimeout(function () { P.pedirTexto('Não deu para copiar sozinho. Toque e segure no texto abaixo para copiar e cole no Direct.', { titulo: '📸 Direct do Instagram', valor: texto, somenteLeitura: true, sim: 'Fechar', nao: false }); }, 0); });
+    if (V.ehCelular()) { ev.preventDefault(); abrirAppCelular(V.linkInstagramApp(h), V.linkInstagram(h)); }
+    registrarIgFundo(o);
+  });
+  function abrirWhatsCelular(href) { abrirAppCelular(href, V.urlWhatsWeb(href)); }
+  function abrirAppCelular(href, web) {
     var saiu = false, marca = function () { saiu = true; };
     document.addEventListener('visibilitychange', function f() { if (document.visibilityState === 'hidden') { marca(); document.removeEventListener('visibilitychange', f); } });
     window.addEventListener('pagehide', marca, { once: true }); window.addEventListener('blur', marca, { once: true });
     try { window.location.href = href; } catch (x) { saiu = false; }
-    setTimeout(function () { if (saiu || document.visibilityState === 'hidden') return; var w = window.open(V.urlWhatsWeb(href), '_blank'); if (!w) window.location.href = V.urlWhatsWeb(href); }, 1500);
+    setTimeout(function () { if (saiu || document.visibilityState === 'hidden') return; var w = window.open(web, '_blank'); if (!w) window.location.href = web; }, 1500);
   }
 
   function ligarAcoes(raiz, dentroModal) {
@@ -2668,6 +2855,7 @@
       b.onclick = function (ev) {
         ev.preventDefault(); var a = b.dataset.a;
         if (bloq(a)) return aviso('Esta função ainda não foi liberada no servidor (crm-v3). Use a planilha por enquanto.');
+        if (/^-\d+$/.test(String(b.dataset.k || '')) && !/-(nova|novo)$/.test(a)) return aviso('Aguarde: ainda enviando ao CRM. O número chega em instantes (link, QR e mensagens precisam dele).');
         if (dentroModal) $('modal').close('');
         setTimeout(function () { ACOES[a](b.dataset.k); }, 0);
       };
@@ -2701,6 +2889,7 @@
       var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
       if (a && l) a.href = l; }; }); // só troca o texto; consentimento continua valendo (link some se bloqueada)
     if ($('opMais')) $('opMais').onclick = function () { F.op.qtd = (F.op.qtd || OP_PASSO) + OP_PASSO; var y = window.scrollY; render(); window.scrollTo(0, y); };
+    if ($('fIg')) $('fIg').onclick = function () { F.op.ig = !F.op.ig; try { localStorage.setItem(IGF, F.op.ig ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fIg')) $('fIg').focus(); };
     if ($('fWa')) $('fWa').onclick = function () { F.op.wa = !F.op.wa; try { localStorage.setItem(WAF, F.op.wa ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fWa')) $('fWa').focus(); };
     // v0.5.6: 1º contato (WhatsApp, ligação, e-mail) -> Contatada automaticamente via registrarContatoOp. Só se ainda Nova.
     // v0.8.8: o link abre NA HORA (sem preventDefault, sem esperar o CRM, sem recarregar a tela). O registro vai em segundo plano.
@@ -2730,12 +2919,15 @@
   var instalar = null;
   window.addEventListener('beforeinstallprompt', function (ev) { ev.preventDefault(); instalar = ev; if ($('bInstalar')) $('bInstalar').hidden = false; });
   window.addEventListener('hashchange', render);
-  window.addEventListener('online', function () { api.sincronizar().then(function (s) { if (s.enviados) aviso(s.enviados + ' alteração(ões) enviada(s).'); if (s.erros.length) aviso('Algumas alterações foram recusadas: ' + s.erros.join('; ')); iniciar(); }, function (er) { if (er.codigo !== 'TOKEN_INVALIDO') aviso(er.message); }); });
+  // v0.9.3: leitura que chegou com formulário aberto / campo em edição é desenhada quando o Pedro termina.
+  if ($('modal')) $('modal').addEventListener('close', talvezRedesenhar);
+  if ($('conteudo')) $('conteudo').addEventListener('focusout', function () { setTimeout(function () { var f = document.activeElement; if (!f || !$('conteudo').contains(f)) talvezRedesenhar(); }, 0); });
+  window.addEventListener('online', function () { offline = false; faixa(); api.processarFila().then(function (s) { if (s.enviados) aviso(s.enviados + ' alteração(ões) enviada(s).'); if (s.erros.length) aviso('Algumas alterações foram recusadas: ' + s.erros.join('; ')); atualizarFundo(true); }, function (er) { if (er.codigo !== 'TOKEN_INVALIDO') aviso(er.message); }); });
   window.addEventListener('offline', function () { offline = true; faixa(); });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').then(function () {
     // Primeiro uso do demo pode ter baixado o script antes do SW assumir a página.
     if (demo) navigator.serviceWorker.ready.then(function (r) { if (r.active) r.active.postMessage('guardar-demonstracao'); });
   }).catch(function () {});
-  window.ProFixApp = { api: api, iniciar: iniciar, ajustes: ajustes, estat: ESTAT };
-  iniciar();
+  window.ProFixApp = { api: api, iniciar: iniciar, ajustes: ajustes, estat: ESTAT, fundo: function () { return atualizarFundo(true); }, dados: function () { return D; } };
+  iniciar({ abertura: true });
 })();

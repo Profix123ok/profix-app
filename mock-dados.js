@@ -26,7 +26,7 @@
         // v0.8.4: mesmo contrato do crm-v3 (getDados.config.pixPct + planosPublicos.anualPct)
         pixPct: 5, anualPct: 10,
         // v0.9.2: espelha crm-v3 API @127 (getDados.config.pix / planosPublicos.pix). Dados da ProFix (públicos: CNPJ do MEI).
-        pix: { chave: '64628598000140', tipo: 'CNPJ', chaveTexto: 'CNPJ 64.628.598/0001-40', recebedor: 'PROFIX COMPUTADORES', cidade: 'SOROCABA', pct: 5 } },
+        pix: { chave: '64628598000140', tipo: 'CNPJ', chaveTexto: 'CNPJ 64.628.598/0001-40', recebedor: 'PROFIX COMPUTADORES', cidade: 'SOROCABA', pct: 5, nomeBanco: '' } },
       // v0.8.5: mesmo formato de getDados().fin do crm-v3 (configFinanceiro_). Taxas FICTÍCIAS de demonstração.
       fin: { teto: 81000, tetoDaPlanilha: false, alerta: 0.8, taxas: [{ forma: 'Dinheiro', taxa: '' }, { forma: 'Pix', taxa: 0 }, { forma: 'Débito', taxa: 0.99 }, { forma: 'Crédito à vista', taxa: 3.15 }, { forma: 'Crédito parcelado', taxa: '' }], taxasFaltando: ['Crédito parcelado'] },
       clientes: [
@@ -209,7 +209,7 @@
         if (c.consent && ['Sim', 'Não'].indexOf(c.consent) < 0) throw new Error('Consentimento deve ser Sim ou Não.');
         var campos = ['nome', 'whatsapp', 'bairro', 'origem', 'primeiro', 'consent', 'dataConsent', 'obs', 'etapa', 'ultimo', 'proximo', 'acao', 'preventiva', 'indicadoPor', 'motivoPerda', 'valorEst', 'aniversario', 'naoContatar', 'tipoCli', 'doc', 'email'];
         if (c._row) { copiar(achar('clientes', 'nome', c._nomeOriginal || c.nome, c._row), c, campos); return { ok: true, msg: 'Cliente atualizado.' }; }
-        var n = { id: proxId('clientes', 'id', 'C'), primeiro: h(), etapa: 'Lead' }; copiar(n, c, campos); anexar('clientes', n); return { ok: true, msg: 'Cliente cadastrado (' + n.id + ').' };
+        var n = { id: proxId('clientes', 'id', 'C'), primeiro: h(), etapa: 'Lead' }; copiar(n, c, campos); anexar('clientes', n); return { ok: true, row: n._row, id: n.id, msg: 'Cliente cadastrado (' + n.id + ').' }; /* v0.9.3: igual ao crm-v3 (row, id) */
       },
       moverEtapa: function (nome, linha, etapa, motivo) {
         if (D.etapas.indexOf(etapa) < 0) throw new Error('Etapa inválida.');
@@ -288,6 +288,7 @@
         if (o.status === 'Não contatar') throw new Error('Esta empresa está como "Não contatar". Nada foi registrado.');
         var antes = o.status || 'Nova';
         if (antes === 'Nova') { o.status = 'Contatada'; o.lembrete = somaDias(h(), 3); if (!o.proximoPasso) o.proximoPasso = 'Cobrar retorno (uma vez só)'; }
+        else if (String(canal || 'WhatsApp') !== 'WhatsApp' && (antes === 'Sem resposta' || antes === 'Contatada')) { if (antes === 'Sem resposta') o.status = 'Contatada'; } // v0.9.3: igual ao crm-v3 (Instagram/ligação não gastam o lembrete)
         else if (antes === 'Contatada') { o.status = 'Sem resposta'; o.lembrete = ''; o.proximoPasso = 'Lembrete único enviado: aguardar a empresa'; }
         o.ultimoContato = h(); o.historico = (o.historico ? o.historico + '\n' : '') + h() + ' – ' + (canal || 'WhatsApp') + (o.status !== antes ? ' (' + antes + ' → ' + o.status + ')' : '');
         return { ok: true, msg: empresa + ': contato registrado.' };
@@ -733,6 +734,44 @@
       if (alvo) Object.assign(alvo, dados); else { alvo = anexar('estoque', Object.assign({ categoria: '', link: '' }, dados)); }
       if (!alvo.idInsumo) alvo.idInsumo = proxId('estoque', 'idInsumo', 'IN-');
       return { ok: true, msg: 'Insumo ' + item + ' salvo (' + alvo.idInsumo + ').', insumo: insApp(alvo) };
+    };
+    // ---- v0.9.3: API @131 de velocidade (crm-v3 DiferenciaisC.gs), com dados FICTÍCIOS ----
+    var hashTxt = function (t) { var x = 0x811c9dc5; t = String(t); for (var i = 0; i < t.length; i++) { x ^= t.charCodeAt(i); x = (x + ((x << 1) + (x << 4) + (x << 7) + (x << 8) + (x << 24))) >>> 0; } return x.toString(36); };
+    var carimboAbertura = function () { return 'v1|' + hashTxt(JSON.stringify(D)) + '|' + h(); };
+    /** aberturaApp({desde, pacote2, semOportunidades}): cada parte no formato da chamada antiga; desde == carimbo atual -> semMudanca. */
+    S.aberturaApp = function (x) {
+      x = x || {}; var car = carimboAbertura();
+      if (x.desde && String(x.desde) === car) return { ok: true, carimbo: car, semMudanca: true, completo: false, removidos: [] };
+      var r = { ok: true, carimbo: car, semMudanca: false, completo: true, removidos: [], cache: false, partes: {} }, erros = null;
+      var falhar = (opc.falharPartes || []);
+      var parte = function (nome, fn) { try { if (falhar.indexOf(nome) >= 0) throw new Error('Parte indisponível (teste fictício).'); r[nome] = fn(); } catch (e) { r[nome] = null; (erros = erros || {})[nome] = String(e.message || e); } r.partes[nome] = 0; };
+      parte('getDados', function () { return S.getDados(); });
+      if (x.semOportunidades && r.getDados) { r.getDados.oportunidadesTotal = (r.getDados.oportunidades || []).length; delete r.getDados.oportunidades; }
+      parte('agenda', function () { return r.getDados && r.getDados.agenda !== undefined ? r.getDados.agenda : S.listarAgenda(7); });
+      parte('leadsLink', function () { return S.leadsLink(); });
+      parte('clientesResumo', function () { return S.listarClientesResumo(); });
+      parte('planosPublicos', function () { return S.planosPublicos(); });
+      parte('listaContratos', function () { return S.listaContratos({ competencia: h().slice(0, 7) }); });
+      parte('catalogoOS', function () { return S.catalogoOS(); });
+      if (x.pacote2) { parte('fornecedores', function () { return S.listarFornecedores(); }); parte('cotacoes', function () { return S.listarCotacoes({}); }); parte('insumos', function () { return S.listarInsumos(); }); }
+      if (erros) r.erros = erros;
+      return r;
+    };
+    var fotosOps = {}, seqOps = 0;
+    var linhaLeve = function (o) { return { id: o._row, nome: o.empresa || '', ramo: o.segmento || '', bairro: o.bairro || '', telefone: o.telefone || '', whatsapp: o.whatsapp || '', instagram: o.instagram || '', status: o.status || '', ultimaAlteracao: o.ultimaAlteracao || o.ultimoContato || '', _row: o._row }; };
+    /** oportunidadesLeve({desde, offset, limit}): limit padrão 500, máx 2000; desde = só o que mudou (linhas + removidos). */
+    S.oportunidadesLeve = function (x) {
+      x = x || {}; var off = Math.max(0, Math.floor(Number(x.offset) || 0)), lim = Math.min(2000, Math.max(1, Math.floor(Number(x.limit) || 500)));
+      var ops = (D.oportunidades || []).filter(function (o) { return String(o.empresa || '').trim(); }), foto = {};
+      ops.forEach(function (o) { foto[o._row] = JSON.stringify(linhaLeve(o)); });
+      var car = 'op1|' + (++seqOps); fotosOps[car] = foto;
+      var antes = x.desde && fotosOps[x.desde];
+      if (antes) {
+        var linhas = ops.filter(function (o) { return antes[o._row] !== foto[o._row]; }).map(linhaLeve);
+        var rem = Object.keys(antes).filter(function (k) { return !(k in foto); }).map(function (k) { return ['Oportunidades', Number(k)]; });
+        return { ok: true, carimbo: car, completo: false, total: null, offset: 0, limit: lim, linhas: linhas, removidos: rem };
+      }
+      return { ok: true, carimbo: car, completo: true, total: ops.length, offset: off, limit: lim, linhas: ops.slice(off, off + lim).map(linhaLeve), removidos: [] };
     };
     return S;
   }
