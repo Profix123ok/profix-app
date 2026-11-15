@@ -32,5 +32,8 @@ window.PROFIX_CONFIG = {
     fimDeSemana: { inicio: '09:00', fim: '17:00' }
   },
   PRECO_VISITA_EMPRESA: 179.90, // tabela oficial 02/11/2026 (visita técnica a empresa)
-  VERSAO_APP: '0.9.2'
+  // v0.9.3: chamadas de velocidade do CRM ADM (crm-v3 API @131): 'aberturaApp' (abertura numa chamada, com {desde}), 'oportunidadesLeve'
+  // (lista compacta com delta) e 'idApp' (criação com id gerado no celular, sem duplicar). Se a ação não existir/der erro, o App usa as chamadas antigas.
+  LEITURAS_VELOCIDADE: ['aberturaApp', 'oportunidadesLeve', 'idApp'], // crm-v3 API @131 (15/11/2026). Tirar um nome daqui = volta ao caminho antigo.
+  VERSAO_APP: '0.9.3'
 };
