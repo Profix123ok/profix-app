@@ -26,11 +26,18 @@
   if (ajustes.descontoPix == null) ajustes.descontoPix = V.DESCONTO_PIX;
   if (ajustes.descontoAnual == null) ajustes.descontoAnual = V.DESCONTO_ANUAL;
   function salvarAjustes() { localStorage.setItem(AJ, JSON.stringify(ajustes)); }
+  // v0.9.2: dados do Pix (chave, recebedor, cidade). Fonte: SERVIDOR primeiro (config do CRM, quando existir – ver ProFixPix.daConfigServidor);
+  // os campos de Mais › Ajustes valem só se o servidor não informar; sem nada, o padrão da ProFix (CNPJ 64.628.598/0001-40).
+  var PIX = window.ProFixPix;
+  function pixConfig() { return PIX.escolherConfig(D && D.config, { chave: ajustes.pixChave || '', nome: ajustes.pixNome || '', cidade: ajustes.pixCidade || '' }); }
+  /** Bloco "Pagamento via Pix" (texto + código). valor 0 = código sem valor. null se a chave estiver inválida. Nunca leva custo. */
+  function blocoPix(valor, num) { try { return PIX.bloco(pixConfig(), valor, num); } catch (x) { return null; } }
+  function copiarTexto(t, ok) { return (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso(ok || 'Copiado.'); }, function () { P.pedirTexto('Não deu para copiar sozinho. Toque e segure no texto abaixo para copiar.', { titulo: 'Copiar', valor: t, somenteLeitura: true, sim: 'Fechar', nao: false }); }); }
   function cfgPrecos() { return V.precosComerciais({ pix: ajustes.descontoPix, anual: ajustes.descontoAnual, extra: V.EXTRA_MAQUINA }); }
   /** Lê pixPct/anualPct do getDados.config (+ planosPublicos mesclado em api.js) e grava no cache local. */
   function aplicarPrecosDoCrm(dados) {
     var cfg = (dados && dados.config) || {}, mudou = false;
-    var pix = Number(cfg.pixPct);
+    var pix = Number(cfg.pixPct != null ? cfg.pixPct : cfg.pix && cfg.pix.pct); // v0.9.2: config.pix.pct (API @127) é o mesmo % do Pix
     if (isFinite(pix) && pix >= 0 && pix <= 20) { if (ajustes.descontoPix !== pix) { ajustes.descontoPix = pix; mudou = true; } ajustes.pixFonte = 'crm'; }
     var an = Number(cfg.anualPct);
     if (isFinite(an) && an >= 0 && an <= 100) { if (ajustes.descontoAnual !== an) { ajustes.descontoAnual = an; mudou = true; } ajustes.anualFonte = 'crm'; }
@@ -163,13 +170,18 @@
       var cc = V.contagemContatoOps(D.oportunidades), chipC = function (k, rot) { return '<button type="button" class="chip" data-contato="' + k + '" aria-pressed="' + ((F.op.contato || '') === k) + '">' + rot + '</button>'; };
       var barraContato = '<div class="chips" id="fContato" role="group" aria-label="Filtrar por contato">' + chipC('', 'Todas') + chipC('nao', '🆕 ' + V.SITUACAO_CONTATO.nao + ' (' + cc.nao + ')') + chipC('sim', '✅ ' + V.SITUACAO_CONTATO.sim + ' (' + cc.sim + ')') + '</div>';
       var ops = V.filtrarOps(D.oportunidades, fOp);
+      // v0.9.2: 50 por vez (o toque não trava com centenas de cards). Busca e filtros valem sobre a lista toda; mudou o filtro, volta para 50.
+      var sig = JSON.stringify([fOp.status, fOp.prioridade, fOp.segmento, fOp.q, fOp.cidade, fOp.wa, fOp.contato]);
+      if (sig !== F.op.sig || !F.op.qtd) { F.op.sig = sig; F.op.qtd = OP_PASSO; }
+      var mostra = Math.min(ops.length, F.op.qtd);
       return barraContato + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
         '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
-        (ops.length > LIMITE ? '<p class="muted">Mostrando as ' + LIMITE + ' primeiras. Use os filtros ou a busca para achar as outras.</p>' : '') +
-        lista(ops.slice(0, LIMITE), function (o) {
+        (ops.length > mostra ? '<p class="muted" id="opMostrando">Mostrando ' + mostra + ' de ' + ops.length + '.</p>' : '') +
+        lista(ops.slice(0, mostra), function (o) {
           return card(e(o.empresa), e(o.segmento) + ' · ' + e(o.bairro) + (o.lembrete ? ' · ⏰ ' + V.dataBR(o.lembrete) : '') + (o.proximoPasso ? '<br>' + e(o.proximoPasso) : '') + (o.valorEst ? '<br>Valor estimado ' + V.brl(o.valorEst) : '') + blocoContatoOp(o),
             tagPri(o.prioridade) + '<span data-op-st="' + o._row + '">' + tag(o.status) + '</span>', waOp(o) + contatoOp(o) + botao('Editar', 'op-editar', o._row) + (o.status !== 'Virou lead' && !V.bloqueadaOp(o) ? botao('➜ Virar lead', 'op-lead', o._row) : ''));
-        }, 'Nenhuma empresa com esse filtro.');
+        }, 'Nenhuma empresa com esse filtro.') +
+        (ops.length > mostra ? '<div class="acoes"><button type="button" class="btn sec" id="opMais">Ver mais ' + Math.min(OP_PASSO, ops.length - mostra) + '</button></div>' : '');
   }
   // v0.8.8: último contato em destaque + histórico abrível no próprio card (sem abrir Editar).
   function blocoContatoOp(o) {
@@ -191,7 +203,7 @@
     return id ? '<span class="tag ok" id="naAgenda">Na agenda ✓</span>' + botao('Atualizar na agenda', 'ag-os', o._row) + (api.pode('removerEventoAgenda') ? botao('Tirar da agenda', 'ag-rem-os', o._row) : '') : botao('📅 Pôr na agenda', 'ag-os', o._row); }
   function emailBtn(c, acao, row) { return api.pode('enviarEmailCliente') && V.podeEmailCliente(c) ? botao('✉️ Enviar e-mail', acao, row) : ''; }
   function achar(lista, row) { return (D[lista] || []).filter(function (x) { return x._row === Number(row); })[0]; }
-  var LIMITE = 100;
+  var LIMITE = 100, OP_PASSO = 50;
   var tagStatusOS = function (s) { return tag(s, s === 'Pronto' ? 'media' : s === 'Aguardando aprovação' || s === 'Aguardando peça' ? 'alta' : 'cinza'); };
 
   // v0.5.4: leads que chegaram pela página pública de cadastro (leadsLink). WhatsApp só manual, um a um (link wa.me).
@@ -202,7 +214,7 @@
   function leadsNovos() { return leadsVisiveis().filter(function (l) { return situacaoLead(l) === 'Novo'; }); }
   function waLead(l) { var n = l.consentimento === true || /^(sim|true)$/i.test(String(l.consentimento)) ? V.numeroWa(l.telefone) : null;
     var t = 'Olá ' + String(l.nome || '').split(' ')[0] + ', aqui é da ProFix Computadores. Recebemos seu cadastro' + (l.servico ? ' sobre: ' + l.servico : '') + '. Como podemos ajudar?';
-    return n ? '<a class="btn wa peq" data-wa-lead="' + l._row + '" target="_blank" rel="noopener" href="' + e('https://wa.me/' + n + '?text=' + encodeURIComponent(t)) + '">📲 WhatsApp</a>' : '<span class="muted">Telefone inválido ou sem consentimento.</span>'; }
+    return n ? '<a class="btn wa peq" data-wa-lead="' + l._row + '" target="_blank" rel="noopener" href="' + e(V.urlWhats(n, t)) + '">📲 WhatsApp</a>' : '<span class="muted">Telefone inválido ou sem consentimento.</span>'; }
   function secaoLeadsLink() { var todos = leadsVisiveis(); if (!todos.length) return '';
     var sit = F.lead.sit, cont = {}; SIT_LEAD.forEach(function (k) { cont[k] = 0; }); todos.forEach(function (l) { var k = situacaoLead(l); cont[k] = (cont[k] || 0) + 1; });
     var l = todos.filter(function (x) { return !sit || situacaoLead(x) === sit; });
@@ -267,7 +279,8 @@
         }, 'Nenhuma garantia acabando agora.') + '</section>' +
         '<h2>📞 Quem chamar hoje</h2>' + lista(H.chamar, itemContato, 'Ninguém para chamar hoje 🎉') +
         '<h2>⏳ Sem resposta há 3 dias ou mais</h2>' + lista(H.semResposta, itemContato, 'Nenhum contato parado.') +
-        '<h2>💰 OS para cobrar</h2>' + lista(H.cobrar, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), 'Saldo ' + V.brl(x.saldo), tagStatusOS(x.status), botao('Receber', 'os-receber', x.ref._row, '') + acoesHojeOS(x.ref)); }, 'Nenhuma OS para cobrar.') +
+        '<h2>💰 OS para cobrar</h2>' + lista(H.cobrar, function (x) { return card(e(x.num) + ' · ' + e(x.cliente), 'Saldo ' + V.brl(x.saldo), tagStatusOS(x.status), botao('Receber', 'os-receber', x.ref._row, '') + botao('💬 Cobrar (Pix)', 'os-cobrar', x.ref._row, '') + acoesHojeOS(x.ref)); }, 'Nenhuma OS para cobrar.') +
+        secaoPecasComprar() +
         (H.paradas && H.paradas.length ? '<h2>🐢 OS paradas (3+ dias sem movimento)</h2>' + lista(H.paradas, function (x) { var o = x.ref || achar('os', x.row); return card(e(x.num) + ' · ' + e(x.cliente), e(x.status) + (o ? ' · ' + e((V.badgeParada3d(o, D.hoje) || {}).texto || '') : ''), tag('parada', 'parada'), acoesHojeOS(o)); }, '') : '') +
         '<h2>✅ Tarefas</h2>' + lista(H.tarefas || [], function (t) { return card(e(t.tarefa), e(t.cliente || '') + ' · ' + V.dataBR(t.data), t.data < D.hoje ? tag('atrasada', 'vencido') : '', botao('Marcar feita', 'tar-feita', t._row)); }, 'Sem tarefas para hoje.') +
         '<h2>📅 Agenda</h2>' + lista(H.agenda || [], function (a) { return card(e(a.titulo), V.dataBR(a.data) + ' · ' + e(a.inicio || '') + (a.local ? ' · ' + e(a.local) : ''), a.eventoId ? '<span class="tag ok">Na agenda ✓</span>' : '', mapsBtn(a.local && a.local.length > 12 ? a.local : '') + (a.eventoId && api.pode('criarEventoAgenda') ? botao('Remarcar', 'ag-ev', a.eventoId) : '') + (a.eventoId && api.pode('removerEventoAgenda') ? botao('Tirar da agenda', 'ag-rem', a.eventoId) : '')); }, 'Agenda livre nos próximos 7 dias.');
@@ -345,6 +358,15 @@
           '<p><b>Desconto no Pix:</b> ' + e(String(pc.pix)) + '% <span class="muted">· ' + e(pixSrc) + '</span></p>' +
           '<p><b>Contrato anual:</b> ' + e(String(pc.anual)) + '% <span class="muted">· ' + e(anSrc) + '</span></p>' +
           '<p class="muted">O % do Pix é um lugar só no CRM (API planosPublicos / getDados.config.pixPct). Mude no <b>painel do CRM</b> (Mais · Desconto no Pix). Sem internet, vale o último valor guardado neste aparelho (padrão 5% / 10%).</p></div>' +
+          (function () { var pc = pixConfig(), srv = pc.fonte === 'servidor';
+            return '<div class="card" id="ajRecebPix"><h3 style="margin:0 0 8px">💠 Pix para receber dos clientes</h3>' +
+              '<p class="muted" id="ajPixFonte">' + (srv ? 'Usando a chave do <b>CRM</b> (painel). Os campos abaixo ficam guardados só como reserva.' : 'O CRM ainda não informa a chave Pix: vale o que está aqui (usado só se o servidor não informar).') + '</p>' +
+              '<div><label for="ajPixChave">Chave Pix <span class="muted">(usado só se o servidor não informar)</span></label><input id="ajPixChave" autocomplete="off" value="' + e(ajustes.pixChave || PIX.PADRAO.chave) + '"></div>' +
+              '<div><label for="ajPixNome">Nome do recebedor <span class="muted">(usado só se o servidor não informar)</span></label><input id="ajPixNome" autocomplete="off" maxlength="25" value="' + e(ajustes.pixNome || PIX.PADRAO.nome) + '"></div>' +
+              '<div><label for="ajPixCidade">Cidade <span class="muted">(usado só se o servidor não informar)</span></label><input id="ajPixCidade" autocomplete="off" maxlength="15" value="' + e(ajustes.pixCidade || PIX.PADRAO.cidade) + '"></div>' +
+              '<p class="muted" id="ajPixPrev">Chave em uso: <b>' + e(pc.chaveTexto) + '</b> · ' + e(pc.nome) + ' · ' + e(pc.cidade) + '</p>' +
+              '<p class="erro" id="ajPixErro"></p><div class="acoes"><button type="button" class="btn sec" id="ajPixSalvar">Salvar Pix</button><button type="button" class="btn sec" id="ajPixPadrao">Voltar ao padrão</button></div>' +
+              '<p class="muted">O código “copia e cola” é montado no aparelho, sem custo. Nenhuma mensagem sai sozinha.</p></div>'; })() +
           '<div class="acoes"><button class="btn" id="bInstalar" hidden>📲 Instalar o app</button><button class="btn sec" id="bSync">🔄 Atualizar agora</button><button class="btn sec" id="bSair">Sair deste aparelho</button></div>' +
           '<p class="muted" id="dicaIos"></p><p class="muted">Versão ' + e(CFG.VERSAO_APP || '') + ' · ' + (api.tipo === 'mock' ? 'modo demonstração' : 'conectado à planilha') + (api.ultimaAtualizacao() ? ' · dados de ' + new Date(api.ultimaAtualizacao()).toLocaleString('pt-BR') : '') + '</p>';
       }
@@ -533,12 +555,14 @@
         '<div><label for="orcEquip">Equipamento *</label><input id="orcEquip" autocomplete="off" placeholder="Ex.: Notebook Dell Inspiron" value="' + e(Q.equipamento || '') + '"></div>') +
       '<div><label for="c_diagnostico">Diagnóstico / laudo</label><textarea id="c_diagnostico" rows="2">' + e(Q.diagnostico || '') + '</textarea></div>' +
       '<div><label for="orcBusca">Adicionar da tabela de preços</label><input id="orcBusca" type="search" autocomplete="off" placeholder="Ex.: formatação, SSD, limpeza"><div class="osm-res" id="orcRes"></div></div>' +
-      '<div class="chips" id="orcAdd"><button type="button" class="chip" id="orcLivre">+ Item livre</button><button type="button" class="chip" id="orcPeca">+ Peça</button></div>' +
+      '<div class="chips" id="orcAdd"><button type="button" class="chip" id="orcLivre">+ Item livre</button><button type="button" class="chip" id="orcPeca">+ Peça</button><button type="button" class="chip" id="orcComprar">🛒 Peça a comprar</button></div>' +
       (o ? '<div id="orcCotsBox">' + htmlCots() + '</div>' : '') +
       '<div id="orcItens"></div>' +
       '<div class="orc-desc-total"><label for="orcDescTotal">Desconto no total</label><div class="orc-par"><input id="orcDescTotal" inputmode="decimal" placeholder="0" value="' + e(Q.total.valor || '') + '"><select id="orcDescTotalModo" aria-label="Desconto no total em % ou R$"><option' + (Q.total.modo === '%' ? ' selected' : '') + '>%</option><option' + (Q.total.modo === 'R$' ? ' selected' : '') + '>R$</option></select></div>' +
       '<div class="chips">' + O.ATALHOS.filter(function (a) { return a.tipo === 'desconto'; }).map(function (a) { return '<button type="button" class="chip" data-orc-atalho="' + a.valorUnit + '">' + e(a.rot) + '</button>'; }).join('') + '</div></div>' +
       '<div class="osm-bar" id="orcResumo"></div>' +
+      '<p class="alerta" id="orcCompraAviso" hidden>🛒 Compre só depois do Pix confirmado. A compra é marcada na própria cotação (🧾 Cotações › Comprado), que lança o custo no caixa uma vez só.</p>' +
+      '<div class="card" id="orcPix"></div>' +
       '<div class="lin"><div><label for="c_validade">Válido até</label><input id="c_validade" type="date" value="' + e(dt(Q.validade)) + '"><div class="muted">Em branco = ' + dias + ' dias (padrão do servidor).</div></div><div><label for="c_previsao">Previsão de entrega</label><input id="c_previsao" type="date" value="' + e(dt(Q.previsao)) + '"></div></div>' +
       '<p class="alerta" id="orcAvisoPeca" hidden></p>' +
       (c && !regra ? '<p class="muted">' + (Dif.naoContatar(c) ? 'Cliente marcado como Não contatar.' : 'WhatsApp inválido: salve o orçamento e combine por outro canal.') + '</p>' : '') +
@@ -565,7 +589,10 @@
           '<button type="button" class="btn sec peq" data-orc-del="' + i + '" aria-label="Remover item ' + (i + 1) + '">✕</button></div>' +
           '<div class="orc-l2"><label>Qtd<input data-f="qtd" inputmode="decimal" value="' + e(it.qtd) + '"></label><label>Valor R$<input data-f="valor" inputmode="decimal" placeholder="' + (it.tipo === 'peça' ? 'digite' : '0,00') + '" value="' + e(it.valor) + '"></label>' +
           '<label>Desconto<span class="orc-par"><input data-f="desc" inputmode="decimal" placeholder="0" value="' + e(it.desc) + '"><select data-f="descModo" aria-label="Desconto do item em % ou R$"><option' + (it.descModo !== 'R$' ? ' selected' : '') + '>%</option><option' + (it.descModo === 'R$' ? ' selected' : '') + '>R$</option></select></span></label>' +
-          '<b class="orc-lt" data-lt="' + i + '">—</b></div>' + (it.validoAte ? '<div class="muted">' + e(it.origem || 'Cotação') + ' · O valor da peça vale até ' + V.dataBR(it.validoAte) + (it.custo ? ' · <b>custo posto R$ ' + e(it.custo) + ' (só você vê): digite o preço de venda</b>' : '') + '</div>' : it.origem ? '<div class="muted">' + e(it.origem) + '</div>' : '') +
+          '<b class="orc-lt" data-lt="' + i + '">—</b></div>' +
+          (it.tipo === 'peça' ? (it.cotacao ? '<label class="chk orc-comprar"><input type="checkbox" data-f="comprar"' + (it.comprar ? ' checked' : '') + '> 🛒 Peça encomendada: a ProFix compra para o cliente (' + e(it.cotacao) + ')</label>'
+            : '<div class="muted orc-comprar-dica">Vai comprar esta peça para o cliente? Use uma cotação da OS (🛒 Peça a comprar).</div>') : '') +
+          (it.validoAte ? '<div class="muted">' + e(it.origem || 'Cotação') + ' · O valor da peça vale até ' + V.dataBR(it.validoAte) + (it.custo ? ' · <b>custo posto R$ ' + e(it.custo) + ' (só você vê): digite o preço de venda</b>' : '') + '</div>' : it.origem ? '<div class="muted">' + e(it.origem) + '</div>' : '') +
           '<div class="erro" data-le="' + i + '"></div></div>';
       }).join('');
       totais();
@@ -577,6 +604,11 @@
       var et = k.erros.filter(function (x) { return x.i === 'total'; })[0];
       $('orcResumo').innerHTML = '<span class="muted">' + k.validos.length + ' item(ns) · subtotal ' + ORC.brl(k.bruto) + (k.descontos ? ' · descontos −' + ORC.brl(k.descontos).replace('−', '') : '') + '</span>' +
         '<b class="osm-total">Total: <span id="orcTotal">' + ORC.brl(k.total) + '</span></b>' + (et ? '<span class="erro" id="orcErroTotal">' + e(et.msg) + '</span>' : '');
+      $('orcCompraAviso').hidden = !k.validos.some(function (l) { return l.comprar; });
+      var pb = k.total > 0 ? blocoPix(k.total, o ? o.num : '') : null, pc = pixConfig();
+      var hPix = pb ? '<b>💠 Pagamento via Pix</b> <span class="muted">(vai na mensagem do cliente)</span><br>Chave: <b>' + e(pc.chaveTexto) + '</b> · ' + e(pc.nome) + ' · valor ' + ORC.brl(k.total) +
+        '<div class="acoes"><button type="button" class="btn sec peq" id="orcCopiarPix">📋 Copiar Pix</button></div>' : '<span class="muted">💠 O Pix (chave e copia e cola) entra na mensagem quando o total passar de R$ 0,00.</span>';
+      if ($('orcPix').dataset.h !== hPix) { $('orcPix').innerHTML = hPix; $('orcPix').dataset.h = hPix; } // só redesenha se mudou (senão o toque em 📋 Copiar Pix logo após digitar se perde)
       var vp = ORC.pecasVencendoAntes(k, $('c_validade').value || V.somaDias(D.hoje, dias));
       $('orcAvisoPeca').hidden = !vp.length; $('orcAvisoPeca').textContent = vp.length ? 'Atenção: o valor da peça (' + vp.map(function (l) { return l.descricao + ' até ' + V.dataBR(l.validoAte); }).join('; ') + ') vence antes da validade do orçamento.' : '';
       return k;
@@ -589,8 +621,9 @@
     }
     desenharItens(); resultados();
     $('orcBusca').oninput = resultados;
-    f.addEventListener('input', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) { Q.itens[Number(d.dataset.i)][t.dataset.f] = t.value; } $('fErro').textContent = ''; totais(); guardar(); });
-    f.addEventListener('change', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) Q.itens[Number(d.dataset.i)][t.dataset.f] = t.value; totais(); guardar(); });
+    var valorCampo = function (t) { return t.type === 'checkbox' ? t.checked : t.value; };
+    f.addEventListener('input', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) { Q.itens[Number(d.dataset.i)][t.dataset.f] = valorCampo(t); } $('fErro').textContent = ''; totais(); guardar(); });
+    f.addEventListener('change', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) Q.itens[Number(d.dataset.i)][t.dataset.f] = valorCampo(t); totais(); guardar(); });
     f.addEventListener('click', function (ev) {
       var b = ev.target.closest('button'); if (!b || b.type === 'submit') return;
       if (b.dataset.orcCat !== undefined) { addItem(ORC.itemDoCatalogo(cat[Number(b.dataset.orcCat)])); $('orcBusca').value = ''; resultados(); }
@@ -600,6 +633,14 @@
       else if (b.dataset.orcAtalho !== undefined) { $('orcDescTotal').value = b.dataset.orcAtalho; $('orcDescTotalModo').value = '%'; totais(); guardar(); }
       else if (b.id === 'orcLivre') addItem(ORC.itemVazio());
       else if (b.id === 'orcPeca') addItem(ORC.itemVazio({ tipo: 'peça' }));
+      else if (b.id === 'orcCopiarPix') { var kk = totais(), pbx = blocoPix(kk.total, o ? o.num : ''); if (pbx) copiarTexto(pbx.codigo, 'Pix copia e cola copiado.'); }
+      else if (b.id === 'orcComprar') {
+        // v0.9.2: peça comprada para o cliente = cotação do Módulo 9 (a mesma que vira Comprado e lança o custo no caixa). Sem cotação, não inventa.
+        if (!o) return aviso('Salve o orçamento primeiro (a OS nasce no CRM). Depois cadastre a cotação da peça em 🧾 Cotações da OS e volte ao ⚡ Orçamento.');
+        if (cots.length) { var cb = $('orcCotsBox'); if (cb) cb.scrollIntoView({ block: 'center' }); return aviso('Toque na cotação da peça: ela entra como peça encomendada (custo só para você).'); }
+        guardar();
+        perguntar('Esta OS não tem cotação válida. Abrir 🧾 Cotações para cadastrar a peça (com fornecedor e link)? O rascunho do orçamento fica guardado.', { titulo: '🛒 Peça a comprar', sim: 'Abrir Cotações' }).then(function (ok) { if (ok) { m.close(''); ACOES['os-cot'](o._row); } });
+      }
       else if (b.id === 'orcDescartar') { limparRasc(); m.close(''); orcamentoRapido(row, pre); }
     });
     m.onclose = null; m.returnValue = ''; m.showModal();
@@ -616,11 +657,13 @@
       if (!o && (!cli || !equip)) { $('fErro').textContent = 'Escolha o cliente e informe o equipamento.'; return; }
       var semRedeAgora = !navigator.onLine || offline;
       if (!o && semRedeAgora) { guardar(); $('fErro').textContent = 'Sem internet: para cliente sem OS é preciso conectar (a OS é criada no CRM). O rascunho ficou guardado neste aparelho.'; return; }
+      // v0.9.2: itens[] estruturados (CRM API @123 monta o mesmo itensOrc e confere o total); itensOrc/orcamento seguem juntos (compatível com servidor antigo).
       var v = { diagnostico: $('c_diagnostico').value.trim(), itensOrc: ORC.paraItensOrc(k), orcamento: k.total, validade: $('c_validade').value, previsao: $('c_previsao').value };
+      var itensEstr = ORC.paraItens(k);
       var prazoPadrao = !v.validade; v.validade = v.validade || V.somaDias(D.hoje, dias);
       var modo = ev.submitter && ev.submitter.id === 'fSalvarWa' ? 'wa' : ev.submitter && ev.submitter.id === 'orcSalvarLink' ? 'link' : 'so', popup = null;
       // Abrir no gesto do usuário evita bloqueio de popup após a espera da API.
-      if (modo === 'wa' && !semRedeAgora) { popup = window.open('about:blank', '_blank'); if (popup) { popup.opener = null; popup.document.body.textContent = 'Salvando orçamento… O WhatsApp abrirá após a confirmação.'; } }
+      if (modo === 'wa' && !semRedeAgora && !V.ehCelular()) { popup = window.open('about:blank', '_blank'); if (popup) { popup.opener = null; popup.document.body.textContent = 'Salvando orçamento… O WhatsApp abrirá após a confirmação.'; } }
       busy = true; f.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
       try {
         var os = o;
@@ -632,21 +675,25 @@
           if (!os) throw new Error('OS criada, mas ainda não apareceu. Atualize e abra o orçamento pela OS (não crie outra).');
           limparRasc(); chave = ORC_RASC + os.num; guardar();
         }
-        var r = await api.escrever('salvarOrcamento', [Object.assign({ num: os.num, _row: os._row }, v)], aplicar('os', os._row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v)));
+        var r = await api.escrever('salvarOrcamento', [Object.assign({ num: os.num, _row: os._row, itens: itensEstr }, v)], aplicar('os', os._row, Object.assign({ status: 'Aguardando aprovação', aprovacao: 'Pendente' }, v)));
         limparRasc();
-        if (r.enfileirado) { if (popup) popup.close(); m.close(''); aviso('Orçamento salvo na fila. Sincronize antes de abrir o WhatsApp.'); await iniciar(); return; }
-        var cc = V.clienteDaOS(D, os) || cli || {}, base = { calc: k, cliente: cc, num: os.num, equipamento: os.equipamento || equip, diagnostico: v.diagnostico, validade: v.validade, dias: prazoPadrao ? dias : null, previsao: v.previsao };
-        var texto = ORC.textoWhats(base), wa = V.botaoWaCliente(cc, 'os', texto);
+        var cc = V.clienteDaOS(D, os) || cli || {}, pb = blocoPix(k.total, os.num);
+        var base = { calc: k, cliente: cc, num: os.num, equipamento: os.equipamento || equip, diagnostico: v.diagnostico, validade: v.validade, dias: prazoPadrao ? dias : null, previsao: v.previsao, pix: pb ? pb.texto : '' };
+        var wa = V.botaoWaCliente(cc, 'os', ORC.textoWhats(base));
+        // v0.9.2: os DOIS botões (verde "Salvar e abrir WhatsApp" e "Salvar e gerar link") só abrem o WhatsApp com o link REAL de aprovação.
+        var envio = { os: os, cliente: cc, titulo: 'Orçamento da ' + os.num, tipo: 'orcamento', pix: pb ? pb.codigo : '', fila: !!r.enfileirado,
+          montar: function (link) { return ORC.textoWhats(Object.assign({}, base, { link: link })); },
+          antes: function () { // orçamento ainda na fila: manda primeiro (senão o link mostraria o orçamento antigo)
+            if (!api.fila().some(function (op) { return op.acao === 'salvarOrcamento'; })) return;
+            return api.sincronizar().then(function () { if (api.fila().some(function (op) { return op.acao === 'salvarOrcamento'; })) throw new Error('o orçamento ainda está na fila do aparelho (sem internet)'); return iniciar(); });
+          } };
         m.close(''); await iniciar();
-        if (modo === 'link') {
-          var rl = await api.escrever('linkClienteOS', [{ num: os.num, _row: os._row }]), url = ((rl.dados || rl) || {}).url || '';
-          var tl = ORC.textoWhats(Object.assign({}, base, { link: url })), wl = V.botaoWaCliente(cc, 'os', tl);
-          abrirMsg({ titulo: 'Orçamento da ' + os.num, texto: tl, link: url, waUrl: wl ? wl.href : '', aviso: wl && wl.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '', semWa: Dif.naoContatar(cc) ? 'Cliente marcado como “Não contatar”.' : 'WhatsApp inválido: copie o link.', cliente: cc, os: os.num, tipo: 'orcamento' });
-        } else if (modo === 'wa' && wa) {
-          if (popup && !popup.closed) { popup.location.href = wa.href; registrarAberta({ dataset: { regNome: cc.nome, regOs: os.num, regTipo: 'orcamento', regTexto: texto } }); }
-          else abrirMsg({ titulo: 'Orçamento da ' + os.num, texto: texto, waUrl: wa.href, aviso: wa.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '', cliente: cc, os: os.num, tipo: 'orcamento' });
-        } else { if (popup) popup.close(); if (modo === 'wa') aviso('Orçamento salvo. WhatsApp não liberado para este cliente (Não contatar ou número inválido).'); }
-        aviso(r.msg);
+        if (modo === 'so') { if (popup) popup.close(); aviso(r.enfileirado ? 'Orçamento salvo na fila (sem internet). Envio quando a internet voltar.' : r.msg); return; }
+        if (modo === 'wa' && !wa) { if (popup) popup.close(); aviso('Orçamento salvo. WhatsApp não liberado para este cliente (Não contatar ou número inválido).'); return; }
+        if (r.enfileirado) { if (popup) popup.close(); avisoSemLink(envio, new Error('sem internet: o orçamento ficou na fila')); return; }
+        envio.popup = modo === 'wa' ? popup : null;
+        await abrirComLink(envio);
+        if (modo === 'wa') aviso(r.msg);
       } catch (er) { if (popup) popup.close(); if (f.isConnected) $('fErro').textContent = 'Não salvou: ' + er.message; else aviso('Não deu: ' + er.message); }
       finally { busy = false; if (f.isConnected) f.querySelectorAll('button').forEach(function (b) { b.disabled = false; }); }
     };
@@ -678,7 +725,7 @@
         lin('Equipamento', e(o.equipamento)) + lin('Defeito', e(o.defeito)) + lin('Serviço', e(o.servico)) + lin('Entrada', V.dataBR(o.entrada)) + lin('Previsão', V.dataBR(o.previsao)) +
         lin('Acessórios', e(o.acessorios)) + '<div><span class="muted">Senha do aparelho:</span> <span id="senhaOS">' + e(V.textoSenha(o, ajustes.mostrarSenha)) + '</span></div>' +
         lin('Diagnóstico', e(o.diagnostico)) + lin('Orçamento', o.orcamento ? V.brl(o.orcamento) + (o.aprovacao ? ' (' + e(o.aprovacao) + ')' : '') + (o.validade ? ' · vale até ' + V.dataBR(o.validade) : '') : '') +
-        lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) +
+        lin('Valor cobrado', o.valor ? V.brl(o.valor) : '') + lin('Recebido', V.brl(V.recebidoOS(D, o.num))) + lin('Saldo', V.brl(V.saldoOS(D, o))) + linhaPecasComprar(o) +
         '<div><span class="muted">Peças (' + pecas.length + '):</span> ' + (pecas.map(function (p) { return e(p.qtd + '× ' + p.peca) + ' – custo ' + V.brl(p.custoUnit) + ', cobrado ' + V.brl(p.precoUnit); }).join('; ') || '—') + (pecas.length ? ' · custo total ' + V.brl(V.custoPecasOS(D, o.num)) : '') + '</div>' +
         '<details id="maisAcoesOS"><summary>Mais ações</summary>' + botoesDifOS(o) + '<div class="acoes">' + botao('💬 Mensagens', 'os-msgs', row) + botao('Msg serviço', 'os-msg-tipo', row) + botao('Termo de entrada', 'os-termo', row) + (api.pode('salvarVisita') ? botao('🚗 Marcar visita', 'os-visita', row) : '') + botao('Mudar status', 'os-status', row, '') + botao('⚡ Orçamento', 'os-orc', row) + (o.aprovacao === 'Pendente' ? botao('Aprovar / recusar', 'os-decidir', row) : '') + botao('Receber', 'os-receber', row) + botao('+ Peça', 'os-peca', row) + botao('🧾 Cotações', 'os-cot', row) + botao('🏷 Etiqueta QR', 'os-qr', row) + botao('Editar', 'os-editar', row) + (api.pode('excluirRegistro') ? botao('🗑 Excluir', 'os-excluir', row, 'perigo') : '') + (api.pode('lerOSMulti') ? botao('💻 Vários equipamentos', 'osm-abrir', row, '') : '') + '</div>' +
         '<div class="acoes">' + mapsBtn(V.enderecoOS(D, o)) + agendaBtn(o) + emailBtn(V.clienteDaOS(D, o), 'em-os', row) + '</div></details>' +
@@ -1002,7 +1049,7 @@
         (ap ? '<p class="tag ok" id="orcAprovado">✅ Orçamento aprovado' + (o.comoAprov ? ' – ' + e(o.comoAprov) : '') + '</p>' : '') +
         '<div class="orc-acoes">' +
         (podeAprovar ? '<button type="button" class="btn" id="orcAprovar">✅ Aprovar orçamento</button>' : (!ap && (!OSM.num || OSM.sujo) ? '<p class="muted">Salve a OS para poder aprovar.</p>' : '')) +
-        '<a class="btn wa" id="orcWa" target="_blank" rel="noopener" href="' + e(o.whatsappUrl || O.linkWhatsApp(c.whatsapp, o.whatsappTexto)) + '">💬 Enviar pelo WhatsApp</a>' +
+        '<button type="button" class="btn wa" id="orcWa">💬 Enviar pelo WhatsApp (com link de aprovação)</button>' +
         '<button type="button" class="btn sec" id="orcCopiar">📋 Copiar texto</button>' +
         (o.html ? '<button type="button" class="btn sec" id="orcPdf">🖨 Imprimir / PDF</button>' : '<button type="button" class="btn sec" id="orcPdf">🖨 Imprimir</button>') + '</div>' +
         '<p class="muted">O WhatsApp só abre com o texto pronto: quem envia é você.' + (semConsent ? ' Atenção: este cliente está sem consentimento LGPD para mensagens.' : '') + '</p>' +
@@ -1010,11 +1057,16 @@
       if (!t.open) t.showModal();
       $('orcFechar').onclick = function () { t.close(); };
       // v0.9.0: mandar o orçamento da OS com vários equipamentos -> Aguardando aprovação (o link do cliente mostra Aprovar/Recusar). Vencido: oferece renovar antes.
-      $('orcWa').onclick = function (ev) {
+      // v0.9.2: o texto do servidor (whatsappTexto) não leva o link: o App busca o link real (linkClienteOS), põe o Pix e o fechamento do Atendimento.
+      // Sem link: não abre o WhatsApp (aviso + Tentar de novo / Enviar mesmo assim sem link). OS não salva: não manda.
+      $('orcWa').onclick = function () {
         var os = OSM.num && !OSM.sujo ? (D.os || []).filter(function (x) { return x.num === OSM.num; })[0] : null;
-        if (!os) return;
-        if (V.orcamentoVencido(os, D.hoje)) { ev.preventDefault(); prepararEnvioOrc(os).then(function () { aviso('Confira e toque de novo em “Enviar pelo WhatsApp”.'); }); return; }
-        prepararEnvioOrc(os);
+        if (!os) return aviso('Salve a OS para mandar o orçamento com o link de aprovação.');
+        var cc = V.clienteDaOS(D, os) || c, pb = blocoPix(o.totais && o.totais.total, os.num);
+        prepararEnvioOrc(os).then(function () {
+          abrirComLink({ os: os, cliente: cc, titulo: 'Orçamento da ' + os.num, tipo: 'orcamento', pix: pb ? pb.codigo : '',
+            montar: function (link) { return String(o.whatsappTexto || '').replace(/\s+$/, '') + (pb ? '\n\n' + pb.texto : '') + '\n\n' + ORC.fechamento(link); } });
+        });
       };
       $('orcCopiar').onclick = function () { (navigator.clipboard ? navigator.clipboard.writeText(o.whatsappTexto) : Promise.reject()).then(function () { aviso('Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto em “Ver texto do WhatsApp”.'); }); };
       $('orcPdf').onclick = function () {
@@ -1107,11 +1159,13 @@
       (p.link ? '<div><span class="muted">Link de acompanhamento:</span><br><a id="msgLink" href="' + e(p.link) + '" target="_blank" rel="noopener">' + e(p.link) + '</a></div><div class="grandes"><button type="button" class="btn sec" id="bCopiar">📋 Copiar link</button><a class="btn sec" target="_blank" rel="noopener" href="' + e(p.link) + '">🔗 Abrir</a></div>' : '') +
       '<div class="grandes">' + (p.waUrl ? '<a class="btn wa" id="msgWa" target="_blank" rel="noopener" href="' + e(p.waUrl) + '"' + attrReg(p.cliente, p.tipo, p.texto, p.os) + '>📲 Abrir no WhatsApp</a>' : '<span class="muted" id="msgSemWa">' + e(p.semWa || 'WhatsApp não pode ser aberto para este cliente.') + '</span>') +
       (p.texto ? '<button type="button" class="btn sec" id="bCopiarTxt">📋 Copiar</button>' : '') +
+      (p.pix ? '<button type="button" class="btn sec" id="bCopiarPix">📋 Copiar Pix</button>' : '') +
       (emailOk ? '<button type="button" class="btn sec" id="bEmailMsg">✉️ Enviar por e-mail</button>' : '') +
       '<button class="btn sec" value="fechar">Fechar</button></div><p class="muted">O app só abre o WhatsApp/e-mail com o texto pronto: quem envia é você. Nunca ofereça brinde ou desconto em troca de avaliação.</p></form>';
     m.onclose = null; m.showModal();
     if ($('msgWa')) $('msgWa').addEventListener('click', function () { registrarAberta(this); setTimeout(function () { m.close(''); }, 0); });
     if ($('bCopiar')) $('bCopiar').onclick = function () { var t = p.link; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { aviso('Link copiado.'); }, function () { P.pedirTexto('Não deu para copiar sozinho. Toque e segure no link abaixo para copiar.', { titulo: 'Copiar link', valor: t, somenteLeitura: true, sim: 'Fechar', nao: false }); }); };
+    if ($('bCopiarPix')) $('bCopiarPix').onclick = function () { copiarTexto(p.pix, 'Pix copia e cola copiado.'); };
     if ($('bCopiarTxt')) $('bCopiarTxt').onclick = function () {
       var txt = p.texto || '';
       (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { aviso('Texto copiado.'); }, function () { aviso('Não deu para copiar: selecione o texto.'); });
@@ -1348,9 +1402,20 @@
   ACOES['os-msg'] = function (row) {
     var o = achar('os', row), c = V.clienteDaOS(D, o);
     escreverResp('textoStatusOS', [{ num: o.num, _row: o._row }]).then(function (r) {
+      // v0.9.2: o texto de status leva o link de acompanhamento/aprovação. Sem link real no texto: NÃO abre o WhatsApp.
+      var linkOk = /^https:\/\/\S+$/.test(String(r.link || '')) && String(r.texto || '').indexOf(r.link) >= 0;
+      // Pronto: entra o bloco Pix com o saldo (ou o valor, se nada foi pago).
+      var pronto = Dif.statusCanon(r.status || o.status) === 'Pronto', vp = pronto ? V.valorPixMsg('os-pronto', { os: o, saldo: V.saldoOS(D, o), recebido: V.recebidoOS(D, o.num) }) : 0;
+      var pb = pronto && vp > 0 ? blocoPix(vp, o.num) : null, texto = String(r.texto || '') + (pb ? '\n\n' + pb.texto : '');
+      var tit = '📲 Status da ' + o.num + ' · ' + (r.status || o.status);
+      if (!linkOk && !Dif.naoContatar(c)) {
+        avisoSemLink({ os: o, cliente: c, titulo: tit, tipo: 'status', pix: pb ? pb.codigo : '', montar: function () { return texto; } }, new Error(r.link ? 'o texto veio sem o link' : 'o servidor não devolveu o link'));
+        var bt = $('bTentarLink'); if (bt) bt.onclick = function () { $('modal').close(''); ACOES['os-msg'](row); };
+        return;
+      }
       // Regra do app vale por cima da resposta: "Não contatar" bloqueia; sem consentimento = serviço com aviso.
-      var b = V.botaoWaCliente(c, 'os', r.texto), pode = !!(r.podeAbrir && r.waUrl && b);
-      abrirMsg({ titulo: '📲 Status da ' + o.num + ' · ' + (r.status || o.status), texto: r.texto, aviso: r.aviso || (b && b.aviso ? Dif.regraContato(c, 'os').aviso : ''), waUrl: pode ? r.waUrl : '', link: r.link,
+      var b = V.botaoWaCliente(c, 'os', texto), pode = !!(r.podeAbrir && r.waUrl && b);
+      abrirMsg({ titulo: tit, texto: texto, pix: pb ? pb.codigo : '', aviso: r.aviso || (b && b.aviso ? Dif.regraContato(c, 'os').aviso : ''), waUrl: pode ? b.href : '', link: r.link,
         semWa: Dif.naoContatar(c) ? 'Cliente marcado como “Não contatar”.' : (r.aviso || 'WhatsApp inválido.'), cliente: c, os: o.num, tipo: 'status' });
     }, function () {});
   };
@@ -1433,7 +1498,7 @@
     var l = V.linkWaOp(D.modelos, o);
     // Reativação usa texto próprio; se puder WA, monta wa.me direto.
     var n = V.numeroWa(o.whatsapp);
-    var wa = (!V.bloqueadaOp(o) && n) ? ('https://wa.me/' + n + '?text=' + encodeURIComponent(txt)) : '';
+    var wa = (!V.bloqueadaOp(o) && n) ? V.urlWhats(n, txt) : '';
     var m = $('modal');
     m.innerHTML = '<form method="dialog" class="detalhe"><h2 style="margin:0">Reativação 1× · ' + e(o.empresa) + '</h2>' +
       '<p class="muted">Só uma vez. Se não responder, não mande de novo.</p>' +
@@ -1448,7 +1513,7 @@
     };
     if ($('bWaReat')) $('reativarTxt').oninput = function () {
       var n2 = V.numeroWa(o.whatsapp); if (!n2) return;
-      $('bWaReat').href = 'https://wa.me/' + n2 + '?text=' + encodeURIComponent($('reativarTxt').value);
+      $('bWaReat').href = V.urlWhats(n2, $('reativarTxt').value);
     };
   };
 
@@ -1544,6 +1609,7 @@
           (/fictício/i.test(k.obs || '') ? '<br><span class="muted">Exemplo fictício</span>' : ''),
           tag(k.status || 'Ativo', V.ativoContrato(k) ? 'ok' : 'cinza') + (s === 'vencido' ? tag('vencido', 'vencido') : ''),
           (V.podeReceberContrato(k) && api.pode('receberMensalidade') ? botao('💰 Receber', 'ct-receber', k.id, '') : '') +
+          ((s === 'vencido' || s === 'a vencer') && Number(k.valor) > 0 ? botao('💬 Cobrar (Pix)', 'ct-cobrar', k.id, '') : '') +
           (V.precisaDiaContrato(k) && api.pode('salvarContrato') ? botao('📅 Informar dia do vencimento', 'ct-dia', k.id, '') : '') +
           (V.ativoContrato(k) && api.pode('salvarVisita') ? botao('🚗 Agendar visita', 'ct-visita', k.id, '') : ''), ' data-contrato="' + e(k.id) + '" data-situacao="' + e(s) + '"');
       }, F.ctSit ? 'Nenhum contrato nessa situação.' : F.ct === 'ativos' ? 'Nenhum contrato ativo.' : 'Nenhum contrato com esse filtro.') + '</section>';
@@ -1730,20 +1796,74 @@
     var ct = V.contratoAtivoCliente(((CT && CT.contratos) || []), c.nome);
     return {
       cliente: c, os: o || null, visita: visita, D: D, googleReviewUrl: url, linkOS: '', // v0.9.0: link real vem do linkClienteOS em abrirPreviewMsg
+      pix: function (valor, num) { var b = blocoPix(valor, num); return b ? b.texto : ''; }, saldo: o ? V.saldoOS(D, o) : 0, recebido: o ? V.recebidoOS(D, o.num) : 0, // v0.9.2: bloco Pix (pixConfig)
       contrato: ct, precoVisita: precoVisitaCfg(), hoje: D.hoje, agendado: !!(visita || (o && o.agendadoPara))
     };
   }
   // v0.9.0: link de acompanhamento/aprovação da OS (mesma ação do botão 🔗). Guardado por OS enquanto o App está aberto.
-  var LINKS_OS = {};
+  var LINKS_OS = {}, LINK_TIMEOUT_MS = 15000;
+  /** v0.9.2 (crm-v3 API @127): resposta { ok, dados: { ok, num, url, criado, msg } } -> url em r.dados.url (aceita r.url por compatibilidade). */
+  function urlDoLink(r) { var d = (r && r.dados) || {}; return String(d.url || (d.dados && d.dados.url) || (r && r.url) || ''); }
   function obterLinkOS(o) {
     if (LINKS_OS[o.num]) return Promise.resolve(LINKS_OS[o.num]);
     if (!api.pode('linkClienteOS')) return Promise.reject(new Error('link da OS ainda não liberado no servidor'));
     if (!navigator.onLine || offline) return Promise.reject(new Error('sem internet'));
-    return api.escrever('linkClienteOS', [{ num: o.num, _row: o._row }]).then(function (r) {
-      var url = ((r && (r.dados || r)) || {}).url || '';
-      if (!/^https:\/\/\S+$/.test(url)) throw new Error('o servidor não devolveu um link válido');
-      LINKS_OS[o.num] = url; return url;
+    // Mesmo idOperacao nas repetições: o servidor devolve a MESMA url (seguro repetir). Timeout / "Servidor ocupado": até 2 tentativas extras.
+    var idOp = 'link-' + o.num + '-' + Date.now().toString(36), tentativa = 0;
+    aviso('Gerando link…');
+    function uma() {
+      tentativa++;
+      var limite = new Promise(function (_, falha) { setTimeout(function () { falha(Object.assign(new Error('o servidor demorou para responder'), { repetir: true })); }, LINK_TIMEOUT_MS); });
+      return Promise.race([api.escrever('linkClienteOS', [{ num: o.num, _row: o._row }], null, idOp), limite]).then(function (r) {
+        if (r && r.enfileirado) throw new Error('sem internet: nada foi enviado');
+        var url = urlDoLink(r);
+        if (!/^https:\/\/\S+$/.test(url)) throw new Error('o servidor não devolveu um link válido');
+        LINKS_OS[o.num] = url; return url;
+      }).catch(function (er) {
+        var repetir = er && (er.repetir || /ocupad|timeout|tempo|busy|failed to fetch|networkerror|load failed/i.test(er.message || ''));
+        if (repetir && tentativa < 3 && navigator.onLine !== false) { aviso('Gerando link… (tentando de novo)'); return new Promise(function (ok) { setTimeout(ok, 700 * tentativa); }).then(uma); }
+        throw er;
+      });
+    }
+    return uma();
+  }
+  /**
+   * v0.9.2: mensagem que PRECISA do link de aprovação/acompanhamento. Busca o link real (linkClienteOS) e só então abre o WhatsApp.
+   * Sem link (sem internet, servidor vazio ou erro): NÃO abre o WhatsApp; avisa com "Tentar de novo" e, separado e bem claro,
+   * "Enviar mesmo assim sem link" (texto sem "[link…]"). p = { os, cliente, titulo, tipo, montar(link) -> texto, popup?, pix?, antes?() }
+   */
+  function abrirComLink(p) {
+    var c = p.cliente || {};
+    var pre = p.antes ? Promise.resolve().then(p.antes) : Promise.resolve();
+    if (p.popup && !p.popup.closed) { try { p.popup.document.body.textContent = 'Gerando link de aprovação… O WhatsApp abre em seguida.'; } catch (x) { /* ok */ } }
+    return pre.then(function () { return obterLinkOS(p.os); }).then(function (url) {
+      var texto = p.montar(url), b = V.botaoWaCliente(c, 'os', texto);
+      if (p.popup && !p.popup.closed && b) { p.popup.location.href = b.href; registrarAberta({ dataset: { regNome: c.nome, regOs: p.os.num, regTipo: p.tipo || 'orcamento', regTexto: texto } }); return { link: url, aberto: true }; }
+      if (p.popup) p.popup.close();
+      abrirMsg({ titulo: p.titulo, texto: texto, link: url, waUrl: b ? b.href : '', pix: p.pix, aviso: b && b.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '',
+        semWa: Dif.naoContatar(c) ? 'Cliente marcado como “Não contatar”.' : 'WhatsApp inválido: copie o texto.', cliente: c, os: p.os.num, osObj: p.os, tipo: p.tipo || 'orcamento', emailOk: p.emailOk, assuntoEmail: p.assuntoEmail });
+      return { link: url };
+    }, function (er) {
+      if (p.popup) p.popup.close();
+      avisoSemLink(p, er); return { link: '' };
     });
+  }
+  function avisoSemLink(p, er) {
+    var m = $('modal'), c = p.cliente || {}, texto = V.semMarcadorLink(p.montar('')), b = V.botaoWaCliente(c, 'os', texto);
+    if (m.open) m.close('');
+    m.innerHTML = '<form method="dialog" class="detalhe" id="fSemLink"><h2 style="margin:0">' + e(p.titulo || 'Mensagem') + '</h2>' +
+      '<p class="alerta" id="semLinkAviso" role="alert">Não consegui gerar o link de aprovação. Tente de novo com internet.</p>' +
+      '<p class="muted" id="semLinkMotivo">Motivo: ' + e((er && er.message) || 'sem resposta do servidor') + '. O WhatsApp não foi aberto.' + (p.fila ? ' O orçamento ficou salvo na fila do aparelho e vai para o CRM quando a internet voltar.' : '') + '</p>' +
+      '<div class="grandes"><button type="button" class="btn" id="bTentarLink">🔄 Tentar de novo</button>' +
+      (b ? '<button type="button" class="btn sec" id="bSemLink">Enviar mesmo assim sem link</button>' : '') +
+      '<button class="btn sec" value="fechar">Fechar</button></div>' +
+      (b ? '<p class="muted">“Enviar mesmo assim sem link” abre o texto sem o link de aprovação: o cliente vai responder por aqui.</p>' : '') + '</form>';
+    m.onclose = null; m.returnValue = ''; m.showModal();
+    $('bTentarLink').onclick = function () { m.close(''); abrirComLink(Object.assign({}, p, { popup: null })); };
+    if ($('bSemLink')) $('bSemLink').onclick = function () {
+      m.close('');
+      abrirMsg({ titulo: p.titulo + ' (sem link)', texto: texto, waUrl: b.href, pix: p.pix, aviso: 'Atenção: mensagem SEM o link de aprovação.' + (b.aviso ? ' Sem consentimento LGPD: só mensagem sobre a OS.' : ''), cliente: c, os: p.os.num, osObj: p.os, tipo: p.tipo || 'orcamento' });
+    };
   }
   function abrirPreviewMsg(id, ctx, dataIso, hora) {
     var c = ctx.cliente;
@@ -1753,10 +1873,23 @@
       return prepararEnvioOrc(ctx.os).then(function () { abrirPreviewMsg(id, ctx, dataIso, hora); });
     }
     if (V.precisaLinkOS(id, ctx)) {
-      return obterLinkOS(ctx.os).then(function (url) { ctx.linkOS = url; ctx.avisoLink = ''; }, function (er) { ctx.linkOS = ''; ctx.avisoLink = 'Sem o link da OS (' + ((er && er.message) || 'erro') + '). O texto ficou com “[link…]”: troque pelo link antes de enviar (botão 🔗 Link de acompanhamento).'; })
-        .then(function () { montarPreviewMsg(id, ctx, dataIso, hora); });
+      // v0.9.2: sem o link real, o WhatsApp NÃO abre com "[link…]": aviso + Tentar de novo / Enviar mesmo assim sem link.
+      return obterLinkOS(ctx.os).then(function (url) { ctx.linkOS = url; ctx.avisoLink = ''; montarPreviewMsg(id, ctx, dataIso, hora); }, function (er) {
+        if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+        var cat = (V.catalogoMensagensProntas(ctx).todas || []).filter(function (x) { return x.id === id; })[0];
+        avisoSemLink({ os: ctx.os, cliente: c, titulo: '💬 ' + ((cat && cat.rotulo) || 'Mensagem') + ' · ' + ctx.os.num, tipo: 'os', pix: pixDaMsg(id, ctx),
+          montar: function (link) { var cx = Object.assign({}, ctx, { linkOS: link }); return V.montarMensagemPronta(id, cx, dataIso, hora); } }, er);
+        // "Tentar de novo" volta para este mesmo painel com o link.
+        var bt = $('bTentarLink'); if (bt) bt.onclick = function () { $('modal').close(''); abrirPreviewMsg(id, ctx, dataIso, hora); };
+      });
     }
     montarPreviewMsg(id, ctx, dataIso, hora);
+  }
+  /** Código Pix da mensagem (para o botão 📋 Copiar Pix), mesmo valor do texto. */
+  function pixDaMsg(id, ctx) {
+    var o = ctx && ctx.os; if (!V.MSG_COM_PIX[id] || !o) return '';
+    var b = blocoPix(V.valorPixMsg(id, ctx), o.num);
+    return b ? b.codigo : '';
   }
   function montarPreviewMsg(id, ctx, dataIso, hora) {
     var c = ctx.cliente;
@@ -1770,7 +1903,7 @@
     var rot = (cat && cat.rotulo) || 'Mensagem';
     var em = (V.emailMensagemPronta && V.emailMensagemPronta(id, ctx, dataIso, hora)) || null;
     abrirMsg({
-      titulo: '💬 ' + rot + (ctx.os ? ' · ' + ctx.os.num : ''),
+      titulo: '💬 ' + rot + (ctx.os ? ' · ' + ctx.os.num : ''), pix: pixDaMsg(id, ctx), link: ctx.linkOS || '',
       texto: txt, waUrl: b ? b.href : '', aviso: [ctx.avisoLink && V.temMarcadorLink(txt) ? ctx.avisoLink : '', b && b.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : ''].filter(Boolean).join(' '),
       semWa: Dif.naoContatar(c) ? V.AVISO_NAO_CONTATAR : (b ? '' : (tipo === 'marketing' && c.consent !== 'Sim' ? 'Sem consentimento LGPD.' : 'WhatsApp inválido.')),
       cliente: c, os: ctx.os ? ctx.os.num : '', osObj: ctx.os, tipo: tipo, emailOk: true,
@@ -2022,6 +2155,59 @@
     var url = Dif.padroes(D).googleReviewUrl; if (!url || Dif.statusCanon(o.status) !== 'Entregue') return '';
     var c = V.clienteDaOS(D, o); if (Dif.naoContatar(c)) return '<span class="muted" id="avaliarBloq">⛔ Pedir avaliação: cliente marcado como “Não contatar”.</span>';
     return botao('⭐ Pedir avaliação no Google', 'os-avaliar', o._row, 'sec').replace(' peq', '');
+  }
+  // ---- v0.9.2: cobrança com Pix (OS com saldo e mensalidade do plano). Só abre o WhatsApp no toque; nada é cobrado sozinho. ----
+  ACOES['os-cobrar'] = function (row) {
+    var o = achar('os', row), c = V.clienteDaOS(D, o) || { nome: o.cliente }, sd = V.saldoOS(D, o);
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    if (!(sd > 0)) return aviso('Esta OS não tem saldo a receber.');
+    var pb = blocoPix(sd, o.num), nome = V.primeiroNome(c, o);
+    var texto = 'Oi' + (nome ? ', ' + nome : '') + '! Passando para lembrar do valor em aberto da OS ' + o.num + (o.equipamento ? ' (' + o.equipamento + ')' : '') + ': *' + V.brl(sd) + '*.' +
+      (pb ? '\n\n' + pb.texto : '') + '\n\nSe já pagou, me avisa por aqui que eu confiro. Obrigado!';
+    var b = V.botaoWaCliente(c, 'os', texto);
+    abrirMsg({ titulo: '💬 Cobrar · ' + o.num, texto: texto, pix: pb ? pb.codigo : '', waUrl: b ? b.href : '', aviso: b && b.aviso ? 'Sem consentimento LGPD: só mensagem sobre a OS.' : '', semWa: b ? '' : 'WhatsApp inválido: copie o texto.', cliente: c, os: o.num, osObj: o, tipo: 'cobranca' });
+  };
+  ACOES['ct-cobrar'] = function (id) {
+    var k = ((CT && CT.contratos) || []).filter(function (x) { return x.id === id; })[0]; if (!k) return aviso('Contrato não encontrado.');
+    var c = (D.clientes || []).filter(function (x) { return x.nome === k.cliente; })[0] || { nome: k.cliente };
+    if (Dif.naoContatar(c)) return aviso(V.AVISO_NAO_CONTATAR);
+    var comp = V.competenciaBR(k.competencia || D.hoje.slice(0, 7)), pb = blocoPix(Number(k.valor), k.id + String(k.competencia || D.hoje.slice(0, 7)).replace(/\D/g, '')), nome = V.primeiroNome(c);
+    var texto = 'Oi' + (nome ? ', ' + nome : '') + '! Lembrete da mensalidade do plano ' + (k.plano || 'ProFix') + (comp ? ' (' + comp + ')' : '') + ': *' + V.brl(k.valor) + '*' +
+      (k.vencimento ? ', com vencimento em ' + V.dataBR(k.vencimento) : '') + '.' + (pb ? '\n\n' + pb.texto : '') + '\n\nSe já pagou, me avisa por aqui que eu confiro. Obrigado!';
+    var b = V.botaoWaCliente(c, 'os', texto);
+    abrirMsg({ titulo: '💬 Mensalidade · ' + k.cliente, texto: texto, pix: pb ? pb.codigo : '', waUrl: b ? b.href : '', aviso: b && b.aviso ? 'Sem consentimento LGPD: só mensagem sobre o atendimento.' : '', semWa: b ? '' : 'WhatsApp inválido: copie o texto.', cliente: c, tipo: 'cobranca' });
+  };
+  /**
+   * v0.9.2: peças encomendadas = cotações do Módulo 9 ligadas à OS (mesmo nome da peça do orçamento). O status da COTAÇÃO manda:
+   * Cotado/Escolhido = ainda não comprou (compre só depois do Pix confirmado) · Comprado/Recebido = já comprou (custo já foi para o caixa uma vez).
+   */
+  function pecasAComprarOS(o) {
+    var nomes = ORC.pecasEncomendadas(o && o.itensOrc); if (!nomes.length) return [];
+    var cots = []; try { cots = m9Dados().cotacoes || []; } catch (x) { cots = []; }
+    var rec = V.recebidoOS(D, o.num), aprovado = /^aprovado$/i.test(o.aprovacao || '');
+    var chave = function (t) { return V.norm(t).replace(/\s+/g, ' ').trim(); };
+    return nomes.map(function (n) {
+      var lig = cots.filter(function (c) { return c.os === o.num && c.status !== 'Descartado' && chave(String(c.peca || c.componente || '') + (c.marca || c.marcaModelo ? ' ' + (c.marca || c.marcaModelo) : '')) === chave(n); })
+        .sort(function (a, b) { var ord = { Recebido: 0, Comprado: 1, Escolhido: 2, Cotado: 3 }; return (ord[a.status] || 9) - (ord[b.status] || 9); })[0] || null;
+      var comprada = !!lig && (lig.status === 'Comprado' || lig.status === 'Recebido');
+      return { nome: n, cot: lig, comprada: comprada, podeComprar: !comprada && aprovado && rec > 0, aprovado: aprovado, recebido: rec };
+    });
+  }
+  function linhaPecasComprar(o) {
+    var l = pecasAComprarOS(o); if (!l.length) return '';
+    return '<div id="osAComprar"><span class="muted">🛒 Peça encomendada:</span> ' + l.map(function (x) {
+      var id = x.cot ? ' (' + e(x.cot.id) + ' · ' + e(x.cot.status) + ')' : ' (sem cotação ligada)';
+      return '<b>' + e(x.nome) + '</b>' + id + ' – ' + (x.comprada ? '✅ já comprada' : x.podeComprar ? '<b>Pix confirmado: pode comprar</b> (🧾 Cotações › Comprado)' : 'compre só depois do Pix confirmado');
+    }).join('; ') + '</div>';
+  }
+  /** Hoje: OS aprovadas e pagas com peça encomendada ainda não comprada. */
+  function secaoPecasComprar() {
+    var l = (D.os || []).filter(function (o) { return /^aprovado$/i.test(o.aprovacao || '') && String(o.itensOrc || '').indexOf(ORC.SUF_ENC) >= 0; })
+      .map(function (o) { return { o: o, p: pecasAComprarOS(o).filter(function (x) { return x.podeComprar; }) }; }).filter(function (x) { return x.p.length; });
+    if (!l.length) return '';
+    return '<section id="pecasComprar"><h2>🛒 Peças para comprar (Pix confirmado)</h2>' + lista(l, function (x) {
+      return card(e(x.o.num) + ' · ' + e(x.o.cliente), x.p.map(function (y) { return e(y.nome) + (y.cot ? ' · ' + e(y.cot.id) : ''); }).join('<br>'), tag('comprar', 'media'), botao('🧾 Cotações', 'os-cot', x.o._row) + botao('Abrir OS', 'os-abrir', x.o._row));
+    }, '') + '</section>';
   }
   ACOES['os-avaliar'] = function (row) {
     var o = achar('os', row), c = V.clienteDaOS(D, o), url = Dif.padroes(D).googleReviewUrl || 'https://g.page/r/CZQuYc9gn5lJECE/review';
@@ -2454,15 +2640,28 @@
         function (er) { CONTATO_FUNDO.pendente--; faixa(); aviso('O contato não foi registrado no CRM: ' + er.message); });
   }
   /** Ao voltar do WhatsApp: atualiza com o CRM sem tela de carregamento e sem perder a rolagem. */
+  // v0.9.2: ao voltar do WhatsApp NÃO recarrega nem redesenha a lista (o card da empresa já foi atualizado na hora).
+  // Só um envio leve da fila em segundo plano (contato que ficou no aparelho por falta de internet/erro de rede vai agora).
   function sincronizarQuieto() {
-    var m = $('modal'); if (m && m.open) { CONTATO_FUNDO.sync = true; return; }
-    return api.carregar().then(function (r) { if (r.dados) { D = r.dados; aplicarPrecosDoCrm(D); } offline = r.offline; faixa();
-      var m2 = $('modal'); if (m2 && m2.open) return; var y = window.scrollY; render(); window.scrollTo(0, y); }, function () {});
+    if (!api.fila().length) return Promise.resolve();
+    return api.sincronizar().then(function (s) { faixa(); if (s.erros && s.erros.length) aviso('Algumas alterações foram recusadas: ' + s.erros.join('; ')); }, function () { faixa(); });
   }
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState !== 'visible' || !CONTATO_FUNDO.sync || CONTATO_FUNDO.pendente) return;
+    if (document.visibilityState !== 'visible' || CONTATO_FUNDO.pendente) return;
     CONTATO_FUNDO.sync = false; setTimeout(sincronizarQuieto, 400);
   });
+  // v0.9.2: celular – links whatsapp:// abrem o app direto; se em ~1,5 s a página continuar na frente (app não abriu), vai pelo api.whatsapp.com.
+  document.addEventListener('click', function (ev) {
+    var a = ev.target && ev.target.closest && ev.target.closest('a[href^="whatsapp://"]'); if (!a || ev.defaultPrevented) return;
+    ev.preventDefault(); abrirWhatsCelular(a.getAttribute('href'));
+  });
+  function abrirWhatsCelular(href) {
+    var saiu = false, marca = function () { saiu = true; };
+    document.addEventListener('visibilitychange', function f() { if (document.visibilityState === 'hidden') { marca(); document.removeEventListener('visibilitychange', f); } });
+    window.addEventListener('pagehide', marca, { once: true }); window.addEventListener('blur', marca, { once: true });
+    try { window.location.href = href; } catch (x) { saiu = false; }
+    setTimeout(function () { if (saiu || document.visibilityState === 'hidden') return; var w = window.open(V.urlWhatsWeb(href), '_blank'); if (!w) window.location.href = V.urlWhatsWeb(href); }, 1500);
+  }
 
   function ligarAcoes(raiz, dentroModal) {
     raiz.querySelectorAll('[data-a]').forEach(function (b) {
@@ -2501,6 +2700,7 @@
     c.querySelectorAll('[data-wa-mod]').forEach(function (sel) { sel.onchange = function () {
       var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
       if (a && l) a.href = l; }; }); // só troca o texto; consentimento continua valendo (link some se bloqueada)
+    if ($('opMais')) $('opMais').onclick = function () { F.op.qtd = (F.op.qtd || OP_PASSO) + OP_PASSO; var y = window.scrollY; render(); window.scrollTo(0, y); };
     if ($('fWa')) $('fWa').onclick = function () { F.op.wa = !F.op.wa; try { localStorage.setItem(WAF, F.op.wa ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fWa')) $('fWa').focus(); };
     // v0.5.6: 1º contato (WhatsApp, ligação, e-mail) -> Contatada automaticamente via registrarContatoOp. Só se ainda Nova.
     // v0.8.8: o link abre NA HORA (sem preventDefault, sem esperar o CRM, sem recarregar a tela). O registro vai em segundo plano.
@@ -2513,6 +2713,12 @@
     c.querySelectorAll('[data-chip-sit]').forEach(function (b) { b.onclick = function () { F.ctSit = b.dataset.chipSit; render(); var n = document.querySelector('[data-chip-sit="' + F.ctSit + '"]'); if (n) n.focus(); }; });
     if ($('fCompCT')) $('fCompCT').onchange = function () { var v = this.value || ''; CTX.comp = /^\d{4}-\d{2}$/.test(v) && v !== D.hoje.slice(0, 7) ? v : ''; CTX.retorno = ''; recarregarCT(); };
     c.querySelectorAll('[data-contato]').forEach(function (b) { b.onclick = function () { F.op.contato = b.dataset.contato; render(); var n = document.querySelector('[data-contato="' + F.op.contato + '"]'); if (n) n.focus(); }; });
+    if ($('ajPixSalvar')) $('ajPixSalvar').onclick = function () {
+      var c = { chave: $('ajPixChave').value.trim(), nome: $('ajPixNome').value.trim(), cidade: $('ajPixCidade').value.trim() };
+      try { PIX.montar(Object.assign({ valor: 1, txid: 'TESTE' }, PIX.normalizarConfig(c))); } catch (er) { $('ajPixErro').textContent = er.message; return; }
+      ajustes.pixChave = c.chave; ajustes.pixNome = c.nome; ajustes.pixCidade = c.cidade; salvarAjustes(); aviso('Pix salvo neste aparelho.'); render();
+    };
+    if ($('ajPixPadrao')) $('ajPixPadrao').onclick = function () { delete ajustes.pixChave; delete ajustes.pixNome; delete ajustes.pixCidade; salvarAjustes(); aviso('Pix de volta ao padrão da ProFix.'); render(); };
     if ($('ajSenha')) $('ajSenha').onchange = function () { ajustes.mostrarSenha = $('ajSenha').checked; salvarAjustes(); aviso(ajustes.mostrarSenha ? 'Senha do aparelho visível nas OS.' : 'Senha do aparelho oculta.'); };
     if ($('bSync')) $('bSync').onclick = function () { iniciar().then(function () { aviso('Dados atualizados.'); }); };
     if ($('bSair')) $('bSair').onclick = function () { perguntar('Sair deste aparelho? Vai precisar digitar a senha (ou a chave) de novo.', { titulo: 'Sair', sim: 'Sair', perigo: true }).then(function (ok) { if (ok) { api.esquecerToken(); telaChave(); } }); };

@@ -195,3 +195,7 @@ table.dre td:last-child{white-space:nowrap}
 .orc-par{display:grid;grid-template-columns:1fr 58px;gap:4px}.orc-lt{grid-column:1/-1;text-align:right;white-space:nowrap}
 .orc-desc-total{display:grid;gap:4px}.orc-desc-total .orc-par{max-width:240px}.orc-rap .osm-bar{bottom:0}.orc-rap .osm-cat span{overflow-wrap:anywhere}
 @media (min-width:700px){.orc-l2{grid-template-columns:70px 1fr 1.2fr 110px}.orc-lt{grid-column:auto;align-self:center}}
+/* v0.9.2: peça encomendada e bloco Pix no orçamento rápido */
+.orc-comprar { font-size: .9em; margin-top: 4px; }
+#orcPix { margin: 8px 0; word-break: break-word; }
+#osAComprar { margin-top: 4px; }

@@ -11,16 +11,24 @@
       statusOS: ['Recebido', 'Em diagnóstico', 'Aguardando aprovação', 'Aguardando peça', 'Em reparo', 'Pronto', 'Entregue', 'Cancelado'],
       statusOp: ['Nova', 'Contatada', 'Virou lead', 'Descartada', 'Sem resposta', 'Não contatar'],
       statusRevenda: ['Em preparação', 'À venda', 'Reservado', 'Vendido', 'Devolvido', 'Descartado'],
-      motivosPerda: ['Preço', 'Prazo', 'Desistiu', 'Concorrente', 'Outro'],
+      motivosPerda: ['Preço', 'Resolveu com outra pessoa', 'Desistiu do conserto', 'Comprou um aparelho novo', 'Não respondeu', 'Fora da região', 'Serviço que a ProFix não faz', 'Outro'],
       segmentos: ['Contabilidade', 'Advocacia', 'Clínica', 'Loja', 'Imobiliária', 'Escola', 'Outro'],
       canais: ['WhatsApp', 'Ligação', 'Instagram', 'Presencial', 'E-mail', 'Outro'],
       origens: ['Google', 'Instagram', 'Indicação', 'Panfleto', 'Prospecção', 'Outro'],
       formasPag: ['Dinheiro', 'Pix', 'Débito', 'Crédito à vista', 'Crédito parcelado'],
       formasPagFin: ['Dinheiro', 'Pix', 'Débito', 'Crédito à vista', 'Crédito parcelado'],
       tiposFin: ['Entrada', 'Saída'],
+      // v0.8.6/0.8.7: Módulo 9 do CRM (FICTÍCIO, API @113/@115). Só id/nome/ativo de fornecedor (sem contato). Cotações e Estoque começam vazios, como na planilha real.
+      m9: { fornecedores: [{ id: 'FN-0001', nome: 'Distribuidora Exemplo Fictícia', ativo: true }, { id: 'FN-0002', nome: 'Loja Exemplo Fictícia', ativo: true }, { id: 'FN-0003', nome: 'Fornecedor Antigo Fictício', ativo: false }], cotacoes: [] },
       categoriasFin: ['Serviço', 'Venda de peça', 'Revenda de usado', 'Compra de peça', 'Deslocamento', 'Ferramentas', 'DAS-MEI', 'Marketing', 'Outros'],
       config: { linkAgenda: 'https://exemplo.invalid/agenda', whatsappProfix: '(15) 90000-0000', linkAvaliacao: '', // v0.7.1: padrões do servidor (Propriedades do script; valores fictícios = padrões do contrato)
-        garantiaDiasProfix: 30, validadePadraoDias: 7, descontoIndicacaoPct: 10, googleReviewUrl: 'https://g.page/r/EXEMPLO-FICTICIO/review' },
+        garantiaDiasProfix: 30, validadePadraoDias: 7, descontoIndicacaoPct: 10, googleReviewUrl: 'https://g.page/r/CZQuYc9gn5lJECE/review',
+        // v0.8.4: mesmo contrato do crm-v3 (getDados.config.pixPct + planosPublicos.anualPct)
+        pixPct: 5, anualPct: 10,
+        // v0.9.2: espelha crm-v3 API @127 (getDados.config.pix / planosPublicos.pix). Dados da ProFix (públicos: CNPJ do MEI).
+        pix: { chave: '64628598000140', tipo: 'CNPJ', chaveTexto: 'CNPJ 64.628.598/0001-40', recebedor: 'PROFIX COMPUTADORES', cidade: 'SOROCABA', pct: 5 } },
+      // v0.8.5: mesmo formato de getDados().fin do crm-v3 (configFinanceiro_). Taxas FICTÍCIAS de demonstração.
+      fin: { teto: 81000, tetoDaPlanilha: false, alerta: 0.8, taxas: [{ forma: 'Dinheiro', taxa: '' }, { forma: 'Pix', taxa: 0 }, { forma: 'Débito', taxa: 0.99 }, { forma: 'Crédito à vista', taxa: 3.15 }, { forma: 'Crédito parcelado', taxa: '' }], taxasFaltando: ['Crédito parcelado'] },
       clientes: [
         { _row: 2, id: 'C0001', nome: 'Ana Exemplo Silva', whatsapp: '(15) 90000-0001', consent: 'Sim', dataConsent: d(-40), aniversario: hoje.slice(8, 10) + '/' + hoje.slice(5, 7), codIndic: 'ANA-EX10', origem: 'Instagram', etapa: 'Entregue', primeiro: d(-40), ultimo: d(-5), proximo: d(-1), acao: 'Perguntar se o notebook está ok', bairro: 'Centro', email: 'ana.exemplo@example.com', endereco: 'Rua Exemplo, 100 - Centro, Sorocaba - SP', indicadoPor: '', motivoPerda: '', valorEst: '' },
         { _row: 3, id: 'C0002', nome: 'Bruno Exemplo Lima', whatsapp: '(15) 90000-0002', consent: 'Não', origem: 'Google', etapa: 'Em serviço', primeiro: d(-6), ultimo: d(-2), proximo: hoje, acao: 'Ligar sobre a peça', bairro: 'Campolim', email: 'bruno.exemplo@example.com', endereco: 'Av. Fictícia, 200 - Campolim, Sorocaba - SP', indicadoPor: '', motivoPerda: '', valorEst: '' },
@@ -32,7 +40,7 @@
         { _row: 2, data: d(-4), cliente: 'Carla Exemplo Souza', canal: 'WhatsApp', resumo: 'Enviei o orçamento da fonte', proximoPasso: 'Cobrar resposta', dataProx: d(3), por: 'Pedro' }
       ],
       os: [
-        { _row: 2, num: 'OS-0012', entrada: d(-5), cliente: 'Bruno Exemplo Lima', equipamento: 'Notebook Dell (fictício)', defeito: 'Lento e esquentando', servico: 'Formatação sem backup', status: 'Em reparo', valor: 66.9, custo: 0, previsao: d(1), statusEm: d(-2), senha: '1234', acessorios: 'Carregador', diagnostico: '', orcamento: '', aprovacao: '' },
+        { _row: 2, num: 'OS-0012', entrada: d(-5), cliente: 'Bruno Exemplo Lima', equipamento: 'Notebook Dell (fictício)', defeito: 'Lento e esquentando', servico: 'Formatação sem backup', status: 'Em reparo', valor: 66.9, custo: 0, previsao: d(1), statusEm: d(-2), senha: '1234', acessorios: 'Carregador', diagnostico: '', orcamento: '', aprovacao: '', agendadoPara: '' },
         { _row: 3, num: 'OS-0013', entrada: d(-4), cliente: 'Carla Exemplo Souza', equipamento: 'Desktop gamer (fictício)', defeito: 'Não dá vídeo', status: 'Aguardando aprovação', valor: '', orcamento: 380, diagnostico: 'Fonte com defeito', itensOrc: 'Mão de obra + fonte 600W', validade: d(6), aprovacao: 'Pendente', statusEm: d(-3) },
         { _row: 4, num: 'OS-0015', entrada: d(-9), cliente: 'Ana Exemplo Silva', equipamento: 'PC montado', servico: 'Montagem de PC (peças do cliente)', status: 'Pronto', valor: 350.9, statusEm: d(-8) },
         { _row: 5, num: 'OS-0010', entrada: d(-12), cliente: 'Ana Exemplo Silva', equipamento: 'Notebook Acer', servico: 'Formatação sem backup', status: 'Entregue', valor: 66.9, entrega: d(-4), forma: 'Pix' },
@@ -51,8 +59,13 @@
       ],
       maquinas: [{ id: 'MAQ-0001', cliente: 'Ana Exemplo Silva', tipo: 'Notebook', modelo: 'Acer Aspire (fictício)', serie: 'SN-EXEMPLO-001' }, { id: 'MAQ-0002', cliente: 'Ana Exemplo Silva', tipo: 'Desktop', modelo: 'PC montado (fictício)', serie: '' }],
       timelineCli: [{ quando: d(-4) + ' 17:00', cliente: 'Ana Exemplo Silva', os: 'OS-0010', evento: 'Avaliação pedida', detalhe: 'Link de avaliação aberto no WhatsApp' }],
-      contratos: [{ id: 'CT-0001', cliente: 'Carla Exemplo Souza', plano: 'Essencial', valor: 143.8, visitas: 0, status: 'Ativo', inicio: d(-30), obs: 'Exemplo fictício. Visita preventiva: a cada 2 meses. Até 3 computadores. Limpeza a cada 6 meses.' }],
-      visitas: [{ id: 'VT-0001', contrato: 'CT-0001', cliente: 'Carla Exemplo Souza', data: hoje, prioridade: 'Alta', status: 'Agendada', inicio: '', fim: '', km: '', horas: '', os: '', obs: 'Rede do escritório (fictício)' }],
+      // v0.8.9: campos de cobrança (dia do vencimento e forma) — FICTÍCIOS. A situação do mês (pago/a vencer/vencido/fora) é calculada pelo servidor demo,
+      // no mesmo critério do crm-v3: vencido = dia já passou no mês; a vencer = dia 31 (último dia do mês); sem dia = fora (contrato antigo); Proposta = fora.
+      contratos: [{ id: 'CT-0001', cliente: 'Carla Exemplo Souza', plano: 'Essencial', valor: 143.8, visitas: 0, status: 'Ativo', inicio: d(-30), dia: Math.max(1, Number(hoje.slice(8, 10)) - 1), forma: 'Pix', obs: 'Exemplo fictício. Visita preventiva: a cada 2 meses. Até 3 computadores. Limpeza a cada 6 meses.' },
+        { id: 'CT-0002', cliente: 'Escritório Exemplo Gama (fictício)', plano: 'Empresa', valor: 719, visitas: 2, status: 'Ativo', inicio: d(-60), dia: 31, forma: 'Pix', obs: 'Exemplo fictício.' },
+        { id: 'CT-0003', cliente: 'Clínica Exemplo Delta (fictício)', plano: 'Essencial', valor: 359.5, visitas: 1, status: 'Ativo', inicio: d(-90), dia: '', forma: '', obs: 'Exemplo fictício: contrato antigo, sem dia do vencimento.' },
+        { id: 'CT-0004', cliente: 'Loja Exemplo Ômega (fictício)', plano: 'Essencial', valor: 359.5, visitas: 1, status: 'Proposta', inicio: d(5), dia: '', forma: '', obs: 'Exemplo fictício: proposta enviada.' }],
+      visitas: [{ id: 'VT-0001', contrato: 'CT-0001', cliente: 'Carla Exemplo Souza', data: hoje, prioridade: 'Alta', status: 'Agendada', inicio: '', fim: '', km: '', horas: '', os: '', hora: '19:00', obs: 'Horário: 19:00\nRede do escritório (fictício)' }],
       cotaEmail: 95, // e-mails que ainda podem sair hoje (fictício)
       leadsLink: [
         { _row: 2, dataHora: hoje + ' 09:12', nome: 'Exemplo Lead Link Ana', telefone: '(15) 90000-1101', cidade: 'Sorocaba', servico: 'Notebook não liga', consentimento: true, dataConsentimento: hoje + ' 09:12', origem: 'pagina-cadastro', status: 'Novo', obs: '' },
@@ -79,7 +92,7 @@
         { _row: 15, cidade: 'Itu', empresa: 'Academia Exemplo Xi', segmento: 'Academia', bairro: 'Centro', telefone: '', whatsapp: '', fonte: 'Exemplo', coleta: d(-20), status: 'Descartada', prioridade: '', canal: '', proximoPasso: '', lembrete: '', consentOp: '', ultimoContato: '', historico: '', motivoPerda: 'Exemplo', valorEst: '', obs: '' }
       ],
       modelos: [
-        { _row: 2, modelo: 'Empresa – Primeiro contato', texto: 'Oi, {contato}! Aqui é o Pedro, da ProFix Computadores, de Sorocaba. Cuido de computadores de empresas como a {empresa}. Posso te mandar como funciona? (exemplo)', quando: 'Oportunidade Nova' },
+        { _row: 2, modelo: 'Empresa – Primeiro contato', texto: "Olá! Tudo bem?\n\nMe chamo Pedro, sou responsável pela ProFix Computadores. Atendemos empresas de Sorocaba com suporte técnico e manutenção preventiva, para que os computadores da {empresa} funcionem bem e sem paradas por lentidão ou falhas.\n\nVocê pode conhecer nossos serviços e planos para empresas no nosso site:\nhttps://profixcomputadores.github.io/empresas.html\n\nSe fizer sentido para vocês, podemos marcar uma conversa rápida de 10 minutos, por ligação ou chamada, para eu entender como está a estrutura de TI da {empresa} e mostrar como podemos ajudar. Qual dia e horário fica melhor para você?\n\nSe preferir não receber mensagens, é só me avisar.", quando: 'Oportunidade Nova' },
         { _row: 3, modelo: 'Empresa – Lembrete único (3 dias)', texto: 'Oi, {contato}! Só pra saber se viu minha mensagem sobre a {empresa}. Se não for o momento, tudo bem! (exemplo)', quando: 'Contatada, 3 dias depois' },
         { _row: 4, modelo: 'Empresa – Respondeu com interesse', texto: 'Que bom, {contato}! Me conta o que está acontecendo com os computadores da {empresa}. (exemplo)', quando: 'Virou lead' },
         { _row: 5, modelo: 'Empresa – Agora não', texto: 'Tranquilo, {contato}, obrigado pelo retorno! (exemplo)', quando: 'Descartada' },
@@ -114,7 +127,21 @@
     var num = function (v) { return v === '' || v == null ? '' : Number(String(v).replace(',', '.')); };
     var h = function () { return D.hoje; };
     var S = {
-      getDados: function () { var c = JSON.parse(JSON.stringify(D)); if (!opc.enviarSenha) c.os.forEach(function (o) { delete o.senha; }); return c; },
+      getDados: function () { var c = JSON.parse(JSON.stringify(D)); delete c.m9; delete c.m9cot; if (!opc.enviarSenha) c.os.forEach(function (o) { delete o.senha; }); return c; },
+      // v0.8.4: espelha crm-v3 plPlanosPublicos_ (pixPct/anualPct + planos ativos)
+      planosPublicos: function () {
+        return {
+          ok: true,
+          pixPct: (D.config && D.config.pixPct != null) ? Number(D.config.pixPct) : 5,
+          anualPct: (D.config && D.config.anualPct != null) ? Number(D.config.anualPct) : 10,
+          pix: D.config && D.config.pix ? JSON.parse(JSON.stringify(D.config.pix)) : undefined, // v0.9.2: API @127
+          planos: [
+            { versao: '2026-11-09', chave: 'essencial', nome: 'Essencial', preco: 359.5, aPartir: true, porPc: 0, maqExtra: 35, maqTexto: 'até 5 computadores', maquinas: 5, visitas: '1 por mês', prioridade: 'Suporte remoto', paraQuem: 'Para pequenos negócios com até 5 computadores.', destaque: false, inclui: ['1 visita no local por mês', 'Suporte remoto', 'Checagem de desempenho em cada visita', 'Peças à parte'] },
+            { versao: '2026-11-09', chave: 'profissional', nome: 'Empresa', preco: 719, aPartir: true, porPc: 0, maqExtra: 35, maqTexto: 'até 10 computadores', maquinas: 10, visitas: '2 por mês', prioridade: 'Suporte remoto prioritário', paraQuem: 'Para empresas com até 10 computadores.', destaque: true, inclui: ['2 visitas no local por mês', 'Suporte remoto prioritário', 'Checagem de desempenho em cada visita', 'Peças à parte'] },
+            { versao: '2026-11-09', chave: 'empresa', nome: 'Empresa+', preco: 790.9, aPartir: true, porPc: 71.9, maqExtra: 0, maqTexto: '11 computadores ou mais', maquinas: 11, visitas: '3 por mês', prioridade: 'Prioridade na agenda', paraQuem: 'Para empresas com 11 computadores ou mais.', destaque: false, inclui: ['3 visitas no local por mês', 'Prioridade na agenda', 'Checagem de desempenho em cada visita', 'Peças à parte'] }
+          ]
+        };
+      },
       listarAgenda: function () { return D.agenda || []; },
       leadsLink: function () { return JSON.parse(JSON.stringify(D.leadsLink || [])); },
       // ---- PROPOSTAS (ainda não existem no crm-v3) ----
@@ -138,21 +165,49 @@
         ag.splice(i, 1); (D.os || []).forEach(function (o) { if (o.eventoId === id) o.eventoId = ''; });
         return { msg: 'Evento removido da Agenda.' };
       },
+      salvarAgendamentoOS: function (x) {
+        x = x || {};
+        var o = (D.os || []).find(function (k) { return k.num === x.os || (x._row && k._row === Number(x._row)); });
+        if (!o) throw new Error('OS não encontrada.');
+        var data = String(x.data || '').trim(), hora = String(x.hora || '').trim(), quando = '';
+        if (data) {
+          if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) throw new Error('Informe a hora (ex.: 19:30).');
+          quando = data + ' ' + hora;
+        }
+        o.agendadoPara = quando;
+        return { ok: true, agendado: quando, msg: quando ? ('Agendamento salvo: ' + quando + '.') : 'Agendamento removido.' };
+      },
       enviarEmailCliente: function (x) {
-        var c = (D.clientes || []).find(function (k) { return k.id === x.clienteId; });
+        x = x || {};
+        var clienteId = String(x.clienteId || '').trim(), osNum = String(x.os || '').trim();
+        var assunto = String(x.assunto || '').trim(), corpo = String(x.corpo || '').trim();
+        var refId = String(x.refId || osNum || '').trim();
+        if (!clienteId && !osNum) throw new Error('Informe o cliente ou a OS.');
+        if (!assunto || !corpo) throw new Error('Informe o assunto e a mensagem.');
+        if (/\[CONFIRMAR/.test(corpo)) throw new Error('O texto ainda tem [CONFIRMAR …]. Troque antes de enviar.');
+        var donoOS = null;
+        if (osNum || refId) {
+          var regOS = (D.os || []).find(function (o) { return o.num === (osNum || refId); });
+          if (osNum && !regOS) throw new Error('OS não encontrada.');
+          if (regOS) donoOS = regOS.cliente;
+        }
+        var c = clienteId ? (D.clientes || []).find(function (k) { return k.id === clienteId; })
+          : (D.clientes || []).find(function (k) { return donoOS && k.nome === donoOS; });
         if (!c) throw new Error('Cliente não encontrado.');
-        if (c.consent !== 'Sim') throw new Error('Cliente sem consentimento LGPD: e-mail não enviado.');
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email || '')) throw new Error('Cliente sem e-mail válido.');
-        if (!String(x.assunto || '').trim() || !String(x.corpo || '').trim()) throw new Error('Assunto e texto são obrigatórios.');
-        if (/\[CONFIRMAR/.test(x.corpo)) throw new Error('O texto ainda tem [CONFIRMAR …].');
-        if (!(D.cotaEmail > 0)) throw new Error('Cota diária de e-mails esgotada.');
-        D.cotaEmail--; anexar('interacoes', { data: h(), cliente: c.nome, canal: 'E-mail', resumo: 'E-mail: ' + x.assunto, proximoPasso: '', dataProx: '', por: 'Pedro' });
-        return { enviado: true, restanteCota: D.cotaEmail, msg: 'E-mail enviado.' };
+        if (donoOS != null && c.nome !== donoOS) throw new Error('Esta OS é de outro cliente: e-mail não enviado.');
+        if (/^s/i.test(String(c.naoContatar || '').trim())) throw new Error('Cliente marcado como "Não contatar": e-mail não enviado.');
+        if (String(c.consent || '').trim() !== 'Sim') throw new Error('Cliente sem consentimento LGPD "Sim": e-mail não enviado.');
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email || '')) throw new Error('Cliente sem e-mail válido: e-mail não enviado.');
+        if (!(D.cotaEmail > 0)) throw new Error('Cota diária de e-mails esgotada. Tente amanhã.');
+        D.cotaEmail--;
+        D._ultimoEmail = { to: c.email, assunto: assunto, corpo: corpo, rodape: x.rodape || '', os: osNum, refId: refId };
+        anexar('interacoes', { data: h(), cliente: c.nome, canal: 'E-mail', resumo: 'E-mail: ' + assunto + (refId ? ' – ' + refId : ''), proximoPasso: '', dataProx: '', por: 'Pedro' });
+        return { enviado: true, restanteCota: D.cotaEmail };
       },
       salvarCliente: function (c) {
         if (!String(c.nome || '').trim()) throw new Error('Informe o nome do cliente.');
         if (c.consent && ['Sim', 'Não'].indexOf(c.consent) < 0) throw new Error('Consentimento deve ser Sim ou Não.');
-        var campos = ['nome', 'whatsapp', 'bairro', 'origem', 'primeiro', 'consent', 'dataConsent', 'obs', 'etapa', 'ultimo', 'proximo', 'acao', 'preventiva', 'indicadoPor', 'motivoPerda', 'valorEst', 'aniversario', 'naoContatar', 'tipoCli', 'doc'];
+        var campos = ['nome', 'whatsapp', 'bairro', 'origem', 'primeiro', 'consent', 'dataConsent', 'obs', 'etapa', 'ultimo', 'proximo', 'acao', 'preventiva', 'indicadoPor', 'motivoPerda', 'valorEst', 'aniversario', 'naoContatar', 'tipoCli', 'doc', 'email'];
         if (c._row) { copiar(achar('clientes', 'nome', c._nomeOriginal || c.nome, c._row), c, campos); return { ok: true, msg: 'Cliente atualizado.' }; }
         var n = { id: proxId('clientes', 'id', 'C'), primeiro: h(), etapa: 'Lead' }; copiar(n, c, campos); anexar('clientes', n); return { ok: true, msg: 'Cliente cadastrado (' + n.id + ').' };
       },
@@ -168,9 +223,9 @@
       },
       salvarOS: function (o) {
         if (!o.cliente) throw new Error('Escolha o cliente.');
-        var campos = ['cliente', 'equipamento', 'defeito', 'servico', 'valor', 'previsao', 'acessorios', 'serie', 'obsInt', 'tipoAtend', 'senha'];
+        var campos = ['cliente', 'equipamento', 'defeito', 'servico', 'valor', 'previsao', 'acessorios', 'serie', 'obsInt', 'tipoAtend', 'senha', 'agendadoPara'];
         if (o._row) { var a = achar('os', 'num', o.num, o._row); copiar(a, o, campos); return { ok: true, msg: 'OS ' + a.num + ' salva.' }; }
-        var n = { num: 'OS-' + proxId('os', 'num', '').slice(-4), entrada: h(), status: 'Recebido', statusEm: h() }; copiar(n, o, campos); anexar('os', n); return { ok: true, msg: 'OS ' + n.num + ' criada.' };
+        var n = { num: 'OS-' + proxId('os', 'num', '').slice(-4), entrada: h(), status: 'Recebido', statusEm: h() }; copiar(n, o, campos); anexar('os', n); return { ok: true, num: n.num, _row: n._row, msg: 'OS ' + n.num + ' criada.' };
       },
       mudarStatusOS: function (n, linha, status, op) {
         if (D.statusOS.indexOf(status) < 0) throw new Error('Status inválido.');
@@ -178,12 +233,23 @@
         return { ok: true, msg: 'OS ' + n + ' → ' + status + '.' };
       },
       salvarOrcamento: function (o) {
-        var a = achar('os', 'num', o.num, o._row); copiar(a, o, ['diagnostico', 'itensOrc', 'orcamento', 'validade', 'previsao']);
+        var a = achar('os', 'num', o.num, o._row);
+        // v0.9.2: espelha o crm-v3 API @123: itens[] opcionais -> o servidor monta itensOrc (mesmo formato do App) e confere o total ("não bate").
+        if (Array.isArray(o.itens) && o.itens.length) {
+          var OR = typeof ProFixOrc !== 'undefined' ? ProFixOrc : (typeof require === 'function' ? require('./orcamento_rapido.js') : null);
+          var ie = OR.textoDeItens(o.itens), br = function (n) { return OR.brl(n); };
+          var inf = o.orcamento === '' || o.orcamento == null ? null : Number(String(o.orcamento).indexOf(',') >= 0 ? String(o.orcamento).replace(/\./g, '').replace(',', '.') : o.orcamento);
+          if (inf != null && (!isFinite(inf) || Math.abs(Math.round(inf * 100) / 100 - ie.total) > 0.01)) throw new Error('O total informado (' + br(isFinite(inf) ? inf : 0) + ') não bate com a soma dos itens (' + br(ie.total) + '). Confira os valores.');
+          o = Object.assign({}, o, { itensOrc: ie.texto, orcamento: ie.total }); a.itensRecebidos = o.itens.length;
+        }
+        copiar(a, o, ['diagnostico', 'itensOrc', 'orcamento', 'validade', 'previsao']);
         if (!a.validade) a.validade = somaDias(h(), 10); if (o.marcarAguardando !== false) { a.status = 'Aguardando aprovação'; a.aprovacao = 'Pendente'; } return { ok: true, msg: 'Orçamento salvo.' };
       },
       decidirOrcamento: function (x) {
         if (['Aprovado', 'Recusado'].indexOf(x.decisao) < 0) throw new Error('Decisão inválida.');
-        var a = achar('os', 'num', x.num, x._row); a.aprovacao = x.decisao; a.comoAprov = x.como || ''; a.dataAprov = h();
+        // igual ao crm-v3 (Code.gs decidirOrcamento + Diferenciais.gs motivoRecusa_): recusa exige motivo
+        if (x.decisao === 'Recusado' && ['caro', 'prazo', 'desistiu', 'foi para outro', 'outro'].indexOf(String(x.motivo || '').toLowerCase().trim()) < 0) throw new Error('Escolha o motivo da recusa (caro, prazo, desistiu, foi para outro ou outro).');
+        var a = achar('os', 'num', x.num, x._row); if (x.decisao === 'Recusado') a.motivoRecusa = x.motivo + (x.motivoTexto ? ' – ' + x.motivoTexto : ''); a.aprovacao = x.decisao; a.comoAprov = x.como || ''; a.dataAprov = h();
         if (x.decisao === 'Aprovado') { a.status = x.proximoStatus || 'Em reparo'; if (a.valor === '' || a.valor == null) a.valor = a.orcamento; } else a.status = 'Pronto';
         return { ok: true, msg: 'Orçamento ' + x.decisao.toLowerCase() + '.' };
       },
@@ -396,7 +462,9 @@
         '<h2>Checklist</h2><p>' + (ck.length ? ck.map(function (c) { return esc(c.momento) + ': ' + Object.keys(c.itens).map(function (k) { return esc(k + ' ' + c.itens[k]); }).join(', '); }).join('<br>') : 'Sem checklist registrado.') + '</p>' +
         '<h2>Garantia</h2><p>' + 'Garantia legal de 90 dias (CDC).' + (g.length ? ' Garantia ProFix de ' + g[0].dias + ' dias a partir da entrega (até ' + Dif.dataBR(g[0].ate) + ').' : garDias() ? ' Garantia ProFix de ' + garDias() + ' dias a partir da entrega.' : '') + '</p></html>' };
     };
-    S.linkClienteOS = function (x) { var o = osNum(x && x.num); return { ok: true, num: o.num, url: urlOS(o), msg: 'Link do cliente pronto.' }; };
+    S.salvarValidadeOS = function (x) { var o = osNum(x && x.num); var dias = Dif.padroes(D).validadeDias || 7; o.validade = somaDias(h(), dias); return { ok: true, validade: o.validade, msg: 'Validade do orçamento: até ' + o.validade + '.' }; };
+    // v0.9.2: igual ao crm-v3 API @127 – sempre { ok, num, url, criado, msg } (nunca ok com url vazia).
+    S.linkClienteOS = function (x) { var o = osNum(x && x.num), novo = !o._tokenDemo; o._tokenDemo = true; return { ok: true, num: o.num, url: urlOS(o), criado: novo, msg: 'Link do cliente pronto.' }; };
     S.textoStatusOS = function (x) {
       var o = osNum(x && x.num), c = (D.clientes || []).filter(function (k) { return k.nome === o.cliente; })[0] || {}, link = urlOS(o), st = Dif.statusCanon(o.status), pn = String(o.cliente).split(' ')[0];
       var texto = 'Olá, ' + pn + '! Aqui é da ProFix Computadores. Sua ' + o.num + ' está: ' + st + '.' + (o.previsao && st !== 'Entregue' ? ' Previsão: ' + Dif.dataBR(o.previsao) + '.' : '') + ' Acompanhe por aqui: ' + link;
@@ -411,22 +479,85 @@
       if (!t) throw new Error('Tipo de mensagem inválido.'); var tel = telWa(c);
       return { ok: true, texto: t, podeAbrir: !!tel, waUrl: tel ? waUrl(tel, t) : '', aviso: tel ? '' : 'Cliente sem WhatsApp válido.' };
     };
-    S.resumoMes = function (x) { var r = Dif.resumoMesLocal(D, (x && x.mes) || h().slice(0, 7)); delete r.local; r.receitaContratos = D.contratos.filter(function (k) { return k.status === 'Ativo'; }).reduce(function (s, k) { return Math.round((s + Number(k.valor || 0)) * 100) / 100; }, 0); return r; };
-    S.listaContratos = function () {
+    // v0.8.9: cobrança dos planos — mesmo critério do crm-v3 API @117 (listaContratos/receberMensalidade/salvarContrato).
+    var STATUS_CT = ['Ativo', 'Pausado', 'Encerrado', 'Proposta'];
+    var compBR = function (ym) { return String(ym).slice(5, 7) + '/' + String(ym).slice(0, 4); };
+    var diaCt = function (v) { if (v === '' || v == null) return ''; var n = Number(v); if (isNaN(n) || n < 1 || n > 31 || Math.floor(n) !== n) throw new Error('Dia do vencimento deve ser de 1 a 31.'); return n; };
+    var vencCt = function (dia, ym) { var p = String(ym).split('-').map(Number), ult = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate(), dd = Math.min(Number(dia) || 1, ult); return ym + '-' + (dd < 10 ? '0' : '') + dd; };
+    var pagCt = function (id, ym) { var marca = 'Mensalidade ' + id + ' – competência ' + compBR(ym); return (D.financeiro || []).filter(function (f) { return f.tipo === 'Entrada' && String(f.descricao || '').indexOf(marca) === 0; })[0] || null; };
+    var sitCt = function (k, ym) {
+      var venc = k.dia ? vencCt(k.dia, ym) : '', pg = pagCt(k.id, ym);
+      if (pg) return { s: 'pago', venc: venc, pag: pg };
+      if (!k.dia || k.status !== 'Ativo' || (k.inicio && String(k.inicio).slice(0, 7) > ym)) return { s: 'fora', venc: venc };
+      return { s: venc < h() ? 'vencido' : 'a vencer', venc: venc };
+    };
+    var vivoCt = function (k) { return !k._excluido; };
+    S.resumoMes = function (x) {
+      var mes = (x && x.mes) || h().slice(0, 7), r = Dif.resumoMesLocal(D, mes); delete r.local;
+      r.receitaContratos = D.contratos.filter(function (k) { return vivoCt(k) && k.status === 'Ativo'; }).reduce(function (s, k) { return Math.round((s + Number(k.valor || 0)) * 100) / 100; }, 0);
+      var mk = ' – competência ' + compBR(mes);
+      r.receitaContratosRecebida = Math.round((D.financeiro || []).reduce(function (s, f) { var dsc = String(f.descricao || ''); return f.tipo === 'Entrada' && dsc.indexOf('Mensalidade ') === 0 && dsc.indexOf(mk) > 0 ? s + Number(f.receita || 0) : s; }, 0) * 100) / 100;
+      return r;
+    };
+    S.listaContratos = function (x) {
       var P = ['Urgente', 'Alta', 'Normal', 'Baixa'], ord = function (p) { return P.indexOf(p); };
-      return { ok: true, contratos: copia(D.contratos), visitas: copia(D.visitas).sort(function (a, b) { return (a.status === 'Concluída') - (b.status === 'Concluída') || ord(a.prioridade) - ord(b.prioridade) || (a.data < b.data ? -1 : 1); }), prioridades: P };
+      var ym = /^\d{4}-\d{2}$/.test(String((x && x.competencia) || '')) ? x.competencia : h().slice(0, 7);
+      var res = { competencia: ym, pagos: 0, aVencer: 0, vencidos: 0, fora: 0, recebido: 0, emAberto: 0 };
+      var cts = D.contratos.filter(vivoCt).map(function (k) {
+        var st = sitCt(k, ym);
+        if (st.s === 'pago') { res.pagos++; res.recebido += Number(st.pag.receita) || 0; } else if (st.s === 'fora') res.fora++; else { res[st.s === 'vencido' ? 'vencidos' : 'aVencer']++; res.emAberto += Number(k.valor) || 0; }
+        return Object.assign(copia(k), { dia: k.dia === '' || k.dia == null ? '' : Number(k.dia), competencia: ym, vencimento: st.venc, situacaoMensalidade: st.s, forma: k.forma || '', pagoEm: st.pag ? String(st.pag.data).slice(0, 10) : '', valorPago: st.pag ? Number(st.pag.receita) || 0 : 0 });
+      });
+      res.recebido = Math.round(res.recebido * 100) / 100; res.emAberto = Math.round(res.emAberto * 100) / 100;
+      return { ok: true, contratos: cts, cobranca: res, visitas: copia(D.visitas).sort(function (a, b) { return (a.status === 'Concluída') - (b.status === 'Concluída') || ord(a.prioridade) - ord(b.prioridade) || (a.data < b.data ? -1 : 1); }), prioridades: P };
     };
     S.salvarContrato = function (x) {
-      x = x || {}; var c = cliNome(x.cliente), v = Number(String(x.valor || '').replace(',', '.')); if (!(v > 0)) throw new Error('Informe o valor mensal.');
-      var id = 'CT-' + ('000' + (D.contratos.length + 1)).slice(-4);
-      D.contratos.push({ id: id, cliente: c.nome, plano: String(x.plano || 'Plano empresarial'), valor: Math.round(v * 100) / 100, visitas: Math.max(0, Math.round(Number(x.visitas) || 0)), status: 'Ativo', inicio: x.inicio || h(), obs: x.obs || '' });
-      evento(c.nome, '', 'Contrato mensal', id + ' – R$ ' + v.toFixed(2)); return { ok: true, id: id, msg: 'Contrato ' + id + ' criado.' };
+      x = x || {}; var tem = function (k) { return Object.prototype.hasOwnProperty.call(x, k) && x[k] !== undefined; };
+      var dia = tem('dia') ? diaCt(x.dia) : undefined, status = tem('status') && String(x.status || '').trim() ? String(x.status).trim() : undefined;
+      if (status !== undefined && STATUS_CT.indexOf(status) < 0) throw new Error('Status inválido. Use: ' + STATUS_CT.join(', ') + '.');
+      var forma = tem('forma') ? String(x.forma || '').trim() : undefined;
+      if (forma && (D.formasPagFin || D.formasPag || []).indexOf(forma) < 0) throw new Error('Forma de pagamento inválida.');
+      var id = String(x.id || '').trim();
+      if (id) {
+        var k = D.contratos.filter(function (c) { return c.id === id && vivoCt(c); })[0]; if (!k) throw new Error('Contrato ' + id + ' não encontrado.');
+        var novoSt = status || k.status, novoDia = dia === undefined ? k.dia : dia;
+        if (novoSt === 'Ativo' && !novoDia) throw new Error('Informe o dia do vencimento (1 a 31). Contrato ativo precisa do dia para a cobrança (use status "Proposta" enquanto não fechar).');
+        k.status = novoSt; k.dia = novoDia; if (forma !== undefined) k.forma = forma;
+        if (tem('plano') && String(x.plano || '').trim()) k.plano = String(x.plano).trim();
+        if (tem('valor') && String(x.valor) !== '') { var vv = Number(String(x.valor).replace(',', '.')); if (!(vv > 0)) throw new Error('Informe o valor mensal.'); k.valor = Math.round(vv * 100) / 100; }
+        return { ok: true, id: id, avisos: [], msg: 'Contrato ' + id + ' atualizado.' };
+      }
+      var c = cliNome(x.cliente), v = Number(String(x.valor || '').replace(',', '.')); if (!(v > 0)) throw new Error('Informe o valor mensal.');
+      status = status || 'Ativo'; dia = dia === undefined ? '' : dia;
+      if (status === 'Ativo' && !dia) throw new Error('Informe o dia do vencimento (1 a 31). Contrato ativo precisa do dia para a cobrança (use status "Proposta" enquanto não fechar).');
+      id = 'CT-' + ('000' + (D.contratos.length + 1)).slice(-4);
+      D.contratos.push({ id: id, cliente: c.nome, plano: String(x.plano || 'Plano empresarial'), valor: Math.round(v * 100) / 100, visitas: Math.max(0, Math.round(Number(x.visitas) || 0)), status: status, inicio: x.inicio || h(), dia: dia, forma: forma || '', obs: x.obs || '' });
+      evento(c.nome, '', 'Contrato mensal', id + ' – R$ ' + v.toFixed(2)); return { ok: true, id: id, avisos: [], msg: 'Contrato ' + id + ' criado.' + (dia ? ' Vence todo dia ' + dia + '. Nada é cobrado automaticamente.' : '') };
+    };
+    S.receberMensalidade = function (m) {
+      m = m || {}; var id = String(m.id || '').trim(); if (!id) throw new Error('Informe o id do contrato.');
+      var ym = String(m.competencia || h().slice(0, 7)).trim(); if (!/^\d{4}-\d{2}$/.test(ym)) throw new Error('Competência inválida (use AAAA-MM).');
+      var data = String(m.data || '').trim() || h(); if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new Error('Data inválida (use AAAA-MM-DD).');
+      var k = D.contratos.filter(function (c) { return c.id === id; })[0];
+      if (!k) throw new Error('Contrato ' + id + ' não encontrado.'); if (k._excluido) throw new Error('O contrato ' + id + ' está na Lixeira.');
+      if (!k.dia) throw new Error('O contrato ' + id + ' não tem dia do vencimento: informe o dia (salvarContrato) antes de receber.');
+      if (pagCt(id, ym)) throw new Error('A mensalidade de ' + compBR(ym) + ' do ' + id + ' já foi lançada.');
+      var valor = m.valor !== undefined && m.valor !== null && String(m.valor) !== '' ? Number(String(m.valor).replace(',', '.')) : Number(k.valor);
+      if (!(valor > 0)) throw new Error('Informe o valor recebido.');
+      var forma = String(m.forma || k.forma || '').trim(); if (forma && (D.formasPagFin || D.formasPag || []).indexOf(forma) < 0) throw new Error('Forma de pagamento inválida.');
+      var avisos = [];
+      if (k.status !== 'Ativo') avisos.push('O contrato ' + id + ' está como ' + k.status + '.');
+      if (k.inicio && String(k.inicio).slice(0, 7) > ym) avisos.push('A competência ' + compBR(ym) + ' é anterior ao início do contrato (' + String(k.inicio).slice(0, 10) + ').');
+      if (Number(k.valor) > 0 && Math.abs(valor - Number(k.valor)) > 0.004) avisos.push('Valor recebido diferente do valor mensal do contrato (R$ ' + Number(k.valor).toFixed(2) + ').');
+      var row = (D.financeiro || []).reduce(function (mx, f) { return Math.max(mx, Number(f._row) || 0); }, 1) + 1;
+      D.financeiro.push({ _row: row, data: data, tipo: 'Entrada', categoria: 'Serviço', os: '', descricao: 'Mensalidade ' + id + ' – competência ' + compBR(ym) + ' – ' + k.cliente + ' – ' + k.plano, forma: forma, parcelas: String(m.parcelas || ''), receita: Math.round(valor * 100) / 100, custo: 0 });
+      return { ok: true, msg: 'Mensalidade ' + compBR(ym) + ' do ' + id + ' lançada no Financeiro.', id: id, competencia: ym, situacaoMensalidade: 'pago', lancamento: { row: row, data: data, valor: Math.round(valor * 100) / 100 }, avisos: avisos };
     };
     S.salvarVisita = function (x) {
       x = x || {}; if (!x.cliente) throw new Error('Escolha o cliente.'); if (!/^\d{4}-\d{2}-\d{2}/.test(String(x.data || ''))) throw new Error('Informe a data da visita.');
       if (x.idOperacao && D.visitas.some(function (v) { return v.idOperacao === x.idOperacao; })) return { ok: true, repetida: true, msg: 'Visita já registrada.' };
       var pr = ['Urgente', 'Alta', 'Normal', 'Baixa'].indexOf(x.prioridade) >= 0 ? x.prioridade : 'Normal', id = 'VT-' + ('000' + (D.visitas.length + 1)).slice(-4);
-      D.visitas.push({ id: id, contrato: x.contrato || '', cliente: x.cliente, data: x.data, prioridade: pr, status: 'Agendada', inicio: '', fim: '', km: '', horas: '', os: x.os || '', obs: x.obs || '', idOperacao: x.idOperacao || '' });
+      D.visitas.push({ id: id, contrato: x.contrato || '', cliente: x.cliente, data: x.data, prioridade: pr, status: 'Agendada', inicio: '', fim: '', km: '', horas: '', os: x.os || '', hora: x.hora || '', obs: x.obs || '', idOperacao: x.idOperacao || '' });
       return { ok: true, id: id, msg: 'Visita ' + id + ' agendada (' + pr + ').' };
     };
     var visita = function (id) { var v = D.visitas.filter(function (k) { return k.id === id; })[0]; if (!v) throw new Error('Visita não encontrada.'); return v; };
@@ -522,6 +653,86 @@
       }
       l.status = st; l.statusEm = agora(); evento(l.nome, '', 'Lead do site: ' + st, 'Status mudado à mão');
       return { ok: true, status: st, msg: 'Lead marcado como ' + st + '.' };
+    };
+    // ---------- v0.8.6/0.8.7: espelho de crm-v3/ListaMestra.gs (rotas do App @113/@115). Mesmas mensagens de erro. Dados fictícios. ----------
+    var M9 = D.m9 = D.m9 || { fornecedores: [], cotacoes: [] }; D.estoque = D.estoque || [];
+    var COT_ST = ['Cotado', 'Escolhido', 'Comprado', 'Descartado'], CAT_SAIDA = ['Compra de peça', 'Deslocamento', 'Ferramentas', 'DAS-MEI', 'Marketing', 'Outros'];
+    var n2 = function (v) { var x = Number(String(v == null ? '' : v).replace(/\./g, function (m, i, t) { return t.indexOf(',') >= 0 ? '' : m; }).replace(',', '.')); return isFinite(x) ? x : 0; };
+    var r2 = function (v) { return Math.round(n2(v) * 100) / 100; };
+    var normT = function (t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); };
+    var fornAtivo = function (id) { id = String(id || '').trim(); var f = M9.fornecedores.filter(function (x) { return x.id === id; })[0];
+      if (!f) throw new Error('Fornecedor "' + id + '" não está na lista de fornecedores.'); if (!f.ativo) throw new Error('Fornecedor ' + f.nome + ' (' + f.id + ') está desativado.'); return f; };
+    var cotApp = function (c) { var total = r2(c.precoUnit * c.qtd + c.frete);
+      return { id: c.id, data: c.data, os: c.os, componente: c.componente, fornecedor: c.fornecedor, fornecedorId: c.fornecedorId, marcaModelo: c.marcaModelo, condicao: c.condicao, qtd: c.qtd, precoUnit: c.precoUnit, frete: c.frete,
+        custoFinal: r2(c.precoUnit + c.frete), custoPosto: r2((c.precoUnit * c.qtd + c.frete) / c.qtd), total: total, prazoDias: c.prazoDias, formaPagamento: c.formaPagamento, validade: c.validade, vencida: !!(c.validade && c.validade < h()),
+        fonte: c.fonte, status: c.status, escolhida: c.status === 'Escolhido' || (c.status === 'Comprado' && c.escolhida), garantiaFornecedor: c.garantiaFornecedor, insumo: !!c.insumo, obs: c.obs }; };
+    S.listarFornecedores = function () { return M9.fornecedores.map(function (f) { return { id: f.id, nome: f.nome, ativo: !!f.ativo }; }); };
+    S.listarCotacoes = function (a) { var os = String((a && a.os) || '').trim(); return M9.cotacoes.filter(function (c) { return !os || c.os === os; }).map(cotApp); };
+    S.salvarCotacao = function (c) {
+      c = c || {}; var comp = String(c.componente || c.peca || '').trim(); if (!comp) throw new Error('Informe a peça/componente.');
+      var fonte = String(c.fonte || '').trim(); if (!fonte) throw new Error('Informe a Fonte da cotação (link, WhatsApp do fornecedor, loja…).');
+      var ins = c.insumo === true || /^(s|sim|true)$/i.test(String(c.insumo || '')), os = String(c.os || '').trim();
+      if (!os && !ins) throw new Error('Informe a OS (sem OS só para Insumo).');
+      if (os && !D.os.some(function (o) { return String(o.num) === os && !o._excluido; })) throw new Error('OS "' + os + '" não encontrada.');
+      var f = fornAtivo(c.fornecedorId), qtd = c.qtd === '' || c.qtd == null ? 1 : n2(c.qtd); if (!(qtd > 0) || qtd > 10000) throw new Error('Quantidade inválida.');
+      var unit = n2(c.precoUnit), frete = c.frete === '' || c.frete == null ? 0 : n2(c.frete); if (!(unit > 0)) throw new Error('Informe o preço unitário.'); if (frete < 0) throw new Error('Frete inválido.');
+      if (c.validade && !/^\d{4}-\d{2}-\d{2}$/.test(String(c.validade))) throw new Error('Validade inválida (use aaaa-mm-dd).');
+      var reg = { os: os, componente: comp, fornecedor: f.nome, fornecedorId: f.id, precoUnit: r2(unit), frete: r2(frete), qtd: qtd, prazoDias: String(c.prazoDias == null ? '' : c.prazoDias), marcaModelo: String(c.marcaModelo || ''), condicao: String(c.condicao || ''),
+        formaPagamento: String(c.formaPagamento || ''), fonte: fonte, garantiaFornecedor: String(c.garantiaFornecedor || ''), insumo: ins, obs: String(c.obs || '') };
+      var alvo;
+      if (c.id) { alvo = M9.cotacoes.filter(function (x) { return x.id === String(c.id); })[0]; if (!alvo) throw new Error('Cotação ' + c.id + ' não encontrada.');
+        if (['Cotado', 'Escolhido'].indexOf(alvo.status) < 0) throw new Error('Cotação ' + alvo.id + ' está como ' + alvo.status + ': não dá para editar.');
+        Object.assign(alvo, reg); if (c.validade) alvo.validade = c.validade; }
+      else { alvo = Object.assign({ id: proxId('m9cot', 'id', 'CT-'), data: h(), status: 'Cotado', validade: c.validade || somaDias(h(), 3) }, reg); M9.cotacoes.push(alvo); }
+      return { ok: true, msg: 'Cotação salva: ' + f.nome + ' ' + r2(alvo.precoUnit + alvo.frete) + '.', cotacao: cotApp(alvo) };
+    };
+    D.m9cot = M9.cotacoes; // proxId lê D[lista]
+    S.mudarStatusCotacao = function (a) {
+      a = a || {}; var id = String(a.id || '').trim(), st = String(a.status || '').trim();
+      if (!id) throw new Error('Informe o id da cotação.'); if (COT_ST.indexOf(st) < 0) throw new Error('Status inválido. Use: ' + COT_ST.join(', ') + '.');
+      var lc = a.lancarCaixa && typeof a.lancarCaixa === 'object' ? a.lancarCaixa : null;
+      if (lc && st !== 'Comprado') throw new Error('Lançar no caixa só junto com o status Comprado.');
+      if (lc && !String(lc.categoria || '').trim()) throw new Error('Informe a categoria da Saída (lancarCaixa.categoria).');
+      var c = M9.cotacoes.filter(function (x) { return x.id === id; })[0]; if (!c) throw new Error('Cotação ' + id + ' não encontrada.');
+      var app = cotApp(c), avisos = [];
+      if (c.status === 'Comprado') throw new Error('Cotação ' + id + ' já está como Comprado: o status não muda mais (o caixa já pode ter sido lançado).');
+      if (st === c.status && st !== 'Escolhido') return { ok: true, msg: 'Cotação ' + id + ' já está como ' + st + '.', cotacao: app, avisos: [] };
+      if (st === 'Comprado') {
+        if (app.vencida) throw new Error('Cotação vencida em ' + app.validade + ': confirme o preço com o fornecedor e salve de novo antes de comprar.');
+        if (c.os && !D.financeiro.some(function (l) { return l.os === c.os && l.tipo === 'Entrada' && n2(l.receita) > 0; })) avisos.push('A OS ' + c.os + ' ainda não tem pagamento registrado no Financeiro.');
+      }
+      var fin = null;
+      if (lc) { var cat = String(lc.categoria).trim(); if (D.categoriasFin.indexOf(cat) < 0 || CAT_SAIDA.indexOf(cat) < 0) throw new Error('Categoria inválida para Saída: "' + cat + '".');
+        S.salvarLancamento({ data: h(), tipo: 'Saída', categoria: cat, os: c.os, descricao: 'Cotação ' + c.id + ' – ' + c.componente + (c.qtd !== 1 ? ' x' + c.qtd : '') + ' – ' + c.fornecedor, custo: app.total });
+        fin = { row: D.financeiro[D.financeiro.length - 1]._row, valor: app.total, msg: 'Saída lançada no Financeiro: ' + cat + ' – R$ ' + app.total.toFixed(2).replace('.', ',') + '.' }; }
+      c.status = st; c.escolhida = st === 'Escolhido' || st === 'Comprado';
+      if (st === 'Escolhido' || st === 'Comprado') M9.cotacoes.forEach(function (o) { if (o !== c && normT(o.os) === normT(c.os) && normT(o.componente) === normT(c.componente) && o.status === 'Escolhido') { o.status = 'Cotado'; o.escolhida = false; } });
+      return { ok: true, msg: 'Cotação ' + id + ': ' + st + '.' + (fin ? ' ' + fin.msg : '') + (avisos.length ? ' Atenção: ' + avisos.join(' ') : ''), cotacao: cotApp(c), avisos: avisos, financeiro: fin ? { row: fin.row, valor: fin.valor } : null };
+    };
+    var insForn = function (v) {
+      v = String(v || '').trim(); if (!v) return { id: '', nome: '' };
+      if (/^FN-\d+$/.test(v)) { var f = M9.fornecedores.filter(function (x) { return x.id === v; })[0]; return { id: v, nome: f ? f.nome : v }; }
+      var g = M9.fornecedores.filter(function (x) { return normT(x.nome) === normT(v); })[0]; return { id: g ? g.id : '', nome: v };
+    };
+    var insApp = function (i) { var q = n2(i.qtd), mi = n2(i.minimo), fo = insForn(i.fornecedor); return { id: i.idInsumo || 'linha-' + i._row, item: i.item, categoria: i.categoria || '', qtd: q, minimo: mi, repor: mi > 0 && q <= mi, fornecedor: fo.nome, fornecedorId: fo.id, link: /^https?:\/\//i.test(i.link || '') ? i.link : '' }; };
+    S.listarInsumos = function () { return D.estoque.filter(function (i) { return String(i.item || '').trim(); }).map(insApp); };
+    S.salvarInsumo = function (x) {
+      x = x || {}; var item = String(x.item || '').trim().slice(0, 120); if (!item) throw new Error('Informe o item.');
+      var q = n2(x.qtd), mi = x.minimo === '' || x.minimo == null ? 0 : n2(x.minimo);
+      if (String(x.qtd == null ? '' : x.qtd).trim() === '' || !(q >= 0)) throw new Error('Quantidade inválida.'); if (!(mi >= 0)) throw new Error('Estoque mínimo inválido.');
+      var temFn = Object.prototype.hasOwnProperty.call(x, 'fornecedorId') && x.fornecedorId !== undefined, temNome = Object.prototype.hasOwnProperty.call(x, 'fornecedor') && x.fornecedor !== undefined;
+      var mexeFn = temFn || temNome, fn = String((temFn ? x.fornecedorId : x.fornecedor) == null ? '' : (temFn ? x.fornecedorId : x.fornecedor)).trim(), fnNome = '';
+      if (fn) {
+        if (/^FN-\d+$/i.test(fn)) fnNome = fornAtivo(fn.toUpperCase()).nome;
+        else { var porNome = M9.fornecedores.filter(function (f) { return normT(f.nome) === normT(fn); })[0]; fnNome = fornAtivo(porNome ? porNome.id : fn).nome; }
+      }
+      var id = String(x.id || '').trim(), alvo;
+      if (id) { var m = id.match(/^linha-(\d+)$/); alvo = D.estoque.filter(function (i) { return m ? i._row === Number(m[1]) : i.idInsumo === id; })[0]; if (!alvo) throw new Error('Insumo ' + id + ' não encontrado.'); }
+      else { var dup = D.estoque.filter(function (i) { return normT(i.item) === normT(item); })[0]; if (dup) throw new Error('Já existe o insumo "' + dup.item + '" (id ' + (dup.idInsumo || 'linha-' + dup._row) + '). Use o id para atualizar.'); }
+      var dados = { item: item, qtd: q, minimo: mi }; if (mexeFn) dados.fornecedor = fnNome;
+      if (alvo) Object.assign(alvo, dados); else { alvo = anexar('estoque', Object.assign({ categoria: '', link: '' }, dados)); }
+      if (!alvo.idInsumo) alvo.idInsumo = proxId('estoque', 'idInsumo', 'IN-');
+      return { ok: true, msg: 'Insumo ' + item + ' salvo (' + alvo.idInsumo + ').', insumo: insApp(alvo) };
     };
     return S;
   }
