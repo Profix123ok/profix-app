@@ -288,6 +288,10 @@
   V.filtrarOps = function (lista, f, ordenadas, textos) {
     var q = V.norm(f.q);
     return (ordenadas || V.prepararBuscaOps(lista)).filter(function (o) {
+      if (f.retorno) {
+        if (!o.lembrete || o.status === 'Virou lead' || o.status === 'Descartada' || V.bloqueadaOp(o)) return false;
+        if (f.retorno === 'hoje' ? o.lembrete !== f.hoje : o.lembrete >= f.hoje) return false;
+      }
       if (f.status && o.status !== f.status) return false;
       if (f.prioridade && (o.prioridade || '') !== f.prioridade) return false;
       if (f.segmento && o.segmento !== f.segmento) return false;

@@ -17,7 +17,7 @@
   var api = demo ? ProFixAPI.criarAdaptadorMock({ hoje: CFG.HOJE_FIXO, enviarSenha: true, persistencia: PERSIST, velocidade: CFG.LEITURAS_VELOCIDADE || [], atraso: Number((location.search.match(/[?&]atraso=(\d+)/) || [])[1]) || 0, semAcoes: ((location.search.match(/[?&]semAcoes=([\w,]+)/) || [])[1] || '').split(',').filter(Boolean) })
     : ProFixAPI.criarAdaptadorGas(CFG.API_URL, { liberadas: CFG.ACOES_SERVIDOR, persistencia: PERSIST, velocidade: CFG.LEITURAS_VELOCIDADE || [] });
   var D = null, offline = false;
-  var F = { op: { status: '', prioridade: '', segmento: '', q: '' }, os: { status: '', q: '' }, cli: { q: '' }, lead: { sit: 'Novo' } };
+  var F = { op: { status: '', prioridade: '', segmento: '', q: '', retorno: '' }, os: { status: '', q: '' }, cli: { q: '' }, lead: { sit: 'Novo' } };
   var $ = function (id) { return document.getElementById(id); }, e = V.esc;
   // v0.7.2: confirm/alert/prompt nativos podem ser bloqueados no celular -> modal na própria página (pergunta.js), sempre com Promise.
   var P = window.ProFixPergunta, perguntar = function (t, op) { return P.confirmar(t, op); };
@@ -246,7 +246,14 @@
       var cc = memoOps('cc', V.contagemContatoOps), chipC = function (k, rot) { return '<button type="button" class="chip" data-contato="' + k + '" aria-pressed="' + ((F.op.contato || '') === k) + '">' + rot + '</button>'; };
       var barraContato = '<div class="chips" id="fContato" role="group" aria-label="Filtrar por contato">' + chipC('', 'Todas') + chipC('nao', '🆕 ' + V.SITUACAO_CONTATO.nao + ' (' + cc.nao + ')') + chipC('sim', '✅ ' + V.SITUACAO_CONTATO.sim + ' (' + cc.sim + ')') + '</div>';
       // v0.9.2: 50 por vez (o toque não trava com centenas de cards). Busca e filtros valem sobre a lista toda; mudou o filtro, volta para 50.
-      var sig = JSON.stringify([fOp.status, fOp.prioridade, fOp.segmento, fOp.q, fOp.cidade, fOp.wa, fOp.contato, fOp.ig]);
+      var filtroRetorno = [
+        ['', 'Todos os retornos'], ['atrasado', 'Retornos atrasados'], ['hoje', 'Retornos de hoje']
+      ].map(function (x) {
+        return '<button type="button" class="chip" data-retorno-op="' + x[0] + '" aria-pressed="' + (F.op.retorno === x[0]) + '">' + x[1] + '</button>';
+      }).join('');
+      fOp.retorno = F.op.retorno;
+      fOp.hoje = D.hoje;
+      var sig = JSON.stringify([fOp.retorno, fOp.hoje, fOp.status, fOp.prioridade, fOp.segmento, fOp.q, fOp.cidade, fOp.wa, fOp.contato, fOp.ig]);
       var indice = memoOps('busca', function (lista) {
         return { ordenadas: V.prepararBuscaOps(lista), textos: new WeakMap() };
       });
@@ -257,7 +264,7 @@
       var ops = indice.resultados;
       if (sig !== F.op.sig || !F.op.qtd) { F.op.sig = sig; F.op.qtd = OP_PASSO; }
       var mostra = Math.min(ops.length, F.op.qtd);
-      return barraContato + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
+      return '<div class="chips" role="group" aria-label="Filtrar por data de retorno">' + filtroRetorno + '</div>' + barraContato + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
         '<p class="muted" id="contagem">' + ops.length + ' de ' + (D.oportunidades || []).length + ' empresas</p>' +
         '<p class="muted" id="opsAtualizando"' + (OPS_ATUALIZANDO ? '' : ' hidden') + '>🔄 Atualizando a lista com o CRM… (pode usar normalmente)</p>' +
         (ops.length > mostra ? '<p class="muted" id="opMostrando">Mostrando ' + mostra + ' de ' + ops.length + '.</p>' : '') +
@@ -295,8 +302,11 @@
   function agendaBtn(o) { var id = eventoDaOS(o); if (!api.pode('criarEventoAgenda')) return id ? '<span class="tag ok">Na agenda ✓</span>' : '';
     return id ? '<span class="tag ok" id="naAgenda">Na agenda ✓</span>' + botao('Atualizar na agenda', 'ag-os', o._row) + (api.pode('removerEventoAgenda') ? botao('Tirar da agenda', 'ag-rem-os', o._row) : '') : botao('📅 Pôr na agenda', 'ag-os', o._row); }
   function emailBtn(c, acao, row) { return api.pode('enviarEmailCliente') && V.podeEmailCliente(c) ? botao('✉️ Enviar e-mail', acao, row) : ''; }
-  function achar(lista, row) { return (D[lista] || []).filter(function (x) { return x._row === Number(row); })[0]; }
-  var LIMITE = 100, OP_PASSO = 50;
+  function achar(lista, row) {
+    var numero = Number(row);
+    return (D[lista] || []).find(function (x) { return x._row === numero; });
+  }
+  var LIMITE = 100, OP_PASSO = 50, OS_PASSO = 50;
   var tagStatusOS = function (s) { return tag(s, s === 'Pronto' ? 'media' : s === 'Aguardando aprovação' || s === 'Aguardando peça' ? 'alta' : 'cinza'); };
 
   // v0.5.4: leads que chegaram pela página pública de cadastro (leadsLink). WhatsApp só manual, um a um (link wa.me).
@@ -383,10 +393,14 @@
     servicos: function () {
       var q = V.norm(F.os.q), l = (D.os || []).filter(function (o) { return (!F.os.status || o.status === F.os.status) && (!q || V.norm([o.num, o.cliente, o.equipamento, o.defeito].join(' ')).indexOf(q) >= 0); })
         .sort(function (a, b) { return String(b.num) < String(a.num) ? -1 : 1; });
+      var filtro = JSON.stringify([F.os.status, F.os.q]);
+      if (F.os.filtro !== filtro) { F.os.filtro = filtro; F.os.qtd = OS_PASSO; }
+      var mostra = Math.min(l.length, F.os.qtd);
       return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', 'primaria') + (api.pode('salvarOrcamento') ? botao('⚡ Orçamento rápido', 'orc-novo', '', 'primaria') : '') + '</div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
-        lista(l, function (o) { var s = V.saldoOS(D, o), b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 && ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.');
+        lista(l.slice(0, mostra), function (o) { var s = ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? V.saldoOS(D, o) : 0, b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + (o.status === 'Em diagnóstico' && api.pode('salvarOrcamento') ? botao('Orçamento', 'os-orc', o._row) : '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.') +
+        (mostra < l.length ? '<div class="acoes"><button type="button" class="btn sec" id="osMais">Ver mais ' + Math.min(OS_PASSO, l.length - mostra) + ' OS</button></div>' : '');
     },
     clientes: function (sub) {
       var cab = '<div class="row"><h1>Clientes</h1>' + botao('+ Novo cliente', 'cli-novo', '', '') + '</div>' + abas('clientes', [['lista', 'Lista'], ['funil', 'Funil'], ['oportunidades', 'Oportunidades']], sub).replace('<div class="abas">', '<nav class="abas clientes-abas" aria-label="Seções de Clientes">').replace(/<\/div>$/, '</nav>');
@@ -2921,6 +2935,19 @@
     c.querySelectorAll('[data-wa-mod]').forEach(function (sel) { sel.onchange = function () {
       var o = achar('oportunidades', sel.dataset.waMod), a = c.querySelector('[data-wa-op="' + sel.dataset.waMod + '"]'), l = o && V.linkWaOp(D.modelos, o, sel.value);
       if (a && l) a.href = l; }; }); // só troca o texto; consentimento continua valendo (link some se bloqueada)
+    c.querySelectorAll('[data-retorno-op]').forEach(function (b) { b.onclick = function () {
+      F.op.retorno = b.dataset.retornoOp;
+      render();
+      var ativo = c.querySelector('[data-retorno-op][aria-pressed="true"]');
+      if (ativo) ativo.focus({ preventScroll: true });
+    }; });
+    if ($('osMais')) $('osMais').onclick = function () {
+      F.os.qtd += OS_PASSO;
+      var y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+      if ($('osMais')) $('osMais').focus({ preventScroll: true });
+    };
     if ($('opMais')) $('opMais').onclick = function () { F.op.qtd = (F.op.qtd || OP_PASSO) + OP_PASSO; var y = window.scrollY; render(); window.scrollTo(0, y); };
     if ($('fIg')) $('fIg').onclick = function () { F.op.ig = !F.op.ig; try { localStorage.setItem(IGF, F.op.ig ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fIg')) $('fIg').focus(); };
     if ($('fWa')) $('fWa').onclick = function () { F.op.wa = !F.op.wa; try { localStorage.setItem(WAF, F.op.wa ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fWa')) $('fWa').focus(); };
