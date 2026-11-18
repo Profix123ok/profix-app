@@ -245,9 +245,16 @@
       // v0.8.8: Ainda não contactei × Já contactei (com contagem).
       var cc = memoOps('cc', V.contagemContatoOps), chipC = function (k, rot) { return '<button type="button" class="chip" data-contato="' + k + '" aria-pressed="' + ((F.op.contato || '') === k) + '">' + rot + '</button>'; };
       var barraContato = '<div class="chips" id="fContato" role="group" aria-label="Filtrar por contato">' + chipC('', 'Todas') + chipC('nao', '🆕 ' + V.SITUACAO_CONTATO.nao + ' (' + cc.nao + ')') + chipC('sim', '✅ ' + V.SITUACAO_CONTATO.sim + ' (' + cc.sim + ')') + '</div>';
-      var ops = V.filtrarOps(D.oportunidades, fOp);
       // v0.9.2: 50 por vez (o toque não trava com centenas de cards). Busca e filtros valem sobre a lista toda; mudou o filtro, volta para 50.
       var sig = JSON.stringify([fOp.status, fOp.prioridade, fOp.segmento, fOp.q, fOp.cidade, fOp.wa, fOp.contato, fOp.ig]);
+      var indice = memoOps('busca', function (lista) {
+        return { ordenadas: V.prepararBuscaOps(lista), textos: new WeakMap() };
+      });
+      if (indice.sig !== sig) {
+        indice.resultados = V.filtrarOps(null, fOp, indice.ordenadas, indice.textos);
+        indice.sig = sig;
+      }
+      var ops = indice.resultados;
       if (sig !== F.op.sig || !F.op.qtd) { F.op.sig = sig; F.op.qtd = OP_PASSO; }
       var mostra = Math.min(ops.length, F.op.qtd);
       return barraContato + barraCid + barraWa + '<div class="filtros">' + sel('fSt', D.statusOp, F.op.status, 'Todos os status') + sel('fPri', V.PRI, F.op.prioridade, 'Todas as prioridades') + sel('fSeg', D.segmentos, F.op.segmento, 'Todos os segmentos') + busca('fQ', F.op.q, 'Buscar empresa, bairro…') + '</div>' +
@@ -345,6 +352,8 @@
       };
       var badgeParada = function (o) { var b = V.badgeParada3d(o, D.hoje); return b ? tag('🐢 ' + b.texto, 'parada') : ''; };
       return '<h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
+        '<div class="acoes">' + botao('+ Nova OS', 'os-nova', '', 'primaria') +
+          (api.pode('salvarOrcamento') ? botao('Orçamento rápido', 'orc-novo', '', 'sec') : '') + '</div>' +
         bannerLeadsSite() +
         '<div class="resumo"><div><b>' + H.chamar.length + '</b>para chamar</div><div><b>' + bancada.length + '</b>em bancada</div><div><b>' + entregas.length + '</b>entregas do dia</div><div><b>' + H.cobrar.length + '</b>OS para cobrar</div></div>' +
         secaoLeadsLink() +
@@ -574,6 +583,16 @@
   function aplicar(lista, row, mud) { return function (cache) { var x = (cache[lista] || []).filter(function (y) { return y._row === Number(row); })[0]; if (x) Object.keys(mud).forEach(function (k) { if (k[0] !== '_') x[k] = mud[k]; }); }; }
 
   // ---------- v0.7.8: OS rápida, sem sair do formulário ----------
+  function opcoesClienteRapido(busca, select, escolhido) {
+    var limite = 40;
+    var clientes = V.buscarClientesOS(D.clientes, busca.value, limite + 1);
+    var temMais = clientes.length > limite;
+    if (temMais) clientes.pop();
+    if (escolhido && !clientes.some(function (c) { return c._row === escolhido._row; })) clientes.unshift(escolhido);
+    select.innerHTML = '<option value="">Escolha o cliente</option>' + clientes.map(function (c) {
+      return '<option value="' + c._row + '"' + (escolhido && c._row === escolhido._row ? ' selected' : '') + '>' + e(c.nome) + (c.whatsapp ? ' · ' + e(c.whatsapp) : '') + '</option>';
+    }).join('') + (temMais ? '<option disabled>Digite mais para encontrar outros clientes</option>' : '');
+  }
   function abrirOSRapida(row, pre) {
     var o = row ? achar('os', row) : Object.assign({ cliente: '' }, pre), ocupada = false, clientePendente = false;
     var campos = [{ k: 'cliente', r: 'Cliente', t: 'select', req: true }, { k: 'equipamento', r: 'Equipamento', req: true }, { k: 'defeito', r: 'Defeito relatado' },
@@ -587,9 +606,8 @@
       '<p class="muted">Sem marcar: consentimento Não. Não altera clientes já existentes.</p><button type="button" class="btn sec" id="osCliSalvar">Cadastrar cliente</button><p id="osCliResultado" role="status"></p></details>');
     var m = $('modal'), f = $('fGen'), selecao = o._rowCliente || ((D.clientes || []).find(function (c) { return c.nome === o.cliente; }) || {})._row;
     function opcoes() {
-      var clientes = V.buscarClientesOS(D.clientes, $('osBuscaCli').value), escolhido = (D.clientes || []).find(function (c) { return c._row === Number(selecao); });
-      if (escolhido && !clientes.some(function (c) { return c._row === escolhido._row; })) clientes.unshift(escolhido);
-      $('c_cliente').innerHTML = '<option value="">Escolha o cliente</option>' + clientes.map(function (c) { return '<option value="' + c._row + '"' + (c._row === Number(selecao) ? ' selected' : '') + '>' + e(c.nome) + (c.whatsapp ? ' · ' + e(c.whatsapp) : '') + '</option>'; }).join('');
+      var escolhido = (D.clientes || []).find(function (c) { return c._row === Number(selecao); });
+      opcoesClienteRapido($('osBuscaCli'), $('c_cliente'), escolhido);
     }
     opcoes(); $('osBuscaCli').oninput = opcoes; $('c_cliente').onchange = function () { selecao = this.value; };
     $('c_servico').onchange = function () {
@@ -709,12 +727,12 @@
     var f = $('fGen'), sel = null;
     if (!o) {
       var opcoesCli = function () {
-        var lista = V.buscarClientesOS(D.clientes, $('orcBuscaCli').value), esc = (D.clientes || []).find(function (k) { return String(k._row) === String(sel) || (!sel && Q.cliente && k.nome === Q.cliente); });
-        if (esc) { sel = esc._row; if (!lista.some(function (k) { return k._row === esc._row; })) lista.unshift(esc); }
-        $('orcCliente').innerHTML = '<option value="">Escolha o cliente</option>' + lista.map(function (k) { return '<option value="' + k._row + '"' + (esc && k._row === esc._row ? ' selected' : '') + '>' + e(k.nome) + (k.whatsapp ? ' · ' + e(k.whatsapp) : '') + '</option>'; }).join('');
+        var esc = (D.clientes || []).find(function (k) { return String(k._row) === String(sel) || (!sel && Q.cliente && k.nome === Q.cliente); });
+        if (esc) sel = esc._row;
+        opcoesClienteRapido($('orcBuscaCli'), $('orcCliente'), esc);
       };
-      opcoesCli(); $('orcBuscaCli').oninput = opcoesCli; $('orcCliente').onchange = function () { sel = this.value; Q.cliente = (achar('clientes', sel) || {}).nome || ''; guardar(); };
-      $('orcEquip').oninput = function () { Q.equipamento = this.value; guardar(); };
+      opcoesCli(); $('orcBuscaCli').oninput = opcoesCli; $('orcCliente').onchange = function () { sel = this.value; Q.cliente = (achar('clientes', sel) || {}).nome || ''; };
+      $('orcEquip').oninput = function () { Q.equipamento = this.value; };
     }
     function guardar() { Q.diagnostico = $('c_diagnostico').value; Q.validade = $('c_validade').value; Q.previsao = $('c_previsao').value; try { localStorage.setItem(chave, JSON.stringify(Q)); } catch (x) { /* cota */ } }
     function limparRasc() { try { localStorage.removeItem(chave); } catch (x) { /* ok */ } }
@@ -756,9 +774,24 @@
     }
     desenharItens(); resultados();
     $('orcBusca').oninput = resultados;
-    var valorCampo = function (t) { return t.type === 'checkbox' ? t.checked : t.value; };
-    f.addEventListener('input', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) { Q.itens[Number(d.dataset.i)][t.dataset.f] = valorCampo(t); } $('fErro').textContent = ''; totais(); guardar(); });
-    f.addEventListener('change', function (ev) { var t = ev.target, d = t.closest('.orc-it'); if (d && t.dataset.f) Q.itens[Number(d.dataset.i)][t.dataset.f] = valorCampo(t); totais(); guardar(); });
+    $('orcBusca').onkeydown = function (ev) {
+      if (ev.key !== 'Enter' || ev.isComposing) return;
+      ev.preventDefault();
+      var resultado = $('orcRes').querySelector('button');
+      if (resultado) resultado.focus();
+    };
+    function atualizarOrcamento(ev) {
+      var t = ev.target, item = t.closest('.orc-it');
+      if (t.id === 'orcBusca' || t.id === 'orcBuscaCli') return;
+      if (item && t.dataset.f) {
+        Q.itens[Number(item.dataset.i)][t.dataset.f] = t.type === 'checkbox' ? t.checked : t.value;
+      }
+      $('fErro').textContent = '';
+      if (item || ['orcDescTotal', 'orcDescTotalModo', 'c_validade'].indexOf(t.id) >= 0) totais();
+      guardar();
+    }
+    f.addEventListener('input', atualizarOrcamento);
+    f.addEventListener('change', atualizarOrcamento);
     f.addEventListener('click', function (ev) {
       var b = ev.target.closest('button'); if (!b || b.type === 'submit') return;
       if (b.dataset.orcCat !== undefined) { addItem(ORC.itemDoCatalogo(cat[Number(b.dataset.orcCat)])); $('orcBusca').value = ''; resultados(); }

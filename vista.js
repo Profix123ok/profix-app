@@ -279,9 +279,15 @@
   };
   V.linkTelOp = function (o) { if (V.bloqueadaOp(o)) return null; var d = String(o.telefone || o.whatsapp || '').replace(/[^\d+]/g, ''); return d.replace(/\D/g, '').length >= 8 ? 'tel:' + d : null; };
   V.linkEmailOp = function (o) { if (V.bloqueadaOp(o)) return null; var m = String(o.email || '').trim(); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) ? 'mailto:' + m : null; };
-  V.filtrarOps = function (lista, f) {
+  V.prepararBuscaOps = function (lista) {
+    return (lista || []).slice().sort(function (a, b) {
+      var pa = V.PRI.indexOf(a.prioridade), pb = V.PRI.indexOf(b.prioridade); pa = pa < 0 ? 9 : pa; pb = pb < 0 ? 9 : pb;
+      if (pa !== pb) return pa - pb; var la = a.lembrete || '9', lb = b.lembrete || '9'; return la < lb ? -1 : la > lb ? 1 : 0;
+    });
+  };
+  V.filtrarOps = function (lista, f, ordenadas, textos) {
     var q = V.norm(f.q);
-    return (lista || []).filter(function (o) {
+    return (ordenadas || V.prepararBuscaOps(lista)).filter(function (o) {
       if (f.status && o.status !== f.status) return false;
       if (f.prioridade && (o.prioridade || '') !== f.prioridade) return false;
       if (f.segmento && o.segmento !== f.segmento) return false;
@@ -289,11 +295,15 @@
       if (f.wa && !V.temWaOp(o)) return false;
       if (f.ig && !V.temIgOp(o)) return false; // v0.9.3: Tem Instagram
       if (f.contato && V.contatoOp(o) !== f.contato) return false;
-      if (q && V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' ')).indexOf(q) < 0) return false;
+      if (q) {
+        var texto = textos && textos.get(o);
+        if (texto === undefined) {
+          texto = V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' '));
+          if (textos) textos.set(o, texto);
+        }
+        if (texto.indexOf(q) < 0) return false;
+      }
       return true;
-    }).sort(function (a, b) {
-      var pa = V.PRI.indexOf(a.prioridade), pb = V.PRI.indexOf(b.prioridade); pa = pa < 0 ? 9 : pa; pb = pb < 0 ? 9 : pb;
-      if (pa !== pb) return pa - pb; var la = a.lembrete || '9', lb = b.lembrete || '9'; return la < lb ? -1 : la > lb ? 1 : 0;
     });
   };
 
@@ -323,9 +333,16 @@
       agenda: (D.agenda || []).filter(function (a) { return a.data >= h && a.data <= fim; }) };
   };
   // v0.7.8: helpers puros do fluxo rápido; preços e prazos vêm dos dados.
-  V.buscarClientesOS = function (clientes, busca) {
+  V.buscarClientesOS = function (clientes, busca, limite) {
     var q = V.norm(busca || ''), dig = String(busca || '').replace(/\D/g, '');
-    return (clientes || []).filter(function (c) { return !q || V.norm(c.nome).indexOf(q) >= 0 || (dig && String(c.whatsapp || '').replace(/\D/g, '').indexOf(dig) >= 0); });
+    var encontrados = [];
+    for (var c of clientes || []) {
+      if (!q || V.norm(c.nome).indexOf(q) >= 0 || (dig && String(c.whatsapp || '').replace(/\D/g, '').indexOf(dig) >= 0)) {
+        encontrados.push(c);
+        if (limite && encontrados.length === limite) break;
+      }
+    }
+    return encontrados;
   };
   V.precoServicoOS = function (s) {
     if (!s || s.preco === '' || s.preco == null || /sob or/i.test(s.tipo || '')) return '';
