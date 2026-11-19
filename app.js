@@ -186,15 +186,13 @@
     REDESENHO_PENDENTE = false; var y = window.scrollY; render(); window.scrollTo(0, y); return true;
   }
   function talvezRedesenhar() { if (REDESENHO_PENDENTE) setTimeout(renderSuave, 0); }
-  function rota() { var h = (location.hash || '#servicos').slice(1).split('/'); return { tela: h[0] || 'servicos', sub: h[1] || '' }; }
+  function rota() { var h = (location.hash || '#hoje').slice(1).split('/'); return { tela: h[0] || 'hoje', sub: h[1] || '' }; }
   var carregando = false;
   var buscaTimer;
   function render() {
     clearTimeout(buscaTimer); ESTAT.renders++;
     var r = rota();
-    var telaMenu = ['osm', 'hoje'].indexOf(r.tela) >= 0 ? 'servicos' :
-      ['cliente', 'agenda'].indexOf(r.tela) >= 0 ? 'clientes' :
-      r.tela === 'leads' || (r.tela === 'clientes' && r.sub === 'oportunidades') ? 'vendas' : r.tela;
+    var telaMenu = r.tela === 'osm' ? 'servicos' : r.tela === 'cliente' ? 'clientes' : r.tela === 'leads' ? 'hoje' : r.tela;
     document.querySelectorAll('.menu a').forEach(function (a) { var on = a.dataset.tela === telaMenu; a.classList.toggle('ativo', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var c = $('conteudo');
     if (!D) { c.innerHTML = carregando ? '<div class="vazio">Carregando dados da planilha… (pode levar uns 20 segundos)</div>' : '<div class="vazio">Ainda não há dados salvos neste aparelho. Conecte à internet e abra o app.</div>'; var fab0 = $('fab'); if (fab0) fab0.hidden = true; return; }
@@ -372,7 +370,7 @@
       var data = String(o.validade || '').slice(0, 10);
       return { os: o, data: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : '' };
     }).sort(function (a, b) { return (a.data || '9999').localeCompare(b.data || '9999'); });
-    return '<a class="link-sec" href="#servicos">← Operacional</a><h1>Orçamentos aguardando resposta</h1>' +
+    return '<a class="link-sec" href="#servicos">← Serviços</a><h1>Orçamentos aguardando resposta</h1>' +
       '<p class="muted">' + prazos.length + ' em aberto</p>' + lista(prazos, function (p) {
         var o = p.os, cliente = V.clienteDaOS(D, o);
         var vencimento = p.data && p.data < D.hoje ? tag('Vencido', 'vencido') :
@@ -396,7 +394,7 @@
         var c = x.ref; return card(e(c.nome), e(x.acao) + ' · ⏰ ' + V.dataBR(x.data), x.data < D.hoje ? tag('atrasado', 'vencido') : '', waCli(c, '', '', x.acao) + botao('Registrar conversa', 'cli-inter', c._row) + botao('Reativar 1×', 'cli-reativar', c._row));
       };
       var badgeParada = function (o) { var b = V.badgeParada3d(o, D.hoje); return b ? tag('🐢 ' + b.texto, 'parada') : ''; };
-      return '<a class="link-sec" href="#servicos">← Operacional</a><h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
+      return '<h1>Hoje · ' + V.dataBR(D.hoje) + '</h1>' +
         '<div class="acoes">' + botao('+ Nova OS', 'os-nova', '', 'primaria') +
           (api.pode('salvarOrcamento') ? botao('Orçamento rápido', 'orc-novo', '', 'sec') : '') + '</div>' +
         bannerLeadsSite() +
@@ -433,20 +431,23 @@
       var filtro = JSON.stringify([F.os.status, F.os.q]);
       if (F.os.filtro !== filtro) { F.os.filtro = filtro; F.os.qtd = OS_PASSO; }
       var mostra = Math.min(l.length, F.os.qtd), totais = V.recebimentosPorOS(D);
-      return '<h1>Operacional</h1><div class="acoes">' +
-        botao('+ Nova OS', 'os-nova', '', 'primaria') + (api.pode('salvarOrcamento') ? botao('Orçamento rápido', 'orc-novo', '', 'primaria') : '') +
-        '<a href="#hoje" class="btn sec peq">Bancada de hoje</a>' +
-        '<a href="#servicos/aprovacoes" class="btn sec peq">Aguardando resposta (' + pendentes.length + ')</a></div>' +
+      return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', 'primaria') +
+        (api.pode('salvarOrcamento') ? botao('⚡ Orçamento rápido', 'orc-novo', '', 'primaria') : '') + '</div>' +
+        '<div class="acoes"><a href="#servicos/aprovacoes" class="btn sec peq">Aguardando resposta (' + pendentes.length + ')</a></div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
         lista(l.slice(0, mostra), function (o) { var s = ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? V.saldoOS(D, o, totais) : 0, b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + (o.status === 'Em diagnóstico' && api.pode('salvarOrcamento') ? botao('Orçamento', 'os-orc', o._row) : '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.') +
         (mostra < l.length ? '<div class="acoes"><button type="button" class="btn sec" id="osMais">Ver mais ' + Math.min(OS_PASSO, l.length - mostra) + ' OS</button></div>' : '');
     },
     clientes: function (sub) {
-      if (sub === 'oportunidades') return TELAS.vendas('oportunidades');
+      var aba = ['agendamentos', 'planos'].indexOf(sub) >= 0 ? '' : sub;
       var cab = '<div class="row"><h1>Clientes</h1>' + botao('+ Novo cliente', 'cli-novo', '', '') + '</div>' +
-        abas('clientes', [['lista', 'Cadastro'], ['agendamentos', 'Agendamentos'], ['planos', 'Planos ativos'], ['funil', 'Funil']], sub)
+        abas('clientes', [['lista', 'Lista'], ['funil', 'Funil'], ['oportunidades', 'Oportunidades']], aba)
           .replace('<div class="abas">', '<nav class="abas clientes-abas" aria-label="Seções de Clientes">').replace(/<\/div>$/, '</nav>');
+      if (sub === 'oportunidades') return cab + corpoOportunidades();
+      if (!sub || sub === 'agendamentos' || sub === 'planos') {
+        cab += '<div class="acoes"><a class="btn sec peq" href="#clientes/agendamentos">Agendamentos</a><a class="btn sec peq" href="#clientes/planos">Planos ativos</a></div>';
+      }
       if (sub === 'agendamentos') return cab + telaAgenda(false);
       if (sub === 'planos') {
         if (!CT) carregarCT();
@@ -467,8 +468,8 @@
     vendas: function (sub) {
       var itens = [['oportunidades', 'Oportunidades'], ['revenda', 'Revenda']], atual = itens.find(function (i) { return i[0] === sub; });
       var links = function (lista) { return itens.map(function (i) { return '<a href="#vendas/' + i[0] + '"' + (!lista && (sub || 'oportunidades') === i[0] ? ' class="ativo" aria-current="page"' : '') + '>' + i[1] + (lista ? '<span aria-hidden="true">›</span>' : '') + '</a>'; }).join(''); };
-      var cab = (sub === 'revenda' ? '<a class="mais-voltar vendas-voltar" href="#vendas/oportunidades">← Oportunidades</a>' : '') +
-        '<h1>' + (atual ? atual[1] : 'Oportunidades') + '</h1>' +
+      var cab = (sub ? '<a class="mais-voltar vendas-voltar" href="#vendas">← Voltar para Vendas</a>' : '') +
+        '<h1><span class="mais-titulo-desktop">Vendas</span><span class="mais-titulo-mobile">' + (atual ? atual[1] : 'Vendas') + '</span></h1>' +
         '<nav class="abas mais-abas vendas-abas" aria-label="Seções de Vendas">' + links(false) + '</nav>' +
         (!sub ? '<nav class="mais-lista vendas-lista" aria-label="Opções de Vendas">' + links(true) + '</nav>' : '');
       if (sub === 'revenda') return cab + '<div class="row">' + botao('+ Novo item', 'rv-novo', '', '') + '</div>' + lista(D.revenda || [], function (r) {
@@ -478,7 +479,7 @@
       }, 'Nada na revenda.');
       return cab + '<div' + (!sub ? ' class="mais-padrao"' : '') + '><div class="acoes">' +
         '<a class="btn sec peq" href="#leads">Cadastros do site</a><a class="btn sec peq" href="#clientes/funil">Funil</a>' +
-        '<a class="btn sec peq" href="#mais/modelos">Modelos de mensagem</a><a class="btn sec peq" href="#vendas/revenda">Revenda</a></div>' +
+        '<a class="btn sec peq" href="#mais/modelos">Modelos de mensagem</a></div>' +
         corpoOportunidades() + '</div>';
     },
     mais: function (sub) {
