@@ -113,18 +113,7 @@
 
   // ---- OS ----
   V.recebidoOS = function (D, num) { return (D.financeiro || []).filter(function (f) { return f.os === num && f.tipo === 'Entrada'; }).reduce(function (s, f) { return s + (Number(f.receita) || 0); }, 0); };
-  V.recebimentosPorOS = function (D) {
-    var totais = new Map();
-    (D.financeiro || []).forEach(function (f) {
-      if (f.tipo === 'Entrada') totais.set(f.os, (totais.has(f.os) ? totais.get(f.os) : 0) + (Number(f.receita) || 0));
-    });
-    return totais;
-  };
-  V.saldoOS = function (D, o, totais) {
-    var valor = Number(o.valor) || 0;
-    var recebido = totais ? (totais.has(o.num) ? totais.get(o.num) : 0) : V.recebidoOS(D, o.num);
-    return Math.round((valor - recebido) * 100) / 100;
-  };
+  V.saldoOS = function (D, o) { var v = Number(o.valor) || 0; return Math.round((v - V.recebidoOS(D, o.num)) * 100) / 100; };
   V.pecasOS = function (D, num) { return (D.pecas || []).filter(function (p) { return p.os === num; }); };
   V.custoPecasOS = function (D, num) { return V.pecasOS(D, num).reduce(function (s, p) { return s + (Number(p.custoUnit) || 0) * (Number(p.qtd) || 1); }, 0); };
   /** Senha do aparelho: só aparece se o servidor mandou E o ajuste "Mostrar senha do aparelho" estiver ligado. */
@@ -290,19 +279,9 @@
   };
   V.linkTelOp = function (o) { if (V.bloqueadaOp(o)) return null; var d = String(o.telefone || o.whatsapp || '').replace(/[^\d+]/g, ''); return d.replace(/\D/g, '').length >= 8 ? 'tel:' + d : null; };
   V.linkEmailOp = function (o) { if (V.bloqueadaOp(o)) return null; var m = String(o.email || '').trim(); return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m) ? 'mailto:' + m : null; };
-  V.prepararBuscaOps = function (lista) {
-    return (lista || []).slice().sort(function (a, b) {
-      var pa = V.PRI.indexOf(a.prioridade), pb = V.PRI.indexOf(b.prioridade); pa = pa < 0 ? 9 : pa; pb = pb < 0 ? 9 : pb;
-      if (pa !== pb) return pa - pb; var la = a.lembrete || '9', lb = b.lembrete || '9'; return la < lb ? -1 : la > lb ? 1 : 0;
-    });
-  };
-  V.filtrarOps = function (lista, f, ordenadas, textos) {
+  V.filtrarOps = function (lista, f) {
     var q = V.norm(f.q);
-    return (ordenadas || V.prepararBuscaOps(lista)).filter(function (o) {
-      if (f.retorno) {
-        if (!o.lembrete || o.status === 'Virou lead' || o.status === 'Descartada' || V.bloqueadaOp(o)) return false;
-        if (f.retorno === 'hoje' ? o.lembrete !== f.hoje : o.lembrete >= f.hoje) return false;
-      }
+    return (lista || []).filter(function (o) {
       if (f.status && o.status !== f.status) return false;
       if (f.prioridade && (o.prioridade || '') !== f.prioridade) return false;
       if (f.segmento && o.segmento !== f.segmento) return false;
@@ -310,15 +289,11 @@
       if (f.wa && !V.temWaOp(o)) return false;
       if (f.ig && !V.temIgOp(o)) return false; // v0.9.3: Tem Instagram
       if (f.contato && V.contatoOp(o) !== f.contato) return false;
-      if (q) {
-        var texto = textos && textos.get(o);
-        if (texto === undefined) {
-          texto = V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' '));
-          if (textos) textos.set(o, texto);
-        }
-        if (texto.indexOf(q) < 0) return false;
-      }
+      if (q && V.norm([o.empresa, o.segmento, o.bairro, o.proximoPasso, o.telefone, o.whatsapp, o.obs].join(' ')).indexOf(q) < 0) return false;
       return true;
+    }).sort(function (a, b) {
+      var pa = V.PRI.indexOf(a.prioridade), pb = V.PRI.indexOf(b.prioridade); pa = pa < 0 ? 9 : pa; pb = pb < 0 ? 9 : pb;
+      if (pa !== pb) return pa - pb; var la = a.lembrete || '9', lb = b.lembrete || '9'; return la < lb ? -1 : la > lb ? 1 : 0;
     });
   };
 
@@ -337,10 +312,9 @@
       if (o.status === 'Contatada' && dias(o.ultimoContato, h) >= 3) semResposta.push({ tipo: 'op', ref: o, nome: o.empresa, data: o.ultimoContato, acao: 'Lembrete único (uma vez só)' });
       else if (o.lembrete && o.lembrete <= h) chamar.push({ tipo: 'op', ref: o, nome: o.empresa, data: o.lembrete, acao: o.proximoPasso || o.status });
     });
-    var totais = V.recebimentosPorOS(D);
     (D.os || []).forEach(function (o) {
-      var s = (o.status === 'Entregue' || o.status === 'Pronto') ? V.saldoOS(D, o, totais) : 0;
-      if (s > 0) cobrar.push({ ref: o, num: o.num, cliente: o.cliente, saldo: s, status: o.status });
+      var s = V.saldoOS(D, o);
+      if (s > 0 && (o.status === 'Entregue' || o.status === 'Pronto')) cobrar.push({ ref: o, num: o.num, cliente: o.cliente, saldo: s, status: o.status });
       else if (['Entregue', 'Cancelado', 'Pronto'].indexOf(o.status) < 0 && dias(o.statusEm || o.entrada, h) >= 3) paradas.push({ ref: o, num: o.num, cliente: o.cliente, status: o.status });
     });
     var ord = function (a, b) { return String(a.data || '') < String(b.data || '') ? -1 : 1; };
@@ -349,16 +323,9 @@
       agenda: (D.agenda || []).filter(function (a) { return a.data >= h && a.data <= fim; }) };
   };
   // v0.7.8: helpers puros do fluxo rápido; preços e prazos vêm dos dados.
-  V.buscarClientesOS = function (clientes, busca, limite) {
+  V.buscarClientesOS = function (clientes, busca) {
     var q = V.norm(busca || ''), dig = String(busca || '').replace(/\D/g, '');
-    var encontrados = [];
-    for (var c of clientes || []) {
-      if (!q || V.norm(c.nome).indexOf(q) >= 0 || (dig && String(c.whatsapp || '').replace(/\D/g, '').indexOf(dig) >= 0)) {
-        encontrados.push(c);
-        if (limite && encontrados.length === limite) break;
-      }
-    }
-    return encontrados;
+    return (clientes || []).filter(function (c) { return !q || V.norm(c.nome).indexOf(q) >= 0 || (dig && String(c.whatsapp || '').replace(/\D/g, '').indexOf(dig) >= 0); });
   };
   V.precoServicoOS = function (s) {
     if (!s || s.preco === '' || s.preco == null || /sob or/i.test(s.tipo || '')) return '';
