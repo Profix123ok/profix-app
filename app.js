@@ -361,6 +361,29 @@
     if (!api.pode(acao[a[0]])) return '';
     return '<div class="grandes" id="proximaOS">' + botao(a[1], a[0], o._row, 'primaria').replace(' peq', '') + '</div>';
   }
+  function orcamentosPendentes() {
+    return (D.os || []).filter(function (o) {
+      return o.status === 'Aguardando aprovação' && ['Aprovado', 'Recusado'].indexOf(o.aprovacao) < 0 && V.dinheiro(o.orcamento) > 0;
+    });
+  }
+  function telaAprovacoes(pendentes) {
+    var limite = V.somaDias(D.hoje, 2);
+    var prazos = pendentes.map(function (o) {
+      var data = String(o.validade || '').slice(0, 10);
+      return { os: o, data: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : '' };
+    }).sort(function (a, b) { return (a.data || '9999').localeCompare(b.data || '9999'); });
+    return '<a class="link-sec" href="#servicos">← Operacional</a><h1>Orçamentos aguardando resposta</h1>' +
+      '<p class="muted">' + prazos.length + ' em aberto</p>' + lista(prazos, function (p) {
+        var o = p.os, cliente = V.clienteDaOS(D, o);
+        var vencimento = p.data && p.data < D.hoje ? tag('Vencido', 'vencido') :
+          p.data === D.hoje ? tag('Vence hoje', 'alta') :
+          p.data && p.data <= limite ? tag('Vence em breve', 'media') : '';
+        return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + V.brl(V.dinheiro(o.orcamento)) +
+          ' · ' + (p.data ? 'Válido até ' + V.dataBR(p.data) : 'Validade não informada'), vencimento,
+          (cliente && !Dif.naoContatar(cliente) && api.pode('linkClienteOS') ? botao('Preparar lembrete', 'orc-lembrete', o._row, 'primaria') : '') +
+          botao('Abrir OS', 'os-abrir', o._row));
+      }, 'Nenhum orçamento aguardando resposta.');
+  }
   // ---------- Telas ----------
   var TELAS = {
     hoje: function () {
@@ -402,7 +425,9 @@
         '<h2>✅ Tarefas</h2>' + lista(H.tarefas || [], function (t) { return card(e(t.tarefa), e(t.cliente || '') + ' · ' + V.dataBR(t.data), t.data < D.hoje ? tag('atrasada', 'vencido') : '', botao('Marcar feita', 'tar-feita', t._row)); }, 'Sem tarefas para hoje.') +
         '<h2>📅 Agenda</h2>' + lista(H.agenda || [], function (a) { return card(e(a.titulo), V.dataBR(a.data) + ' · ' + e(a.inicio || '') + (a.local ? ' · ' + e(a.local) : ''), a.eventoId ? '<span class="tag ok">Na agenda ✓</span>' : '', mapsBtn(a.local && a.local.length > 12 ? a.local : '') + (a.eventoId && api.pode('criarEventoAgenda') ? botao('Remarcar', 'ag-ev', a.eventoId) : '') + (a.eventoId && api.pode('removerEventoAgenda') ? botao('Tirar da agenda', 'ag-rem', a.eventoId) : '')); }, 'Agenda livre nos próximos 7 dias.');
     },
-    servicos: function () {
+    servicos: function (sub) {
+      var pendentes = orcamentosPendentes();
+      if (sub === 'aprovacoes') return telaAprovacoes(pendentes);
       var q = V.norm(F.os.q), l = (D.os || []).filter(function (o) { return (!F.os.status || o.status === F.os.status) && (!q || V.norm([o.num, o.cliente, o.equipamento, o.defeito].join(' ')).indexOf(q) >= 0); })
         .sort(function (a, b) { return String(b.num) < String(a.num) ? -1 : 1; });
       var filtro = JSON.stringify([F.os.status, F.os.q]);
@@ -410,7 +435,8 @@
       var mostra = Math.min(l.length, F.os.qtd), totais = V.recebimentosPorOS(D);
       return '<h1>Operacional</h1><div class="acoes">' +
         botao('+ Nova OS', 'os-nova', '', 'primaria') + (api.pode('salvarOrcamento') ? botao('Orçamento rápido', 'orc-novo', '', 'primaria') : '') +
-        '<a href="#hoje" class="btn sec peq">Bancada de hoje</a></div>' +
+        '<a href="#hoje" class="btn sec peq">Bancada de hoje</a>' +
+        '<a href="#servicos/aprovacoes" class="btn sec peq">Aguardando resposta (' + pendentes.length + ')</a></div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
         lista(l.slice(0, mostra), function (o) { var s = ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? V.saldoOS(D, o, totais) : 0, b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + (o.status === 'Em diagnóstico' && api.pode('salvarOrcamento') ? botao('Orçamento', 'os-orc', o._row) : '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.') +
@@ -977,6 +1003,14 @@
     'os-nova': function () { abrirOSRapida(''); },
     'os-orc': function (row) { orcamentoRapido(row); },
     'orc-novo': function () { orcamentoRapido('', {}); },
+    'orc-lembrete': function (row) {
+      var os = achar('os', row);
+      if (!os || orcamentosPendentes().indexOf(os) < 0) return aviso('Este orçamento já saiu da fila.');
+      var cliente = V.clienteDaOS(D, os);
+      if (!cliente || Dif.naoContatar(cliente)) return aviso(V.AVISO_NAO_CONTATAR);
+      return abrirPreviewMsg('os-orc', { cliente: cliente, os: os, D: D, linkOS: '',
+        pix: function (valor, num) { var b = blocoPix(valor, num); return b ? b.texto : ''; } });
+    },
     'os-pronto': function (row) {
       var o = achar('os', row);
       perguntar('Marcar ' + o.num + ' como Pronto? Depois você poderá abrir o WhatsApp; nenhuma mensagem é enviada automaticamente.', { titulo: 'OS pronta', sim: 'Marcar pronto' }).then(function (ok) {
