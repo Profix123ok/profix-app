@@ -113,7 +113,18 @@
 
   // ---- OS ----
   V.recebidoOS = function (D, num) { return (D.financeiro || []).filter(function (f) { return f.os === num && f.tipo === 'Entrada'; }).reduce(function (s, f) { return s + (Number(f.receita) || 0); }, 0); };
-  V.saldoOS = function (D, o) { var v = Number(o.valor) || 0; return Math.round((v - V.recebidoOS(D, o.num)) * 100) / 100; };
+  V.recebimentosPorOS = function (D) {
+    var totais = new Map();
+    (D.financeiro || []).forEach(function (f) {
+      if (f.tipo === 'Entrada') totais.set(f.os, (totais.has(f.os) ? totais.get(f.os) : 0) + (Number(f.receita) || 0));
+    });
+    return totais;
+  };
+  V.saldoOS = function (D, o, totais) {
+    var valor = Number(o.valor) || 0;
+    var recebido = totais ? (totais.has(o.num) ? totais.get(o.num) : 0) : V.recebidoOS(D, o.num);
+    return Math.round((valor - recebido) * 100) / 100;
+  };
   V.pecasOS = function (D, num) { return (D.pecas || []).filter(function (p) { return p.os === num; }); };
   V.custoPecasOS = function (D, num) { return V.pecasOS(D, num).reduce(function (s, p) { return s + (Number(p.custoUnit) || 0) * (Number(p.qtd) || 1); }, 0); };
   /** Senha do aparelho: só aparece se o servidor mandou E o ajuste "Mostrar senha do aparelho" estiver ligado. */
@@ -326,9 +337,10 @@
       if (o.status === 'Contatada' && dias(o.ultimoContato, h) >= 3) semResposta.push({ tipo: 'op', ref: o, nome: o.empresa, data: o.ultimoContato, acao: 'Lembrete único (uma vez só)' });
       else if (o.lembrete && o.lembrete <= h) chamar.push({ tipo: 'op', ref: o, nome: o.empresa, data: o.lembrete, acao: o.proximoPasso || o.status });
     });
+    var totais = V.recebimentosPorOS(D);
     (D.os || []).forEach(function (o) {
-      var s = V.saldoOS(D, o);
-      if (s > 0 && (o.status === 'Entregue' || o.status === 'Pronto')) cobrar.push({ ref: o, num: o.num, cliente: o.cliente, saldo: s, status: o.status });
+      var s = (o.status === 'Entregue' || o.status === 'Pronto') ? V.saldoOS(D, o, totais) : 0;
+      if (s > 0) cobrar.push({ ref: o, num: o.num, cliente: o.cliente, saldo: s, status: o.status });
       else if (['Entregue', 'Cancelado', 'Pronto'].indexOf(o.status) < 0 && dias(o.statusEm || o.entrada, h) >= 3) paradas.push({ ref: o, num: o.num, cliente: o.cliente, status: o.status });
     });
     var ord = function (a, b) { return String(a.data || '') < String(b.data || '') ? -1 : 1; };
