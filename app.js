@@ -306,7 +306,7 @@
     var numero = Number(row);
     return (D[lista] || []).find(function (x) { return x._row === numero; });
   }
-  var LIMITE = 100, OP_PASSO = 50, OS_PASSO = 50;
+  var LIMITE = 100, OP_PASSO = 50, OS_PASSO = 50, CLI_PASSO = 50;
   var tagStatusOS = function (s) { return tag(s, s === 'Pronto' ? 'media' : s === 'Aguardando aprovação' || s === 'Aguardando peça' ? 'alta' : 'cinza'); };
 
   // v0.5.4: leads que chegaram pela página pública de cadastro (leadsLink). WhatsApp só manual, um a um (link wa.me).
@@ -395,11 +395,11 @@
         .sort(function (a, b) { return String(b.num) < String(a.num) ? -1 : 1; });
       var filtro = JSON.stringify([F.os.status, F.os.q]);
       if (F.os.filtro !== filtro) { F.os.filtro = filtro; F.os.qtd = OS_PASSO; }
-      var mostra = Math.min(l.length, F.os.qtd);
+      var mostra = Math.min(l.length, F.os.qtd), totais = V.recebimentosPorOS(D);
       return '<div class="row"><h1>Serviços (OS)</h1>' + botao('+ Nova OS', 'os-nova', '', 'primaria') + (api.pode('salvarOrcamento') ? botao('⚡ Orçamento rápido', 'orc-novo', '', 'primaria') : '') + '</div>' +
         '<div class="filtros">' + sel('fOsSt', D.statusOS, F.os.status, 'Todos os status') + busca('fOsQ', F.os.q, 'Buscar OS, cliente, equipamento…') + '</div>' +
         '<p class="muted" id="contagem">' + l.length + ' OS</p>' +
-        lista(l.slice(0, mostra), function (o) { var s = ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? V.saldoOS(D, o) : 0, b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + (o.status === 'Em diagnóstico' && api.pode('salvarOrcamento') ? botao('Orçamento', 'os-orc', o._row) : '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.') +
+        lista(l.slice(0, mostra), function (o) { var s = ['Pronto', 'Entregue'].indexOf(o.status) >= 0 ? V.saldoOS(D, o, totais) : 0, b = V.badgeParada3d(o, D.hoje); return card(e(o.num) + ' · ' + e(o.cliente), e(o.equipamento) + ' · ' + (o.valor ? V.brl(o.valor) : o.orcamento ? 'Orçamento ' + V.brl(o.orcamento) : 'sem valor') + (s > 0 ? ' · saldo ' + V.brl(s) : ''), tagStatusOS(o.status) + (b ? tag('🐢 ' + b.dias + 'd', 'parada') : ''), botao('Abrir', 'os-abrir', o._row, '') + (o.status === 'Em diagnóstico' && api.pode('salvarOrcamento') ? botao('Orçamento', 'os-orc', o._row) : '') + botao('Msg', 'os-msg-tipo', o._row)); }, 'Nenhuma OS com esse filtro.') +
         (mostra < l.length ? '<div class="acoes"><button type="button" class="btn sec" id="osMais">Ver mais ' + Math.min(OS_PASSO, l.length - mostra) + ' OS</button></div>' : '');
     },
     clientes: function (sub) {
@@ -1426,8 +1426,8 @@
   function escreverResp(acao, args) { if (!api.pode(acao)) { aviso('Esta função ainda não foi liberada no servidor (crm-v3).'); return Promise.reject(new Error('bloq')); } return api.escrever(acao, args).then(function (r) { return r.dados || r; }).catch(function (er) { aviso('Não deu: ' + er.message); throw er; }); }
 
   // ---- Lista de clientes: busca única + chips + cartão com última OS, total gasto e tempo desde o último atendimento ----
-  function cartaoCliente(c, s) {
-    var inter = (D.interacoes || []).filter(function (i) { return i.cliente === c.nome; }).slice(-1)[0], selo = Dif.seloLgpd(c);
+  function cartaoCliente(c, s, inter) {
+    var selo = Dif.seloLgpd(c);
     var ult = s.ultimaOSNum ? '<span class="ult-os">Última OS: <b>' + e(s.ultimaOSNum) + '</b> ' + tag(s.ultimaOSStatus, Dif.corStatus(s.ultimaOSStatus)) + '</span>' : '<span class="muted">Sem OS</span>';
     return card('<a class="nome-cli" href="#cliente/' + c._row + '">' + e(c.nome) + '</a>',
       ult + '<div class="nums-cli"><span>💰 ' + V.brl(s.totalGasto || 0) + '</span><span data-tempo>🕒 ' + e(Dif.tempoDesde(s.diasSemRetorno)) + '</span>' + (s.garantiaAte ? '<span>🛡 garantia ' + Dif.diasRestantes(s.garantiaAte, D.hoje) + 'd</span>' : '') + '</div>' +
@@ -1437,9 +1437,14 @@
   }
   function telaClientesLista(cab) {
     var R = Dif.resumoClientes(D), cont = Dif.contarChips(D, R), l = Dif.filtrarClientes(D, F.cli, R);
+    var filtro = JSON.stringify([F.cli.q, F.cli.chip]);
+    if (F.cli.filtro !== filtro) { F.cli.filtro = filtro; F.cli.qtd = CLI_PASSO; }
+    var mostra = Math.min(l.length, F.cli.qtd), ultimas = new Map();
+    (D.interacoes || []).forEach(function (i) { ultimas.set(i.cliente, i); });
     var chips = '<div class="chips" id="fCliChips" role="group" aria-label="Filtrar clientes">' + Dif.CHIPS.map(function (k) { return '<button type="button" class="chip" data-chip-cli="' + k[0] + '" aria-pressed="' + ((F.cli.chip || '') === k[0]) + '">' + e(k[1]) + ' (' + cont[k[0]] + ')</button>'; }).join('') + '</div>';
     return cab + '<div class="filtros">' + busca('fCliQ', F.cli.q, 'Buscar nome, telefone, OS, equipamento, série…') + '</div>' + chips + '<p class="muted" id="contagem">' + l.length + ' clientes</p>' +
-      lista(l, function (c) { return cartaoCliente(c, R[c.nome] || {}); }, 'Nenhum cliente com esse filtro.');
+      lista(l.slice(0, mostra), function (c) { return cartaoCliente(c, R[c.nome] || {}, ultimas.get(c.nome)); }, 'Nenhum cliente com esse filtro.') +
+      (mostra < l.length ? '<div class="acoes"><button type="button" class="btn sec" id="cliMais">Ver mais ' + Math.min(CLI_PASSO, l.length - mostra) + ' clientes</button></div>' : '');
   }
 
   // ---- Ficha do cliente (#cliente/<linha>) ----
@@ -2941,13 +2946,19 @@
       var ativo = c.querySelector('[data-retorno-op][aria-pressed="true"]');
       if (ativo) ativo.focus({ preventScroll: true });
     }; });
-    if ($('osMais')) $('osMais').onclick = function () {
-      F.os.qtd += OS_PASSO;
-      var y = window.scrollY;
-      render();
-      window.scrollTo(0, y);
-      if ($('osMais')) $('osMais').focus({ preventScroll: true });
+    var ligarMais = function (id, estado, passo) {
+      var b = $(id);
+      if (!b) return;
+      b.onclick = function () {
+        estado.qtd += passo;
+        var y = window.scrollY;
+        render();
+        window.scrollTo(0, y);
+        if ($(id)) $(id).focus({ preventScroll: true });
+      };
     };
+    ligarMais('osMais', F.os, OS_PASSO);
+    ligarMais('cliMais', F.cli, CLI_PASSO);
     if ($('opMais')) $('opMais').onclick = function () { F.op.qtd = (F.op.qtd || OP_PASSO) + OP_PASSO; var y = window.scrollY; render(); window.scrollTo(0, y); };
     if ($('fIg')) $('fIg').onclick = function () { F.op.ig = !F.op.ig; try { localStorage.setItem(IGF, F.op.ig ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fIg')) $('fIg').focus(); };
     if ($('fWa')) $('fWa').onclick = function () { F.op.wa = !F.op.wa; try { localStorage.setItem(WAF, F.op.wa ? '1' : ''); } catch (x) { /* sem armazenamento */ } render(); if ($('fWa')) $('fWa').focus(); };
