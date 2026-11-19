@@ -142,16 +142,7 @@
   function buscarCatalogo(itens, q, max) {
     var n = norm(q); if (!n) return (itens || []).slice(0, max || 8);
     var p = n.split(/\s+/);
-    var limite = max || 8;
-    var encontrados = [];
-    for (var c of itens || []) {
-      var d = norm(c.descricao + ' ' + (c.categoria || ''));
-      if (p.every(function (w) { return d.indexOf(w) >= 0; })) {
-        encontrados.push(c);
-        if (limite > 0 && encontrados.length >= limite) break;
-      }
-    }
-    return encontrados.slice(0, limite);
+    return (itens || []).filter(function (c) { var d = norm(c.descricao + ' ' + (c.categoria || '')); return p.every(function (w) { return d.indexOf(w) >= 0; }); }).slice(0, max || 8);
   }
   /** Mesmo formato do orcamentoOS do servidor (sem o HTML), para prévia offline e modo demonstração. */
   function orcamentoLocal(x, cli, termos) {
